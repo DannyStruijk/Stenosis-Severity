@@ -1,8 +1,9 @@
 # Predicting the Severity of Aortic Valve Stenosis Based on Revised Calcification Score
 
-Author: D.M. Struijk  
-Student nr.: 1452479  
-Supervisors:  Marcel van 't Veer, Pim Tonino and Marcel Breeuwer  
+**Author:** D.M. Struijk (1452479) 
+**Supervisors:**  Marcel van 't Veer, Pim Tonino and Marcel Breeuwer  
+
+Catharina Ziekenhuis, Eindhoven
 Technical University of Eindhoven, Department of Biomedical Engineering  
 
 
