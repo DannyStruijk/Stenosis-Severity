@@ -3,7 +3,7 @@
 **Author:** D.M. Struijk (1452479)  
 **Supervisors:**  Marcel van 't Veer, Pim Tonino and Marcel Breeuwer  
 
-Catharina Ziekenhuis, Eindhoven
+Catharina Ziekenhuis, Eindhoven  
 Technical University of Eindhoven, Department of Biomedical Engineering  
 
 
