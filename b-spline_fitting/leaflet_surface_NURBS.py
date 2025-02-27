@@ -13,28 +13,26 @@ leaflet_tip = [(point_1[0] + point_2[0]) / 2, 1, (point_1[2] + hinge_point[2]) /
 arch_control_1 = [(leaflet_tip[0] + point_1[0]) / 2, (leaflet_tip[1] + hinge_point[1]) / 2, (leaflet_tip[2] + hinge_point[2]) / 1.5]
 arch_control_2 = [(leaflet_tip[0] + point_2[0]) / 2, (leaflet_tip[1] + hinge_point[1]) / 2, (leaflet_tip[2] + hinge_point[2]) / 1.5]
 
-# Create boundary curves
-curve_1 = [point_1, arch_control_1, leaflet_tip]
-curve_2 = [leaflet_tip, arch_control_2, point_2]
-curve_3 = [point_1, hinge_point, point_2]  # curve from point_1 to point_2 via hinge_point
-
 # Define the control grid (3x3 control points)
-control_points = np.array([
+control_points = ([
     [point_1, arch_control_1, leaflet_tip],
     [hinge_point, hinge_point, hinge_point],
     [point_2, arch_control_2, leaflet_tip]
 ])
 
-# Set degree to 3 (cubic)
-degree_u = 3
-degree_v = 3
+# Define surface
+surf = BSpline.Surface()
+surf.degree_u = 2
+surf.degree_v = 2
+surf.ctrlpts2d = control_points # Set control points
 
-# Set the size of the surface in u and v directions
-size_u = 2
-size_v = 2
- 
+# Define knot vectors
+surf.knotvector_u = [0, 0, 0, 1, 1, 1]
+surf.knotvector_v = [0, 0, 0, 1, 1, 1]
+
+# Set resolution
+surf.delta = 0.05 # Resolution
+
 # Fit NURBS surface through the control points
-surf = fitting.interpolate_surface(control_points, size_u, size_v, degree_u, degree_v)
+surf.evaluate()
 
-# Set evaluation delta for resolution
-surf.delta = 0.05
