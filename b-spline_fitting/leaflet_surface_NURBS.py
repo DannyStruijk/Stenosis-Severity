@@ -5,22 +5,20 @@
 from geomdl import BSpline
 import numpy as np
 import pyvista as pv
-from functions import export_vtk
+import functions
+
+import os 
+
+os.chdir("H:/DATA/Afstuderen/2. Code/Stenosis-Severity/b-spline_fitting")
 
 # Define control points based on user's input
-point_1 = [0, 0, 1]  # Commissure 1
-point_2 = [2, 0, 1]  # Commissure 2
+commissure_1 = [0, 0, 1]  # Commissure 1
+commissure_2 = [2, 0, 1]  # Commissure 2
 hinge_point = [1, 0, 0]  # Hinge point
-leaflet_tip = [(point_1[0] + point_2[0]) / 2, 1, (point_1[2] + hinge_point[2]) / 3]
-arch_control_1 = [(leaflet_tip[0] + point_1[0]) / 2, (leaflet_tip[1] + hinge_point[1]) / 2, (leaflet_tip[2] + hinge_point[2]) / 1.5]
-arch_control_2 = [(leaflet_tip[0] + point_2[0]) / 2, (leaflet_tip[1] + hinge_point[1]) / 2, (leaflet_tip[2] + hinge_point[2]) / 1.5]
+leaflet_tip = [(commissure_1[0] + commissure_2[0]) / 2, 1, (commissure_1[2] + hinge_point[2]) / 3]
 
-# Define the control grid (3x3 control points)
-control_points = [
-    [point_1, arch_control_1, leaflet_tip],
-    [hinge_point, hinge_point, hinge_point],
-    [point_2, arch_control_2, leaflet_tip]
-]
+# Calculate the control poitns for the surface reconstructions
+control_points = functions.calc_boundary_ctrlpts(commissure_1, commissure_2, leaflet_tip, hinge_point)
 
 # Define the NURBS surface
 surf = BSpline.Surface()
@@ -37,4 +35,5 @@ surf.delta = 0.05  # Resolution
 
 surf.evaluate()
 
-export_vtk(surf, "H:/DATA/Afstuderen/2. Code/Stenosis-Severity/b-spline_fitting/leaflet_surface.vtk")
+functions.export_vtk(surf, "H:/DATA/Afstuderen/2. Code/Stenosis-Severity/reconstructions/leaflet_surface.vtk")
+
