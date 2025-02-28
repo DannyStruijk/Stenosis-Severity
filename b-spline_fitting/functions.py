@@ -1,7 +1,9 @@
 from geomdl import BSpline
 from geomdl.visualization import VisMPL
+import numpy as np
+import vtk
 
-def save_surface_as_vtk(surface, filename="surface.vtk"):
+def export_vtk(surface, filename="surface.vtk"):
     """
     Save a B-Spline surface to a VTK file for visualization in ParaView.
     
@@ -38,4 +40,4 @@ def save_surface_as_vtk(surface, filename="surface.vtk"):
     print(f"Surface saved as {filename}")
 
 # Save the surface as a VTK file
-save_surface_as_vtk(surf, "H:/DATA/Afstuderen/2. Code/Stenosis-Severity/b-spline_fitting/nurbs_surface.vtk")
+#save_surface_as_vtk(surf, "H:/DATA/Afstuderen/2. Code/Stenosis-Severity/b-spline_fitting/nurbs_surface.vtk")
