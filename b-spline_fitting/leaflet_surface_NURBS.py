@@ -2,13 +2,11 @@
 # the leaflet based on a NURBS surface. Consequently, export the file and view 
 # surface to a vtk file to view it in paraview.
 
-from geomdl import BSpline
 import numpy as np
-import pyvista as pv
 import functions
-
 import os 
 
+# Change working directory in order to import functions from other file
 os.chdir("H:/DATA/Afstuderen/2. Code/Stenosis-Severity/b-spline_fitting")
 
 # Define control points based on user's input
@@ -18,22 +16,18 @@ hinge_point = [1, 0, 0]  # Hinge point
 leaflet_tip = [(commissure_1[0] + commissure_2[0]) / 2, 1, (commissure_1[2] + hinge_point[2]) / 3]
 
 # Calculate the control poitns for the surface reconstructions
-control_points = functions.calc_boundary_ctrlpts(commissure_1, commissure_2, leaflet_tip, hinge_point)
+control_points = functions.calc_surface_ctrlpts(commissure_1, commissure_2, leaflet_tip, hinge_point)
 
-# Define the NURBS surface
-surf = BSpline.Surface()
-surf.degree_u = 2
-surf.degree_v = 2
-surf.ctrlpts2d = control_points  # Set control points
+# Define the knot vectors for the surface
+knotvector_u = [0, 0, 0, 0.9, 0.9, 1]
+#knotvector_v = [0, 0, 0, 0.9, 0.9, 1]
 
-# Define knot vectors
-surf.knotvector_u = [0, 0, 0, 1, 1, 1]
-surf.knotvector_v = [0, 0, 0, 1, 1, 1]
+#knotvector_u = [0, 0.25, 0.5, 0.75, 0.9, 1]
+knotvector_v = [0, 0.25, 0.5, 0.75, 0.9, 1]
 
-# Set resolution
-surf.delta = 0.05  # Resolution
+# Reconstruct the surface using the defined control points, parameters are currently hard-coded
+surf = functions.reconstruct_surface(control_points, knotvector_u = knotvector_u, knotvector_v = knotvector_v)
 
-surf.evaluate()
-
+# Save the surface as a VTK file
 functions.export_vtk(surf, "H:/DATA/Afstuderen/2. Code/Stenosis-Severity/reconstructions/leaflet_surface.vtk")
 

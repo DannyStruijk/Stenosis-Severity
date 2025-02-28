@@ -42,20 +42,21 @@ def export_vtk(surface, filename="surface.vtk"):
 # Save the surface as a VTK file
 #save_surface_as_vtk(surf, "H:/DATA/Afstuderen/2. Code/Stenosis-Severity/b-spline_fitting/nurbs_surface.vtk")
 
-def calc_boundary_ctrlpts(commissure_1: list, commissure_2: list, leaflet_tip: list, hinge_point: list):
+def calc_surface_ctrlpts(commissure_1: list, commissure_2: list, leaflet_tip: list, hinge_point: list):
     """
     Calculate the control points of the boundaries of a leaflet tip based on landmarks
     
-    Arguments:
-        - Commisure_1, representing one commisure of the leaflet
-        - Commisure_2, representing the other commisure of the leaflet
-        - leaflet_tip, which is the tip of the leaflet
-        - hinge_point, this is the hinge points, the lowest point of the leaflet between the commissures
+    Parameters:
+        Commissure_1, representing one commisure of the leaflet
+        Commissure_2, representing the other commisure of the leaflet
+        leaflet_tip, which is the tip of the leaflet
+        hinge_point, this is the hinge points, the lowest point of the leaflet between the commissures
     Note that the function now only works for a single leaflet. The way that the
     curvature of the arch is now calculate is based on hard-coding
     
-    The function returns a grid of control points representing the control points reconstructing the 
-    boundaries of the leaflet.
+    Returns:
+        grid of control points representing the control points reconstructing the 
+        boundaries of the leaflet.
     """
     arch_control_1 = [(leaflet_tip[0] + commissure_1[0]) / 2, (leaflet_tip[1] + hinge_point[1]) / 2, (leaflet_tip[2] + hinge_point[2]) / 1.5]
     arch_control_2 = [(leaflet_tip[0] + commissure_2[0]) / 2, (leaflet_tip[1] + hinge_point[1]) / 2, (leaflet_tip[2] + hinge_point[2]) / 1.5]
@@ -69,6 +70,42 @@ def calc_boundary_ctrlpts(commissure_1: list, commissure_2: list, leaflet_tip: l
     
     return control_points
 
+def reconstruct_surface(control_points, degree_u=2, degree_v=2, knotvector_u=None, knotvector_v=None, delta=0.02):
+    """
+    Constructs and evaluates a NURBS surface from given control points.
+
+    Parameters:
+        control_points (list): 2D grid of 3D control points.
+        degree_u (int): Degree in the U direction (default: 2).
+        degree_v (int): Degree in the V direction (default: 2).
+        knotvector_u (list, optional): Knot vector for U direction.
+        knotvector_v (list, optional): Knot vector for V direction.
+        delta (float): Surface evaluation resolution (default: 0.05).
+
+    Returns:
+        BSpline.Surface: The reconstructed and evaluated NURBS surface.
+    """
+    from geomdl import BSpline
+
+    # Create the NURBS surface
+    surf = BSpline.Surface()
+    surf.degree_u = degree_u
+    surf.degree_v = degree_v
+    surf.ctrlpts2d = control_points
+
+    # Define default knot vectors if not provided
+    if knotvector_u is None:
+        knotvector_u = [0, 0, 0, 1, 1, 1]
+    if knotvector_v is None:
+        knotvector_v = [0, 0, 0, 1, 1, 1]
+
+    surf.knotvector_u = knotvector_u
+    surf.knotvector_v = knotvector_v
+    surf.delta = delta
+
+    # Evaluate the surface
+    surf.evaluate()
+    return surf
 
 
 
