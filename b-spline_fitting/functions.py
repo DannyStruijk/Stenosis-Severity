@@ -1,7 +1,9 @@
 from geomdl import BSpline
-from geomdl.visualization import VisMPL
+from geomdl.visualization import VisVTK
 import numpy as np
 import vtk
+
+
 
 def export_vtk(surface, filename="surface.vtk"):
     """
