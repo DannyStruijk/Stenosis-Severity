@@ -60,8 +60,11 @@ def calc_surface_ctrlpts(commissure_1: list, commissure_2: list, leaflet_tip: li
         grid of control points representing the control points reconstructing the 
         boundaries of the leaflet.
     """
-    arch_control_1 = [(leaflet_tip[0] + commissure_1[0]) / 2, (leaflet_tip[1] + hinge_point[1]) / 2, (leaflet_tip[2] + hinge_point[2]) / 1.5]
-    arch_control_2 = [(leaflet_tip[0] + commissure_2[0]) / 2, (leaflet_tip[1] + hinge_point[1]) / 2, (leaflet_tip[2] + hinge_point[2]) / 1.5]
+#   arch_control_1 = [(leaflet_tip[0] + commissure_1[0]) / 2, (leaflet_tip[1] + hinge_point[1]) / 2, (leaflet_tip[2] + hinge_point[2]) / 1.5]
+#    arch_control_2 = [(leaflet_tip[0] + commissure_2[0]) / 2, (leaflet_tip[1] + hinge_point[1]) / 2, (leaflet_tip[2] + hinge_point[2]) / 1.5]
+
+    arch_control_1=[(leaflet_tip[0]+commissure_1[0])/2-0.5, (leaflet_tip[1]+hinge_point[1])/2+0.5, (leaflet_tip[2]+hinge_point[2])/2]
+    arch_control_2=[(leaflet_tip[0]+commissure_2[0])/2+0.5, (leaflet_tip[1]+hinge_point[1])/2+0.5, (leaflet_tip[2]+hinge_point[2])/2]
 
     # Define the control grid (3x3 control points)
     control_points = [

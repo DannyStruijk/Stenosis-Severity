@@ -18,8 +18,8 @@ hinge_point = [1,0,0]
 leaflet_tip=[(point_1[0]+point_2[0])/2,  1 , (point_1[2]+hinge_point[2])/3]
 
 # Arch punten om te helpen met lijn vormen tussen tip en commisuren
-arch_control_1=[(leaflet_tip[0]+point_1[0])/2, (leaflet_tip[1]+hinge_point[1])/2, (leaflet_tip[2]+hinge_point[2])/1.5]
-arch_control_2=[(leaflet_tip[0]+point_2[0])/2, (leaflet_tip[1]+hinge_point[1])/2, (leaflet_tip[2]+hinge_point[2])/1.5]
+arch_control_1=[(leaflet_tip[0]+point_1[0])/2-0.5, (leaflet_tip[1]+hinge_point[1])/2+0.5, (leaflet_tip[2]+hinge_point[2])/2]
+arch_control_2=[(leaflet_tip[0]+point_2[0])/2+0.5, (leaflet_tip[1]+hinge_point[1])/2+0.5, (leaflet_tip[2]+hinge_point[2])/2]
 
 # Handmatig punten instellen in 3D
 points = np.array([point_1, hinge_point, point_2])
