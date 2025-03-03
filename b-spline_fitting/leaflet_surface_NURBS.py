@@ -21,8 +21,8 @@ leaflet_tip = [(commissure_1[0] + commissure_2[0]) / 2, 1, (commissure_1[2] + hi
 control_points = functions.calc_surface_ctrlpts(commissure_1, commissure_2, leaflet_tip, hinge_point)
 
 # Define the knot vectors for the surface
-knotvector_u = [0, 0.01, 0.4, 0.6, 0.8, 1]
-knotvector_v = [0, 0.01, 0.4, 0.6, 0.8, 1]
+knotvector_u = [0, 0, 0,1,1,1]
+knotvector_v = [0, 0, 0, 1, 1, 1]
 
 #knotvector_u = [0, 0.25, 0.5, 0.75, 0.9, 1]
 #knotvector_v = [0, 0.25, 0.5, 0.75, 0.9, 1]
