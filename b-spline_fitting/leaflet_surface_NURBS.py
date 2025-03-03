@@ -2,13 +2,14 @@
 # the leaflet based on a NURBS surface. Consequently, export the file and view 
 # surface to a vtk file to view it in paraview.
 
+# Change working directory in order to import functions from other file
+os.chdir("H:/DATA/Afstuderen/2. Code/Stenosis-Severity/b-spline_fitting")
+
+# Import modules
 import numpy as np
 import functions
 import os 
 from geomdl.visualization import VisMPL
-
-# Change working directory in order to import functions from other file
-os.chdir("H:/DATA/Afstuderen/2. Code/Stenosis-Severity/b-spline_fitting")
 
 # Define control points based on user's input
 commissure_1 = [0, 0, 1]  # Commissure 1
