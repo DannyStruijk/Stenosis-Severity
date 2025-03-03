@@ -3,10 +3,14 @@
 " Op basis van zelfgekozen punten. Dit resultaat wordt vergeleken met de Philips segmentatie. "
 
 
+# Change working directory in order to import functions from other file
+os.chdir("H:/DATA/Afstuderen/2. Code/Stenosis-Severity/b-spline_fitting")
+
 import numpy as np
 import matplotlib.pyplot as plt 
 from scipy.interpolate import make_interp_spline
 from mpl_toolkits.mplot3d import Axes3D, art3d
+import functions
 
 # User input: selecting the necessary points to reconstruct the leaflet
 # Commisuren & hinge point
@@ -60,9 +64,14 @@ ax.plot(arch_2_x, arch_2_y, arch_2_z, 'b-')
 ax.scatter(*leaflet_tip, color='g', s=100, label='Leaflet tip')  # Groen punt voor leaflet tip
 ax.legend()
 
-#Plot arch points
+# Plot arch points
 ax.scatter(*arch_control_1, color='r', s=50, label="Arch point")
 ax.scatter(*arch_control_2, color='r', s=50, label="Arch point")
+
+# Plot annulus midpoints
+center = [leaflet_tip[0], leaflet_tip[1], (point_1[2]+point_2[2])/2]
+annulus_midpoint = functions.midpoint_on_annulus(point_1, point_2, center)
+ax.scatter(*annulus_midpoint, color= 'b', s=50, label="Annulus Midpoint")
 
 plt.show()
 

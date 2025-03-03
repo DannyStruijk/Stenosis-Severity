@@ -32,3 +32,11 @@ surf = functions.reconstruct_surface(control_points, knotvector_u = knotvector_u
 
 # Save the surface as a VTK file
 functions.export_vtk(surf, "H:/DATA/Afstuderen/2. Code/Stenosis-Severity/reconstructions/leaflet_surface.vtk")
+
+# Reconstruct the leaflet wall
+# Calculate the center first based on the leaflet tip
+center = [leaflet_tip[0], leaflet_tip[1], (commissure_1[2]+commissure_2[2])/2]
+annulus_midpoint = functions.midpoint_on_annulus(commissure_1, commissure_2, center)
+
+leaflet_wall = functions.reconstruct_leaflet_wall(commissure_1, commissure_2, hinge_point, annulus_midpoint)
+functions.export_vtk(leaflet_wall, "H:/DATA/Afstuderen/2. Code/Stenosis-Severity/reconstructions/leaflet_wall.vtk")
