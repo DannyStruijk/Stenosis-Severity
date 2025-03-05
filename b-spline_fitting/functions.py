@@ -40,9 +40,7 @@ def export_vtk(surface, filename="surface.vtk"):
     writer.Write()
     
     print(f"Surface saved as {filename}")
-
-# Save the surface as a VTK file
-#save_surface_as_vtk(surf, "H:/DATA/Afstuderen/2. Code/Stenosis-Severity/b-spline_fitting/nurbs_surface.vtk")
+    
 
 def calc_surface_ctrlpts(commissure_1: list, commissure_2: list, leaflet_tip: list, center = list):
     """
@@ -81,6 +79,8 @@ def calc_surface_ctrlpts(commissure_1: list, commissure_2: list, leaflet_tip: li
         [commissure_2, arch_control_2, leaflet_tip]
     ]
     
+    print("\nControl points: ", control_points[0], "\n", control_points[1], "\n", control_points[2])
+    
     return control_points
 
 def reconstruct_surface(control_points, degree_u=2, degree_v=2, knotvector_u=None, knotvector_v=None, delta=0.02):
@@ -98,7 +98,7 @@ def reconstruct_surface(control_points, degree_u=2, degree_v=2, knotvector_u=Non
     Returns:
         BSpline.Surface: The reconstructed and evaluated NURBS surface.
     """
-    print("Surf", control_points)
+
     # Create the NURBS surface
     surf = BSpline.Surface()
     surf.degree_u = degree_u
@@ -120,7 +120,7 @@ def reconstruct_surface(control_points, degree_u=2, degree_v=2, knotvector_u=Non
     return surf
 
 
-def calc_wall_ctrlpts(commissure_1, commissure_2, leaflet_tip, degree_u=2, degree_v=2, knotvector_u=None, knotvector_v=None, delta=0.02):
+def calc_wall_ctrlpts(commissure_1: list, commissure_2: list, leaflet_tip: list, degree_u=2, degree_v=2, knotvector_u=None, knotvector_v=None, delta=0.02):
     """
     Constructs and evaluates a B-Spline surface bound by the commissures and the hinge point.
     
@@ -139,27 +139,32 @@ def calc_wall_ctrlpts(commissure_1, commissure_2, leaflet_tip, degree_u=2, degre
         BSpline.Surface: The reconstructed and evaluated B-Spline surface.
     """
     annulus_midpoint = midpoint_on_annulus(commissure_1, commissure_2, leaflet_tip)
-
-    # Calculate the hinge 
-    hinge_point=[annulus_midpoint[0], annulus_midpoint[1], 0]
-
     
+    # Calculate the hinge 
+    hinge_point=[annulus_midpoint[0], round(annulus_midpoint[1],2), 0]
+
     # Define the center of the wall 
     center_wall = [
     (annulus_midpoint[0]), 
     (annulus_midpoint[1]),
-    (0.6)
+    (annulus_midpoint[2]+hinge_point[2])/2
     ]
-
     
-    # Define control points
+    # Define a grid for the control points representing the wall
     control_points = [
         [commissure_1, annulus_midpoint, commissure_2],
         [commissure_1, center_wall, commissure_2],
-        [commissure_1+0.1, hinge_point, commissure_2-0.1]
+        [commissure_1, hinge_point, commissure_2]
     ]
     
-    print(control_points)
+    control_points = [
+        [[0, 0, 1], annulus_midpoint, [1, 2, 1]], 
+        [[0, 0, 1], [0.3423658394074329, 1.556026136348903, 0.5], [1, 2, 1]], 
+        [[0, 0, 1], [0.3423658394074329, 1.56, 0], [1, 2, 1]]
+    ]
+
+    
+    print("\nControl points: ", control_points[0], "\n", control_points[1], "\n", control_points[2])
     
     return control_points
 
@@ -209,5 +214,3 @@ def midpoint_on_annulus(commissure_1, commissure_2, center):
     return midpoint
 
 
-#def create_boundaries(commissure_1: list, commissure_2: list, leaflet_tip: list):
-    
