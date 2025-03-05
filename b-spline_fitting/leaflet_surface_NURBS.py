@@ -1,42 +1,39 @@
 # Script to use the boundaries created in leaflet_boundaries.py to reconstruct
 # the leaflet based on a NURBS surface. Consequently, export the file and view 
 # surface to a vtk file to view it in paraview.
-
+import os 
 # Change working directory in order to import functions from other file
 os.chdir("H:/DATA/Afstuderen/2. Code/Stenosis-Severity/b-spline_fitting")
 
 # Import modules
-import numpy as np
 import functions
-import os 
-from geomdl.visualization import VisMPL
 
 # Define control points based on user's input
 commissure_1 = [0, 0, 1]  # Commissure 1
 commissure_2 = [2, 0, 1]  # Commissure 2
-hinge_point = [1, 0, 0]  # Hinge point
-leaflet_tip = [(commissure_1[0] + commissure_2[0]) / 2, 1, (commissure_1[2] + hinge_point[2]) / 3]
+commissure_3 = [1, 2, 1]
+leaflet_tip = [(commissure_1[0] + commissure_2[0]) / 2, 1, commissure_1[2] / 1.5]
 
 # Calculate the control poitns for the surface reconstructions
-control_points = functions.calc_surface_ctrlpts(commissure_1, commissure_2, leaflet_tip, hinge_point)
+control_points_1 = functions.calc_surface_ctrlpts(commissure_1, commissure_2, leaflet_tip)
+control_points_2 = functions.calc_surface_ctrlpts(commissure_1, commissure_3, leaflet_tip)
+control_points_3 = functions.calc_surface_ctrlpts(commissure_2, commissure_3, leaflet_tip)
 
 # Define the knot vectors for the surface
 knotvector_u = [0, 0, 0,1,1,1]
 knotvector_v = [0, 0, 0, 1, 1, 1]
 
-#knotvector_u = [0, 0.25, 0.5, 0.75, 0.9, 1]
-#knotvector_v = [0, 0.25, 0.5, 0.75, 0.9, 1]
-
 # Reconstruct the surface using the defined control points, parameters are currently hard-coded
-surf = functions.reconstruct_surface(control_points, knotvector_u = knotvector_u, knotvector_v = knotvector_v)
+leaflet_1 = functions.reconstruct_surface(control_points_1, knotvector_u = knotvector_u, knotvector_v = knotvector_v)
+leaflet_2 = functions.reconstruct_surface(control_points_2, knotvector_u = knotvector_u, knotvector_v = knotvector_v)
+leaflet_3 = functions.reconstruct_surface(control_points_3, knotvector_u = knotvector_u, knotvector_v = knotvector_v)
 
 # Save the surface as a VTK file
-functions.export_vtk(surf, "H:/DATA/Afstuderen/2. Code/Stenosis-Severity/reconstructions/leaflet_surface.vtk")
+functions.export_vtk(leaflet_1, "H:/DATA/Afstuderen/2. Code/Stenosis-Severity/reconstructions/leaflet_surface.vtk")
+functions.export_vtk(leaflet_2, "H:/DATA/Afstuderen/2. Code/Stenosis-Severity/reconstructions/leaflet_surface_2.vtk")
+functions.export_vtk(leaflet_3, "H:/DATA/Afstuderen/2. Code/Stenosis-Severity/reconstructions/leaflet_surface_3.vtk")
 
 # Reconstruct the leaflet wall
-# Calculate the center first based on the leaflet tip
-center = [leaflet_tip[0], leaflet_tip[1], (commissure_1[2]+commissure_2[2])/2]
-annulus_midpoint = functions.midpoint_on_annulus(commissure_1, commissure_2, center)
-
-leaflet_wall = functions.reconstruct_leaflet_wall(commissure_1, commissure_2, hinge_point, annulus_midpoint)
+control_points_wall = functions.calc_wall_ctrlpts(commissure_1, commissure_2, leaflet_tip)
+leaflet_wall = functions.reconstruct_surface(control_points_wall, knotvector_u = knotvector_u, knotvector_v = knotvector_v)
 functions.export_vtk(leaflet_wall, "H:/DATA/Afstuderen/2. Code/Stenosis-Severity/reconstructions/leaflet_wall.vtk")

@@ -2,7 +2,7 @@
 " Daarnaast probeer ik de reconstructie van een leaflet te maken dmv Nadir point, commisuren en hinge points" 
 " Op basis van zelfgekozen punten. Dit resultaat wordt vergeleken met de Philips segmentatie. "
 
-
+import os
 # Change working directory in order to import functions from other file
 os.chdir("H:/DATA/Afstuderen/2. Code/Stenosis-Severity/b-spline_fitting")
 
@@ -16,14 +16,16 @@ import functions
 # Commisuren & hinge point
 point_1 = [0,0,1]
 point_2 = [2,0,1]
+point_3 = [-1, 0, 1]
 hinge_point = [1,0,0]
 
 # Automatische leaflet_tip herkenning
 leaflet_tip=[(point_1[0]+point_2[0])/2,  1 , (point_1[2]+hinge_point[2])/3]
 
 # Arch punten om te helpen met lijn vormen tussen tip en commisuren
-arch_control_1=[(leaflet_tip[0]+point_1[0])/2-0.5, (leaflet_tip[1]+hinge_point[1])/2+0.5, (leaflet_tip[2]+hinge_point[2])/2]
-arch_control_2=[(leaflet_tip[0]+point_2[0])/2+0.5, (leaflet_tip[1]+hinge_point[1])/2+0.5, (leaflet_tip[2]+hinge_point[2])/2]
+arch_control_1=[(leaflet_tip[0]+point_1[0])/2, (leaflet_tip[1]+hinge_point[1])/2, (leaflet_tip[2]+hinge_point[2])/2]
+arch_control_2=[(leaflet_tip[0]+point_2[0])/2, (leaflet_tip[1]+hinge_point[1])/2, (leaflet_tip[2]+hinge_point[2])/2]
+arch_control_3=[(leaflet_tip[0] + point_3[0]) / 2, (leaflet_tip[1] + hinge_point[1]) / 2, (leaflet_tip[2] + point_3[2]) / 2]
 
 # Handmatig punten instellen in 3D
 points = np.array([point_1, hinge_point, point_2])
