@@ -44,7 +44,7 @@ def export_vtk(surface, filename="surface.vtk"):
 # Save the surface as a VTK file
 #save_surface_as_vtk(surf, "H:/DATA/Afstuderen/2. Code/Stenosis-Severity/b-spline_fitting/nurbs_surface.vtk")
 
-def calc_surface_ctrlpts(commissure_1: list, commissure_2: list, leaflet_tip: list, hinge_point: list):
+def calc_surface_ctrlpts(commissure_1: list, commissure_2: list, leaflet_tip: list, center = list):
     """
     Calculate the control points of the boundaries of a leaflet tip based on landmarks
     
@@ -60,16 +60,24 @@ def calc_surface_ctrlpts(commissure_1: list, commissure_2: list, leaflet_tip: li
         grid of control points representing the control points reconstructing the 
         boundaries of the leaflet.
     """
-#   arch_control_1 = [(leaflet_tip[0] + commissure_1[0]) / 2, (leaflet_tip[1] + hinge_point[1]) / 2, (leaflet_tip[2] + hinge_point[2]) / 1.5]
-#    arch_control_2 = [(leaflet_tip[0] + commissure_2[0]) / 2, (leaflet_tip[1] + hinge_point[1]) / 2, (leaflet_tip[2] + hinge_point[2]) / 1.5]
+    center = [
+    (commissure_1[0] + commissure_2[0] + leaflet_tip[0]) / 3,
+    (commissure_1[1] + commissure_2[1] + leaflet_tip[1]) / 3,
+    -1
+    ]
 
-    arch_control_1=[(leaflet_tip[0]+commissure_1[0])/2-0.5, (leaflet_tip[1]+hinge_point[1])/2, (leaflet_tip[2]+hinge_point[2])/2]
-    arch_control_2=[(leaflet_tip[0]+commissure_2[0])/2+0.5, (leaflet_tip[1]+hinge_point[1])/2, (leaflet_tip[2]+hinge_point[2])/2]
+    annulus_midpoint = midpoint_on_annulus(commissure_1, commissure_2, leaflet_tip)
+    
+    # Calculate the hinge 
+    hinge_point=[annulus_midpoint[0], annulus_midpoint[1], 0]
+
+    arch_control_1=[(leaflet_tip[0]+commissure_1[0])/2, (leaflet_tip[1]+commissure_1[1])/2, (leaflet_tip[2]+commissure_1[2])/2-0.2]
+    arch_control_2=[(leaflet_tip[0]+commissure_2[0])/2, (leaflet_tip[1]+commissure_2[1])/2, (leaflet_tip[2]+commissure_2[2])/2-0.2]
 
     # Define the control grid (3x3 control points)
     control_points = [
         [commissure_1, arch_control_1, leaflet_tip],
-        [hinge_point, hinge_point, hinge_point],
+        [hinge_point, center, leaflet_tip],
         [commissure_2, arch_control_2, leaflet_tip]
     ]
     
@@ -90,8 +98,7 @@ def reconstruct_surface(control_points, degree_u=2, degree_v=2, knotvector_u=Non
     Returns:
         BSpline.Surface: The reconstructed and evaluated NURBS surface.
     """
-    from geomdl import BSpline
-
+    print("Surf", control_points)
     # Create the NURBS surface
     surf = BSpline.Surface()
     surf.degree_u = degree_u
@@ -113,7 +120,7 @@ def reconstruct_surface(control_points, degree_u=2, degree_v=2, knotvector_u=Non
     return surf
 
 
-def reconstruct_leaflet_wall(commissure_1, commissure_2, hinge_point, annulus_midpoint, degree_u=2, degree_v=2, knotvector_u=None, knotvector_v=None, delta=0.02):
+def calc_wall_ctrlpts(commissure_1, commissure_2, leaflet_tip, degree_u=2, degree_v=2, knotvector_u=None, knotvector_v=None, delta=0.02):
     """
     Constructs and evaluates a B-Spline surface bound by the commissures and the hinge point.
     
@@ -131,39 +138,30 @@ def reconstruct_leaflet_wall(commissure_1, commissure_2, hinge_point, annulus_mi
     Returns:
         BSpline.Surface: The reconstructed and evaluated B-Spline surface.
     """
+    annulus_midpoint = midpoint_on_annulus(commissure_1, commissure_2, leaflet_tip)
+
+    # Calculate the hinge 
+    hinge_point=[annulus_midpoint[0], annulus_midpoint[1], 0]
+
+    
     # Define the center of the wall 
     center_wall = [
-    (annulus_midpoint[0] + hinge_point[0]) / 2, 
-    (annulus_midpoint[1] + hinge_point[1]) / 2, 
-    (annulus_midpoint[2] + hinge_point[2]) / 2
+    (annulus_midpoint[0]), 
+    (annulus_midpoint[1]),
+    (0.6)
     ]
+
     
     # Define control points
     control_points = [
         [commissure_1, annulus_midpoint, commissure_2],
         [commissure_1, center_wall, commissure_2],
-        [commissure_1, hinge_point, commissure_2]
+        [commissure_1+0.1, hinge_point, commissure_2-0.1]
     ]
     
-    # Create the B-Spline surface
-    surf = BSpline.Surface()
-    surf.degree_u = degree_u
-    surf.degree_v = degree_v
-    surf.ctrlpts2d = control_points
+    print(control_points)
     
-    # Define default knot vectors if not provided
-    if knotvector_u is None:
-        knotvector_u = [0, 0, 0, 1, 1, 1]
-    if knotvector_v is None:
-        knotvector_v = [0, 0, 0, 1, 1, 1]
-    
-    surf.knotvector_u = knotvector_u
-    surf.knotvector_v = knotvector_v
-    surf.delta = delta
-    
-    # Evaluate the surface
-    surf.evaluate()
-    return surf
+    return control_points
 
 
 def midpoint_on_annulus(commissure_1, commissure_2, center):
