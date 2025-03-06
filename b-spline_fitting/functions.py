@@ -2,6 +2,9 @@ from geomdl import BSpline
 from geomdl.visualization import VisVTK
 import numpy as np
 import vtk
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+from scipy.optimize import least_squares
 
 
 
@@ -42,7 +45,7 @@ def export_vtk(surface, filename="surface.vtk"):
     print(f"Surface saved as {filename}")
     
 
-def calc_surface_ctrlpts(commissure_1: list, commissure_2: list, leaflet_tip: list, center = list):
+def calc_surface_ctrlpts(commissure_1: list, commissure_2: list, leaflet_tip: list):
     """
     Calculate the control points of the boundaries of a leaflet tip based on landmarks
     
@@ -58,14 +61,14 @@ def calc_surface_ctrlpts(commissure_1: list, commissure_2: list, leaflet_tip: li
         grid of control points representing the control points reconstructing the 
         boundaries of the leaflet.
     """
+
+    annulus_midpoint = midpoint_on_annulus(commissure_1, commissure_2, leaflet_tip)
+    
     center = [
     (commissure_1[0] + commissure_2[0] + leaflet_tip[0]) / 3,
     (commissure_1[1] + commissure_2[1] + leaflet_tip[1]) / 3,
     -1
     ]
-
-    annulus_midpoint = midpoint_on_annulus(commissure_1, commissure_2, leaflet_tip)
-    
     # Calculate the hinge 
     hinge_point=[annulus_midpoint[0], annulus_midpoint[1], 0]
 
@@ -79,7 +82,6 @@ def calc_surface_ctrlpts(commissure_1: list, commissure_2: list, leaflet_tip: li
         [commissure_2, arch_control_2, leaflet_tip]
     ]
     
-    print("\nControl points: ", control_points[0], "\n", control_points[1], "\n", control_points[2])
     
     return control_points
 
@@ -120,7 +122,7 @@ def reconstruct_surface(control_points, degree_u=2, degree_v=2, knotvector_u=Non
     return surf
 
 
-def calc_wall_ctrlpts(commissure_1: list, commissure_2: list, leaflet_tip: list, degree_u=2, degree_v=2, knotvector_u=None, knotvector_v=None, delta=0.02):
+def calc_wall_ctrlpts(commissure_1: list, commissure_2: list, leaflet_tip: list, center: list, degree_u=2, degree_v=2, knotvector_u=None, knotvector_v=None, delta=0.02):
     """
     Constructs and evaluates a B-Spline surface bound by the commissures and the hinge point.
     
@@ -138,7 +140,7 @@ def calc_wall_ctrlpts(commissure_1: list, commissure_2: list, leaflet_tip: list,
     Returns:
         BSpline.Surface: The reconstructed and evaluated B-Spline surface.
     """
-    annulus_midpoint = midpoint_on_annulus(commissure_1, commissure_2, leaflet_tip)
+    annulus_midpoint = midpoint_on_annulus(center, commissure_1, commissure_2)
     
     # Calculate the hinge 
     hinge_point=[annulus_midpoint[0], round(annulus_midpoint[1],2), 0]
@@ -163,9 +165,7 @@ def calc_wall_ctrlpts(commissure_1: list, commissure_2: list, leaflet_tip: list,
         [[0, 0, 1], [0.3423658394074329, 1.56, 0], [1, 2, 1]]
     ]
 
-    
-    print("\nControl points: ", control_points[0], "\n", control_points[1], "\n", control_points[2])
-    
+        
     return control_points
 
 
@@ -212,5 +212,63 @@ def midpoint_on_annulus(commissure_1, commissure_2, center):
     ]
     
     return midpoint
+
+#%% Circle
+# Define the residual function for the ellipsoid equation
+def ellipsoid_residual(params, points):
+    # Unpack parameters (center and radii)
+    xc, yc, zc, a, b, c = params
+    
+    # Compute the residuals (differences from the ellipsoid equation)
+    residuals = ((points[:, 0] - xc) ** 2) / a**2 + ((points[:, 1] - yc) ** 2) / b**2 + ((points[:, 2] - zc) ** 2) / c**2 - 1
+    
+    return residuals
+
+def fit_ellipsoid(points):
+    # Initial guess for the parameters (center and semi-axes)
+    # Center at the centroid and semi-axes as the average distances from the center
+    centroid = np.mean(points, axis=0)
+    initial_guess = np.concatenate([centroid, np.ones(3)])
+
+    # Use least-squares optimization to minimize the residuals
+    result = least_squares(ellipsoid_residual, initial_guess, args=(points,))
+    
+    # Return the optimized parameters (center and semi-axes)
+    return result.x
+
+# Function to generate ellipsoid points
+def generate_ellipsoid(center, a, b, c, num_points=100):
+    u = np.linspace(0, 2 * np.pi, num_points)
+    v = np.linspace(0, np.pi, num_points)
+    x = center[0] + a * np.outer(np.cos(u), np.sin(v))
+    y = center[1] + b * np.outer(np.sin(u), np.sin(v))
+    z = center[2] + c * np.outer(np.ones(np.size(u)), np.cos(v))
+    return x, y, z
+
+# Function to export circle to VTK
+def export_to_vtk(circle_points, filename="circle.vtp"):
+    # Convert numpy array to vtk
+    vtk_points = vtk.vtkPoints()
+    for point in circle_points:
+        vtk_points.InsertNextPoint(point)
+    
+    # Create a polyline to connect the points
+    polyline = vtk.vtkCellArray()
+    for i in range(len(circle_points) - 1):
+        polyline.InsertNextCell(2)
+        polyline.InsertCellPoint(i)
+        polyline.InsertCellPoint(i + 1)
+    
+    # Create a PolyData object to hold the circle data
+    circle_polydata = vtk.vtkPolyData()
+    circle_polydata.SetPoints(vtk_points)
+    circle_polydata.SetLines(polyline)
+    
+    # Write the PolyData to a VTK XML file
+    writer = vtk.vtkXMLPolyDataWriter()
+    writer.SetFileName(filename)
+    writer.SetInputData(circle_polydata)
+    writer.Write()
+    print(f"VTK file saved as: {filename}")
 
 
