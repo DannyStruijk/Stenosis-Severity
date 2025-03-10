@@ -1,11 +1,4 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Mon Mar 10 11:01:56 2025
-
-@author: u840707
-"""
-
-# functions/dicom_functions.py
+# gui_functions.py
 import pydicom
 import numpy as np
 import matplotlib.pyplot as plt
@@ -29,17 +22,23 @@ def enhance_contrast(slice_data):
 
 def initialize_slice_index():
     """Initializes and returns the starting slice index."""
-    return 90
+    return 90  # Start from a specific slice (e.g., 90th slice)
 
-def update_image(slice_index, image_data, canvas):
-    """Updates the image displayed in the GUI based on the current slice index."""
+def update_image(slice_index, image_data, canvas, landmarks):
+    """Updates the image displayed in the GUI based on the current slice index, with landmarks."""
     slice_data = get_slice(image_data, slice_index)
-    #enhanced_image = enhance_contrast(slice_data)
-    
+    # Optional contrast enhancement
+    # enhanced_image = enhance_contrast(slice_data)
+
     fig, ax = plt.subplots()
     ax.imshow(slice_data, cmap='gray')
     ax.axis('off')
-    
+
+    # Plot landmarks on the image (points or circles)
+    for (x, y, z) in landmarks:
+        if z == slice_index: 
+            ax.plot(x, y, 'ro', markersize=10)  # 'ro' means red dots
+
     # Update the canvas with the new figure
     canvas.figure = fig
     canvas.draw()
@@ -47,16 +46,16 @@ def update_image(slice_index, image_data, canvas):
     # Close the figure after it is drawn to prevent memory leak
     plt.close(fig)  # Close the figure
 
-def next_slice(slice_index, image_data, canvas):
+def next_slice(slice_index, image_data, canvas, landmarks):
     """Displays the next slice."""
     if slice_index < image_data.shape[0] - 1:
         slice_index += 1
-        update_image(slice_index, image_data, canvas)
+        update_image(slice_index, image_data, canvas, landmarks)  # Pass landmarks here
     return slice_index
 
-def prev_slice(slice_index, image_data, canvas):
+def prev_slice(slice_index, image_data, canvas, landmarks):
     """Displays the previous slice."""
     if slice_index > 0:
         slice_index -= 1
-        update_image(slice_index, image_data, canvas)
+        update_image(slice_index, image_data, canvas, landmarks)  # Pass landmarks here
     return slice_index
