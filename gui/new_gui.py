@@ -35,6 +35,13 @@ class DicomSliceViewer:
         # Setup Labels
         self.instruction = tk.Label(self.window, text = "Please annotate the three commissures.")
         self.instruction.pack(side='bottom')
+        self.commissure_1 = tk.Label(self.window, text = "Coordinates 1st commissure:")
+        self.commissure_1.pack(side = 'right')
+        # self.commissure_2 = tk.Label(self.window, text = "Coordinates 2nd commissure:")
+        # self.commissure_2.pack(side = 'right')
+        # self.commissure_3 = tk.Label(self.window, text = "Coordinates 3rd commissure:")
+        # self.commissure_3.pack(side = 'right')
+        
 
         # Display the first slice
         self.update_slice()
@@ -45,10 +52,10 @@ class DicomSliceViewer:
     def create_buttons(self):
         """Create the navigation and annotation buttons."""
         prev_button = Button(self.window, text="Previous Slice", command=self.prev_button_func)
-        prev_button.pack(side="left")
+        prev_button.place(relx=0.0, rely=1.0, anchor="sw", x=10, y=-10)
 
         next_button = Button(self.window, text="Next Slice", command=self.next_button_func)
-        next_button.pack(side="right")
+        next_button.place(relx=1.0, rely=1.0, anchor="se", x=-10, y=-10)
 
         self.annotate_button = Button(self.window, text="Enable Annotation", command=self.toggle_annotation)
         self.annotate_button.pack(side="bottom")
@@ -81,17 +88,33 @@ class DicomSliceViewer:
 
     def on_click(self, event):
         """Handle mouse click on the image and add annotation."""
-        # if event.xdata is None or event.y is None:
-        #     print("Clicked outside the figure. Ignoring.")
-        #     return
+        if event.xdata is None or event.y is None:
+            print("Clicked outside the figure. Ignoring.")
+            return
 
         if self.annotating:
-            print(f"Click detected at: ({event.x}, {event.y})")
+            print(f"Click detected at: ({event.xdata}, {event.ydata})")
             x, y = int(event.xdata), int(event.ydata)
             z = self.slice_index
             self.landmarks.append((x, y, z))  # Add the clicked point to the landmarks
-            print(f"Landmarks: {self.landmarks}")
             self.update_slice()  # Update the display with the new annotation
+            
+        if len(self.landmarks)==2:
+            self.commissures_done()
+            
+    def commissures_done(self):
+        self.instruction.config(text="Are you done with the commissures?")
+        self.annotate_button.config(text="Yes, continue with leaflet tip", command = self.annotate_leaflet)
+        self.no_button = Button(self.window, text = "No, start over", command =  self.start_over)
+        self.no_button.pack(side="top")    
+    
+    def start_over(self):
+        self.landmarks = []
+        self.no_button.destroy()
+        self.update_slice()
+
+    def annotate_leaflet(self):
+        print("now do the leaflet")
 
     def run(self):
         """Start the Tkinter main loop."""
