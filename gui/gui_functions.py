@@ -29,15 +29,15 @@ def enhance_contrast(slice_data):
 
 def initialize_slice_index():
     """Initializes and returns the starting slice index."""
-    return 0
+    return 90
 
 def update_image(slice_index, image_data, canvas):
     """Updates the image displayed in the GUI based on the current slice index."""
     slice_data = get_slice(image_data, slice_index)
-    enhanced_image = enhance_contrast(slice_data)
+    #enhanced_image = enhance_contrast(slice_data)
     
     fig, ax = plt.subplots()
-    ax.imshow(enhanced_image, cmap='gray')
+    ax.imshow(slice_data, cmap='gray')
     ax.axis('off')
     
     # Update the canvas with the new figure

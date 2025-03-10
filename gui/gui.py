@@ -34,11 +34,32 @@ window.title("DICOM Slice Viewer")
 canvas = FigureCanvasTkAgg(Figure(), master=window)
 canvas.get_tk_widget().pack()
 
+# Create a label to display the current slice index
+slice_label = tk.Label(window, text=f"Current Slice: {slice_index}")
+slice_label.pack()
+
+# Function to update the slice and canvas
+def update_slice():
+    """Update the image displayed in the GUI with the current slice."""
+    gf.update_image(slice_index, image_data, canvas)
+    slice_label.config(text=f"Current Slice: {slice_index}")  # Update the label with the current slice index
+
 # Add buttons for navigation
-prev_button = Button(window, text="Previous Slice", command=lambda: gf.prev_slice(slice_index, image_data, canvas))
+def prev_button_func():
+    global slice_index
+    slice_index = gf.prev_slice(slice_index, image_data, canvas)
+    update_slice()
+
+def next_button_func():
+    global slice_index
+    slice_index = gf.next_slice(slice_index, image_data, canvas)
+    update_slice()
+
+# Create the previous and next slice buttons
+prev_button = Button(window, text="Previous Slice", command=prev_button_func)
 prev_button.pack(side="left")
 
-next_button = Button(window, text="Next Slice", command=lambda: gf.next_slice(slice_index, image_data, canvas))
+next_button = Button(window, text="Next Slice", command=next_button_func)
 next_button.pack(side="right")
 
 # Display the first slice
