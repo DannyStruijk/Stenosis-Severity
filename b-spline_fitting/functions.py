@@ -67,10 +67,10 @@ def calc_surface_ctrlpts(commissure_1: list, commissure_2: list, leaflet_tip: li
     center = [
     (commissure_1[0] + commissure_2[0] + leaflet_tip[0]) / 3,
     (commissure_1[1] + commissure_2[1] + leaflet_tip[1]) / 3,
-    -1
+    leaflet_tip[2]-10
     ]
     # Calculate the hinge 
-    hinge_point=[annulus_midpoint[0], annulus_midpoint[1], 0]
+    hinge_point=[annulus_midpoint[0], annulus_midpoint[1], leaflet_tip[2]-30]
 
     arch_control_1=[(leaflet_tip[0]+commissure_1[0])/2, (leaflet_tip[1]+commissure_1[1])/2, (leaflet_tip[2]+commissure_1[2])/2-0.2]
     arch_control_2=[(leaflet_tip[0]+commissure_2[0])/2, (leaflet_tip[1]+commissure_2[1])/2, (leaflet_tip[2]+commissure_2[2])/2-0.2]
