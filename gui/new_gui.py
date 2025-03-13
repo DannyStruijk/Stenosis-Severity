@@ -11,7 +11,8 @@ class DicomSliceViewer:
         self.image_data = gf.load_dicom(dicom_file_path)
         self.slice_index = gf.initialize_slice_index()
         self.landmarks = []
-        self.annotating = False
+        self.annotating_com = False
+        self.leaflet_tip = []
 
         # Set up the window and canvas
         self.window = tk.Tk()
@@ -78,8 +79,8 @@ class DicomSliceViewer:
 
     def toggle_annotation(self):
         """Toggles the annotation mode."""
-        self.annotating = not self.annotating  # Toggle the flag
-        if self.annotating:
+        self.annotating_com = not self.annotating_com  # Toggle the flag
+        if self.annotating_com:
             #print("Annotation Mode Enabled")
             self.annotate_button.config(text="Disable Annotation")
         else:
@@ -92,14 +93,14 @@ class DicomSliceViewer:
             print("Clicked outside the figure. Ignoring.")
             return
 
-        if self.annotating:
+        if self.annotating_com:
             print(f"Click detected at: ({event.xdata}, {event.ydata})")
             x, y = int(event.xdata), int(event.ydata)
             z = self.slice_index
             self.landmarks.append((x, y, z))  # Add the clicked point to the landmarks
             self.update_slice()  # Update the display with the new annotation
             
-        if len(self.landmarks)==2:
+        if len(self.landmarks)==3:
             self.commissures_done()
             
     def commissures_done(self):
@@ -113,8 +114,12 @@ class DicomSliceViewer:
         self.no_button.destroy()
         self.update_slice()
 
-    def annotate_leaflet(self):
-        print("now do the leaflet")
+    # def annotate_leaflet(self):
+    #     print("now do the leaflet")
+    #     self.annotating_com = False
+    #     self.instruction.config(text = "Please annotate the leaflet tip")
+    #     self.no_button.destroy()
+    #     self.annotate_button.config(text = "Enable Annotation", command = self.toggle_annotation)
 
     def run(self):
         """Start the Tkinter main loop."""
@@ -123,6 +128,6 @@ class DicomSliceViewer:
 
 # Main execution
 if __name__ == "__main__":
-    dicom_file_path = r"H:\DATA\Afstuderen\2.Code\Stenosis-Severity\dicoms\dicom_viewer_0002\0002.DCM"
+    dicom_file_path = r"T:\Research_01\CZE-2020.67 - SAVI-AoS\CZE001 02074965016\DICOM\00003852\AA44D04F\AA453F21\00007152"
     viewer = DicomSliceViewer(dicom_file_path)
     viewer.run()
