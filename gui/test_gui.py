@@ -6,6 +6,9 @@ import os
 import gui_functions as gf  # Import your gui_functions module
 import pydicom
 import matplotlib.pyplot as plt  # Corrected import for matplotlib
+import subprocess 
+import vtk
+from vtk.util.numpy_support import vtk_to_numpy
 
 # Define the DICOM directory
 dicom_dir = r"T:\Research_01\CZE-2020.67 - SAVI-AoS\CZE001 02074965016\DICOM\00003852\AA44D04F\AA453F21\00007152"
@@ -17,7 +20,7 @@ class DicomSliceViewer:
     def __init__(self, dicom_files):
         # Initialize variables
         self.dicom_files = dicom_files  # Sorted list of DICOM files
-        self.slice_index = 200  # Start with the first slice
+        self.slice_index = 100  # Start with the first slice
         self.image_data = gf.get_sorted_image_data(dicom_files)  # Corrected function
         self.landmarks = []
         self.annotating = False
@@ -61,7 +64,10 @@ class DicomSliceViewer:
         self.annotate_button.pack(side="bottom")
 
         self.no_button = Button(self.window, text="No, start over", command=self.start_over)
-        self.no_button.pack(side="top")    
+        self.no_button.pack(side="top")  
+        
+        self.overlay_button = Button(self.window, text="Overlay", command=self.overlay)
+        self.overlay_button.pack(side="right")
         
         print(self.image_data.shape)
 
@@ -128,6 +134,9 @@ class DicomSliceViewer:
         with open("H:/DATA/Afstuderen/2.Code/Stenosis-Severity/b-spline_fitting/landmarks.txt", "w") as f:
             for landmark in self.landmarks:
                 f.write(f"{landmark[0]} {landmark[1]} {landmark[2]}\n")
+                
+        reconstruct_button = Button(self.window, text = "Reconstruct", command = self.run_script)
+        reconstruct_button.pack(side="right")
     
         exit_button = Button(self.window, text="Exit", command=self.window.destroy)
         exit_button.pack(side="bottom")
@@ -138,6 +147,19 @@ class DicomSliceViewer:
         self.annotate_button.config(state=tk.NORMAL, text="Enable Annotation")
         self.instruction.config(text="Please annotate the three commissures.")
         self.update_slice()
+        
+    def run_script(self):
+        """Execute an external Python script."""
+        
+               
+        script_path = r"H:\DATA\Afstuderen\2.Code\Stenosis-Severity\b-spline_fitting\leaflet_surface_NURBS.py"  
+        subprocess.run(["python", script_path], check=True) 
+        
+        
+
+    def overlay(self):
+        """Overlays the reconstruction of the aorta leaflets over the CT image"""
+        return 0
 
     def run(self):
         """Start the Tkinter main loop."""
