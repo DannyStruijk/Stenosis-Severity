@@ -24,26 +24,36 @@ def initialize_slice_index():
     """Initializes and returns the starting slice index."""
     return 90  # Start from a specific slice (e.g., 90th slice)
 
-def update_image(slice_index, image_data, canvas, landmarks):
-    """Updates the image displayed in the GUI based on the current slice index, with landmarks."""
+def update_image(slice_index, image_data, canvas, landmarks, vtk_surface_points = None):
+    """Updates the image displayed in the GUI based on the current slice index, with landmarks and overlayed surface."""
+    
+    # Extract slice data
     slice_data = get_slice(image_data, slice_index)
-    # Optional contrast enhancement
-    # enhanced_image = enhance_contrast(slice_data)
-
+    
+    # Create a new figure for displaying the image
     fig, ax = plt.subplots()
+    
+    # Show the image slice in grayscale
     ax.imshow(slice_data, cmap='gray')
-    ax.axis('off')
+    ax.axis('off')  # Hide the axis for a clean image
 
     # Plot landmarks on the image (points or circles)
     for (x, y, z) in landmarks:
-        if z == slice_index: 
-            ax.plot(x, y, 'ro', markersize=10)  # 'ro' means red dots
+        if z == slice_index:  # Plot landmarks only on the current slice
+            ax.plot(x, y, 'ro', markersize=10)  # 'ro' means red dots, markersize controls the size
+
+    # Overlay the surface points on the image
+    # vtk_surface_points should be a NumPy array with x, y, z coordinates (integer values)
+    surface_points_on_slice = vtk_surface_points[np.abs(vtk_surface_points[:, 2] - slice_index) < 2]  # Allow a tolerance for z-axis
+    
+    if len(surface_points_on_slice) > 0:
+        ax.scatter(surface_points_on_slice[:, 0], surface_points_on_slice[:, 1], c='b', s=10, label="Leaflet Surface", alpha=0.6)
 
     # Update the canvas with the new figure
     canvas.figure = fig
     canvas.draw()
 
-    # Close the figure after it is drawn to prevent memory leak
+    # Close the figure to prevent memory leaks
     plt.close(fig)  # Close the figure
 
 def next_slice(slice_index, image_data, canvas, landmarks):
