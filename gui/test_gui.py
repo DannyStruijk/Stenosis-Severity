@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt  # Corrected import for matplotlib
 import subprocess 
 import vtk
 from vtk.util.numpy_support import vtk_to_numpy
+import numpy as np
 
 # Define the DICOM directory
 dicom_dir = r"T:\Research_01\CZE-2020.67 - SAVI-AoS\CZE001 02074965016\DICOM\00003852\AA44D04F\AA453F21\00007152"
@@ -154,12 +155,40 @@ class DicomSliceViewer:
                
         script_path = r"H:\DATA\Afstuderen\2.Code\Stenosis-Severity\b-spline_fitting\leaflet_surface_NURBS.py"  
         subprocess.run(["python", script_path], check=True) 
-        
-        
 
     def overlay(self):
-        """Overlays the reconstruction of the aorta leaflets over the CT image"""
-        return 0
+        """Overlays the reconstructed leaflet surface on the CT image in the GUI."""
+        print("Overlaying...")
+        # Load the VTK surface
+        vtk_reader = vtk.vtkPolyDataReader()
+        vtk_reader.SetFileName(r"H:\DATA\Afstuderen\2.Code\Stenosis-Severity\reconstructions\leaflet_surface_1.vtk")
+        vtk_reader.Update()
+    
+        polydata = vtk_reader.GetOutput()
+        points = polydata.GetPoints()
+    
+        if points is None:
+            print("Error: No points found in the VTK file.")
+            return
+    
+        # Convert VTK points to NumPy array
+        np_points = vtk_to_numpy(points.GetData())
+    
+        # Extract only points corresponding to the current slice (approximate in Z)
+        slice_z = self.slice_index
+        slice_points = np_points[np.abs(np_points[:, 2] - slice_z) < 2]  # Tolerance for Z match
+    
+        if len(slice_points) == 0:
+            print("No surface points found for this slice.")
+            return
+    
+        # Overlay the points on the image
+        ax = self.fig.gca()
+        ax.scatter(slice_points[:, 0], slice_points[:, 1], c='r', s=10, label="Leaflet Surface")
+        ax.legend()
+        
+    
+        self.canvas.draw()
 
     def run(self):
         """Start the Tkinter main loop."""
