@@ -10,20 +10,15 @@ import functions
 import numpy as np
 
 # Read landmarks from file, which were annotated using the GUI
-landmarks_file = r"H:/DATA/Afstuderen/2.Code/Stenosis-Severity/b-spline_fitting/landmarks.txt"
+# Landmarks file = landmarks from CT images
+# Commissures file = landmarks from STL object
+landmarks_file = r"H:\DATA\Afstuderen\2.Code\Stenosis-Severity\gui\commissures.txt"
+#landmarks_file = r"H:/DATA/Afstuderen/2.Code/Stenosis-Severity/b-spline_fitting/landmarks.txt"
 landmarks = np.loadtxt(landmarks_file)
 
 # Assign commissures and leaflet tip from file
-commissure_1, commissure_2, commissure_3, leaflet_tip = landmarks
-# %% DEFINE COMMISSURES & OTHER INPUT
+commissure_1, commissure_2, commissure_3, leaflet_tip, hinge_1, hinge_2, hinge_3 = landmarks
 
-# Define control points based on user's input
-# commissure_1 = [2, 2, 1]  # Commissure 1
-# commissure_2 = [4, 6, 1]  # Commissure 2
-# commissure_3 = [6, 2, 1]
-
-# Calculating other perimeters
-#leaflet_tip = [(commissure_1[0] + commissure_2[0] + commissure_3[0]) / 3, (commissure_1[1] + commissure_2[1] + commissure_3[1]) / 3, commissure_1[2] / 1.5]
 
 # %% SURFACE CALCULATION & RECONSTRUCTION
 
@@ -48,6 +43,26 @@ functions.export_vtk(leaflet_1, "H:/DATA/Afstuderen/2.Code/Stenosis-Severity/rec
 functions.export_vtk(leaflet_2, "H:/DATA/Afstuderen/2.Code/Stenosis-Severity/reconstructions/leaflet_surface_2.vtk")
 functions.export_vtk(leaflet_3, "H:/DATA/Afstuderen/2.Code/Stenosis-Severity/reconstructions/leaflet_surface_3.vtk")
 
+#%% RECONSTRUCTING THE LEAVES WITH KNOWN HINGE POINTS
+
+# Calculate the control points for the surface reconstructions
+leaf_1 = functions.calc_surface_ctrlpts_hinge(commissure_1, commissure_2, leaflet_tip, hinge_1)
+leaf_2 = functions.calc_surface_ctrlpts_hinge(commissure_1, commissure_3, leaflet_tip, hinge_2)
+leaf_3 = functions.calc_surface_ctrlpts_hinge(commissure_2, commissure_3, leaflet_tip, hinge_3)
+
+# Define the knot vectors for the surface
+knotvector_u = [0, 0, 0,1,1,1]
+knotvector_v = [0, 0, 0, 1, 1, 1]
+
+# # Reconstruct the surface using the defined control points, parameters are currently hard-coded
+leaflet_1_hinge = functions.reconstruct_surface(control_points_1, knotvector_u = knotvector_u, knotvector_v = knotvector_v)
+leaflet_2_hinge = functions.reconstruct_surface(control_points_2, knotvector_u = knotvector_u, knotvector_v = knotvector_v)
+leaflet_3_hinge = functions.reconstruct_surface(control_points_3, knotvector_u = knotvector_u, knotvector_v = knotvector_v)
+
+# # Save the surface as a VTK file
+functions.export_vtk(leaflet_1, "H:/DATA/Afstuderen/2.Code/Stenosis-Severity/reconstructions/leaflet_surface_1_hinge.vtk")
+functions.export_vtk(leaflet_2, "H:/DATA/Afstuderen/2.Code/Stenosis-Severity/reconstructions/leaflet_surface_2_hinge.vtk")
+functions.export_vtk(leaflet_3, "H:/DATA/Afstuderen/2.Code/Stenosis-Severity/reconstructions/leaflet_surface_3_hinge.vtk")
 
 #%% RECONSTRUCTING LEAFLET WALLS
  
