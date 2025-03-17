@@ -64,10 +64,13 @@ def calc_surface_ctrlpts(commissure_1: list, commissure_2: list, leaflet_tip: li
 
     annulus_midpoint = midpoint_on_annulus(commissure_1, commissure_2, leaflet_tip)
     
+    # Define a factor to control how close the center should be to the leaflet_tip in x and y.
+    closeness_factor = 15  # You can adjust this factor to pull the center closer or farther
+    
     center = [
-    (commissure_1[0] + commissure_2[0] + leaflet_tip[0]) / 3,
-    (commissure_1[1] + commissure_2[1] + leaflet_tip[1]) / 3,
-    leaflet_tip[2]-10
+        (commissure_1[0] + commissure_2[0] + (closeness_factor * leaflet_tip[0])) / (2 + closeness_factor),
+        (commissure_1[1] + commissure_2[1] + (closeness_factor * leaflet_tip[1])) / (2 + closeness_factor),
+        leaflet_tip[2]-50  # Keep the z-coordinate unchanged
     ]
     # Calculate the hinge 
     hinge_point=[annulus_midpoint[0], annulus_midpoint[1], leaflet_tip[2]-30]
