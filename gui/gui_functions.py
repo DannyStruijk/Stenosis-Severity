@@ -44,10 +44,10 @@ def update_image(slice_index, image_data, canvas, landmarks, vtk_surface_points 
 
     # Overlay the surface points on the image
     # vtk_surface_points should be a NumPy array with x, y, z coordinates (integer values)
-    surface_points_on_slice = vtk_surface_points[np.abs(vtk_surface_points[:, 2] - slice_index) < 2]  # Allow a tolerance for z-axis
+    # surface_points_on_slice = vtk_surface_points[np.abs(vtk_surface_points[:, 2] - slice_index) < 2]  # Allow a tolerance for z-axis
     
-    if len(surface_points_on_slice) > 0:
-        ax.scatter(surface_points_on_slice[:, 0], surface_points_on_slice[:, 1], c='b', s=10, label="Leaflet Surface", alpha=0.6)
+    # if len(surface_points_on_slice) > 0:
+    #     ax.scatter(surface_points_on_slice[:, 0], surface_points_on_slice[:, 1], c='b', s=10, label="Leaflet Surface", alpha=0.6)
 
     # Update the canvas with the new figure
     canvas.figure = fig
