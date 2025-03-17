@@ -65,12 +65,18 @@ def calc_surface_ctrlpts(commissure_1: list, commissure_2: list, leaflet_tip: li
     annulus_midpoint = midpoint_on_annulus(commissure_1, commissure_2, leaflet_tip)
     
     # Define a factor to control how close the center should be to the leaflet_tip in x and y.
-    closeness_factor = 15  # You can adjust this factor to pull the center closer or farther
+    #closeness_factor = 15  # You can adjust this factor to pull the center closer or farther
+    
+    # center = [
+    #     (commissure_1[0] + commissure_2[0] + (closeness_factor * leaflet_tip[0])) / (2 + closeness_factor),
+    #     (commissure_1[1] + commissure_2[1] + (closeness_factor * leaflet_tip[1])) / (2 + closeness_factor),
+    #     leaflet_tip[2]-50  # Keep the z-coordinate unchanged
+    # ]
     
     center = [
-        (commissure_1[0] + commissure_2[0] + (closeness_factor * leaflet_tip[0])) / (2 + closeness_factor),
-        (commissure_1[1] + commissure_2[1] + (closeness_factor * leaflet_tip[1])) / (2 + closeness_factor),
-        leaflet_tip[2]-50  # Keep the z-coordinate unchanged
+        (commissure_1[0] + commissure_2[0] + leaflet_tip[0]) / (3),
+        (commissure_1[1] + commissure_2[1] + leaflet_tip[1]) / (3),
+        leaflet_tip[2]  # Keep the z-coordinate unchanged
     ]
     # Calculate the hinge 
     hinge_point=[annulus_midpoint[0], annulus_midpoint[1], leaflet_tip[2]-30]
@@ -82,6 +88,44 @@ def calc_surface_ctrlpts(commissure_1: list, commissure_2: list, leaflet_tip: li
     control_points = [
         [commissure_1, arch_control_1, leaflet_tip],
         [hinge_point, center, leaflet_tip],
+        [commissure_2, arch_control_2, leaflet_tip]
+    ]
+    
+    
+    return control_points
+
+def calc_surface_ctrlpts_hinge(commissure_1: list, commissure_2: list, leaflet_tip: list, hinge: list):
+    """
+    Calculate the control points of the boundaries of a leaflet tip based on landmarks
+    
+    Parameters:
+        Commissure_1, representing one commisure of the leaflet
+        Commissure_2, representing the other commisure of the leaflet
+        leaflet_tip, which is the tip of the leaflet
+        hinge_point, this is the hinge points, the lowest point of the leaflet between the commissures
+    Note that the function now only works for a single leaflet. The way that the
+    curvature of the arch is now calculate is based on hard-coding
+    
+    Returns:
+        grid of control points representing the control points reconstructing the 
+        boundaries of the leaflet.
+    """
+
+    annulus_midpoint = midpoint_on_annulus(commissure_1, commissure_2, leaflet_tip)
+    
+    center = [
+        (commissure_1[0] + commissure_2[0] + leaflet_tip[0]) / (3),
+        (commissure_1[1] + commissure_2[1] + leaflet_tip[1]) / (3),
+        leaflet_tip[2]  # Keep the z-coordinate unchanged
+    ]
+
+    arch_control_1=[(leaflet_tip[0]+commissure_1[0])/2, (leaflet_tip[1]+commissure_1[1])/2, (leaflet_tip[2]+commissure_1[2])/2-0.2]
+    arch_control_2=[(leaflet_tip[0]+commissure_2[0])/2, (leaflet_tip[1]+commissure_2[1])/2, (leaflet_tip[2]+commissure_2[2])/2-0.2]
+
+    # Define the control grid (3x3 control points)
+    control_points = [
+        [commissure_1, arch_control_1, leaflet_tip],
+        [hinge, center, leaflet_tip],
         [commissure_2, arch_control_2, leaflet_tip]
     ]
     
@@ -205,7 +249,7 @@ def midpoint_on_annulus(commissure_1, commissure_2, center):
     theta_mid = (theta_1 + theta_2) / 2
 
     # Compute radius (assumed to be the same for both commissures)
-    R = np.linalg.norm(vec1)
+    R = np.linalg.norm((vec1+vec2)/2)
 
     # Compute the midpoint coordinates (preserve the Z-coordinate)
     midpoint = [

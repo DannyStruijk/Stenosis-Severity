@@ -10,12 +10,13 @@ plotter.add_mesh(mesh, color="lightgray", opacity=0.7)
 
 # List to store selected commissure points
 commissures = []
-labels = ["Commissure 1", "Commissure 2", "Commissure 3"]
+labels = ["Commissure 1", "Commissure 2", "Commissure 3", "Leaflet Tip", "Hinge 1", "Hinge 2", "Hinge 3"]
 
 # Callback function for selecting points
 def callback(point):
-    if len(commissures) < 3:
-        print(f"{labels[len(commissures)]}: {point}")
+    if len(commissures) < 7:
+        landmark = np.round(point,1)
+        print(f"{labels[len(commissures)]}: {landmark}")
         commissures.append(point)
 
         # Add new point labels without clearing the previous ones
@@ -36,6 +37,6 @@ plotter.enable_surface_point_picking(callback, show_message=True)
 plotter.show()
 
 # Save the selected points (optional)
-if len(commissures) == 3:
+if len(commissures) == 7:
     np.savetxt("commissures.txt", np.array(commissures))
     print("Commissures saved to 'commissures.txt'.")
