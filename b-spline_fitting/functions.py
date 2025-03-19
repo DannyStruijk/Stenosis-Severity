@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from scipy.optimize import least_squares
 from geomdl import fitting
-
+import pyvista as pv
 
 
 def export_vtk(surface, filename="surface.vtk"):
@@ -106,6 +106,64 @@ def calc_surface_ctrlpts(commissure_1: list, commissure_2: list, leaflet_tip: li
     
     return control_points
 
+def fit_spline_pts(point_1: list, point_2: list, arch_control: list):
+    """
+    Fit a B-spline for three points, in order to determine additional control points for the surface.
+    This is done in order to broaden the control point grid from 3x3 to 5x5.
+
+    Parameters:
+        - point_1: First point.
+        - point_2: Second point.
+        - arch_control: The point that defines the arch and lies between the two points.
+    
+    Returns:
+        - arch_1: The point that lies between the arch control and point_1.
+        - arch_2: The point that lies between the arch control and point_2.
+    """
+    # Create the B-spline curve using the points
+    points = [point_1, arch_control, point_2]
+    curve = fitting.interpolate_curve(points, degree=2)
+    
+    # Evaluate the curve at different parameter values (u values from 0 to 1)
+    u_vals = np.linspace(0, 1, 100)  # Evaluate at 100 points along the curve
+    eval_pts = [curve.evaluate_single(u) for u in u_vals]
+    
+    # Define the points where we want to show the additional control points
+    arch_1, arch_2 = eval_pts[25], eval_pts[75]
+    
+    # Visualize the results using PyVista
+    # Convert the evaluated points into a format PyVista can visualize (array of points)
+    eval_pts = np.array(eval_pts)
+    
+    # Create a PyVista point cloud from the evaluated points
+    point_cloud = pv.PolyData(eval_pts)
+    
+    # Create a PyVista plotter
+    plotter = pv.Plotter()
+
+    # Add the B-spline curve points to the plotter
+    plotter.add_mesh(point_cloud, color='blue', point_size=10, render_points_as_spheres=True)
+
+    # Add the input points (to show them in the visualization as well)
+    input_points = np.array([point_1, point_2, arch_control])
+    input_points_mesh = pv.PolyData(input_points)
+    plotter.add_mesh(input_points_mesh, color='red', point_size=15, render_points_as_spheres=True)
+
+    # Add arch_1 and arch_2 points
+    arch_points = np.array([arch_1, arch_2])
+    arch_points_mesh = pv.PolyData(arch_points)
+    plotter.add_mesh(arch_points_mesh, color='green', point_size=15, render_points_as_spheres=True)
+
+    # Optionally, add labels to the input points
+    plotter.add_point_labels(input_points, ['Point 1', 'Point 2', 'Arch Control'], font_size=12)
+    plotter.add_point_labels(arch_points, ['Arch 1', 'Arch 2'], font_size=12)
+
+    # Show the plot
+    #plotter.show()
+
+    return arch_1, arch_2
+    
+
 def calc_surface_ctrlpts_hinge(cusp_landmarks, leaflet_tip: list):
     """
     Calculate the control points of the boundaries of a leaflet tip based on landmarks
@@ -147,7 +205,7 @@ def calc_surface_ctrlpts_hinge(cusp_landmarks, leaflet_tip: list):
     
     return control_points
 
-def calc_additional_ctrlpoints(surf):
+def calc_additional_ctrlpoints(cusp_landmarks, leaflet_tip: list):
         """
     Function to calculate additional control points based on the evaluation points of a B-spline surface.
     
@@ -157,10 +215,51 @@ def calc_additional_ctrlpoints(surf):
     Returns:
         A 5x3 matrix representing additional control points based on the evaluation points.
     """
-        # Sample the surface to get the evaluation points (evaluated points from the surface)
-        eval_points = np.array(surf.evalpts)  # Get all the evaluated points from the surface
-        #print(eval_points.shape)
-        return eval_points
+        commissure_1 = cusp_landmarks[0]
+        commissure_2 = cusp_landmarks[1]
+        hinge = cusp_landmarks[2]
+        
+        center = [
+            (hinge[0] + leaflet_tip[0]) / 2,
+            (hinge[1]+ leaflet_tip[1]) / 2,
+            hinge[2]  # Keep the z-coordinate unchanged
+        ]
+    
+        arch_control_1=[(leaflet_tip[0]+commissure_1[0])/2, (leaflet_tip[1]+commissure_1[1])/2, (leaflet_tip[2]+commissure_1[2])/2.05]
+        arch_control_2=[(leaflet_tip[0]+commissure_2[0])/2, (leaflet_tip[1]+commissure_2[1])/2, (leaflet_tip[2]+commissure_2[2])/2.05]
+    
+        leaflet_tip_1 = [leaflet_tip[0]+0.0001, leaflet_tip[1]+0.00001, leaflet_tip[2]+0.00001]
+        leaflet_tip_2 = [leaflet_tip[0]-0.0001, leaflet_tip[1]-0.00001, leaflet_tip[2]-0.00001]
+        leaflet_tip_3 = [leaflet_tip[0]+0.0002, leaflet_tip[1]+0.00002, leaflet_tip[2]+0.00002]
+        leaflet_tip_4 = [leaflet_tip[0]-0.0002, leaflet_tip[1]-0.00002, leaflet_tip[2]-0.00002]
+        
+        center_1 = [center[0]+0.0001, center[1]+0.00001, center[2]+0.00001]
+        center_2 = [center[0]-0.0001, center[1]-0.00001, center[2]-0.00001]
+    
+        hinge_arch_1, hinge_arch_2 = fit_spline_pts(commissure_1, commissure_2, hinge)
+        arch_left_1, arch_left_2 = fit_spline_pts(commissure_1, leaflet_tip, arch_control_1)
+        arch_right_1, arch_right_2 = fit_spline_pts(commissure_2, leaflet_tip, arch_control_2)
+
+        # Define the control grid (3x3 control points)
+        # control_points = [
+        #     [commissure_1, arch_left_1, arch_control_1, arch_left_2, leaflet_tip],
+        #     [hinge_arch_1, center_1, center, center_2, leaflet_tip_1],
+        #     [hinge, center_1, center, center_2, leaflet_tip_2],
+        #     [hinge_arch_2, center_1, center, center_2, leaflet_tip_3],
+        #     [commissure_2, arch_right_1, arch_control_2, arch_right_2, leaflet_tip_4]
+        # ]
+        
+        control_points = [
+            [commissure_1, arch_control_1, leaflet_tip],
+            [hinge_arch_1, center, leaflet_tip_1],
+            [hinge, center, leaflet_tip_2],
+            [hinge_arch_2, center,leaflet_tip_3],
+            [commissure_2, arch_control_2, leaflet_tip_4]
+        ]
+        
+        print("Control Points:", control_points)
+        
+        return control_points
 
 def reconstruct_surface(control_points, degree_u=2, degree_v=2, knotvector_u=None, knotvector_v=None, delta=0.005):
     """
@@ -186,7 +285,7 @@ def reconstruct_surface(control_points, degree_u=2, degree_v=2, knotvector_u=Non
 
     # Define default knot vectors if not provided
     if knotvector_u is None:
-        knotvector_u = [0, 0, 0, 1, 1, 1]
+        knotvector_u = [0, 0, 0, 0.25, 0.5, 0.75, 1, 1]
     if knotvector_v is None:
         knotvector_v = [0, 0, 0, 1, 1, 1]
 
@@ -214,7 +313,7 @@ def interpolate_surface(interp_points):
 
 
     # Define the number of points in each direction (3x3 grid)
-    size_u, size_v = 3, 3
+    size_u, size_v = 5, 3
 
     # Construct interpolated surface
     surf = fitting.interpolate_surface(interp_points, size_u, size_v, degree_u=2, degree_v=2)
