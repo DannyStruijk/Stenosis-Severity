@@ -1,90 +1,67 @@
 import sys
 import numpy as np
 import pyvista as pv
-from geomdl import BSpline
+from geomdl import BSpline, fitting
 from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout
+import os 
 
+os.chdir("H:/DATA/Afstuderen/2.Code/Stenosis-Severity/b-spline_fitting")
 
-class BSplineSurfaceEditor(QWidget):
-    def __init__(self):
-        super().__init__()
-        self.setWindowTitle("B-Spline Surface Editor")
-        
-        self.layout = QVBoxLayout()
-        self.setLayout(self.layout)
+import functions
 
-        # Create B-spline surface
-        self.surf = BSpline.Surface()
-        self.surf.degree_u = 2
-        self.surf.degree_v = 2
+# Import leaflet to compare with the fitting B-spline
+mesh = pv.read(r"H:\DATA\Afstuderen\2.Code\Stenosis-Severity\reconstructions\leaflet_surface_1_interpolated.vtk")
 
-        # Define control points as a 2D list (3x3 grid)
-        self.control_points = np.array([
-            [[0, 0, 0], [1, 0, 0], [2, 0, 0]],
-            [[0, 1, 0], [1, 1, 1], [2, 1, 0]],
-            [[0, 2, 0], [1, 2, 0], [2, 2, 0]]
-        ])
-        
-        # Convert to a flat list and set control points
-        num_u, num_v = self.control_points.shape[:2]
-        self.surf.set_ctrlpts(self.control_points.reshape(-1, 3).tolist(), num_u, num_v)
-        
-        # Knot vectors
-        self.surf.knotvector_u = [0, 0, 0, 1, 1, 1]
-        self.surf.knotvector_v = [0, 0, 0, 1, 1, 1]
-        
-        # Evaluate the surface
-        self.surf.evaluate()
+# Loading in the annotated data from the STL object
+landmarks_file = r"H:\DATA\Afstuderen\2.Code\Stenosis-Severity\gui\commissures.txt"
+landmarks = np.loadtxt(landmarks_file)
+commissure_1, commissure_2, commissure_3, leaflet_tip, hinge_1, hinge_2, hinge_3 = landmarks
+cusp_landmarks = functions.calc_leaflet_landmarks(commissure_1, commissure_2, commissure_3, hinge_1, hinge_2, hinge_3)
 
-        # PyVista visualization setup
-        self.plotter = pv.Plotter()
-        
-        # Add the B-spline surface
-        self.surface_mesh = self.get_surface_mesh()
-        self.plotter.add_mesh(self.surface_mesh, color="lightblue", show_edges=True)
-        
-        # Add control points as interactive spheres
-        self.control_points_mesh = pv.PolyData(self.control_points.reshape(-1, 3))
-        self.plotter.add_mesh(self.control_points_mesh, render_points_as_spheres=True, point_size=15, color="red", pickable=True)
-        
-        # Enable point picking and set the callback
-        self.plotter.enable_point_picking(callback=self.on_point_picked, use_mesh=True, show_message=True)
-        
-        # Display the window
-        self.setGeometry(100, 100, 800, 600)
-        self.show()
-        self.plotter.show()
+# Step 2: Create the list of points to interpolate through
+points = [cusp_landmarks[0][0], cusp_landmarks[0][2], cusp_landmarks[0][1]]
 
-    def get_surface_mesh(self):
-        """Function to get the surface mesh for visualization."""
-        eval_points = np.array(self.surf.evalpts)
-        n_u, n_v = 20, 20  # Adjust based on sample size
-        x = eval_points[:, 0].reshape((n_u, n_v))
-        y = eval_points[:, 1].reshape((n_u, n_v))
-        z = eval_points[:, 2].reshape((n_u, n_v))
-        return pv.StructuredGrid(x, y, z)
+# Step 4: Use the interpolation method to fit the B-spline curve through the points
+# The interpolate function creates a B-spline curve that fits the points
+curve = fitting.interpolate_curve(points, degree=2)
 
-    def on_point_picked(self, point):
-        """Callback function for point picking."""
-        # Find the nearest control point
-        distances = np.linalg.norm(self.control_points.reshape(-1, 3) - point, axis=1)
-        idx = np.argmin(distances)
+# Step 6: Evaluate the curve at different parameter values (u values from 0 to 1)
+u_vals = np.linspace(0, 1, 100)  # Evaluate at 100 points along the curve
+eval_pts = [curve.evaluate_single(u) for u in u_vals]
 
-        # Update the control point position
-        self.control_points.reshape(-1, 3)[idx] = point
-        
-        # Update the B-spline surface
-        self.surf.set_ctrlpts(self.control_points.reshape(-1, 3).tolist(), *self.control_points.shape[:2])
-        self.surf.evaluate()
+# Convert eval_pts into a NumPy array for visualization
+eval_pts = np.array(eval_pts)
 
-        # Update the surface and control points in PyVista
-        self.plotter.clear()
-        self.plotter.add_mesh(self.get_surface_mesh(), color="lightblue", show_edges=True)
-        self.control_points_mesh = pv.PolyData(self.control_points.reshape(-1, 3))
-        self.plotter.add_mesh(self.control_points_mesh, render_points_as_spheres=True, point_size=15, color="red", pickable=True)
+# Extra control points (just an example, you can modify as needed)
+extra_ctrlpts = [[eval_pts[25], eval_pts[75]]]  # Specific points on the B-spline curve
 
+# Step 7: Visualize the curve with PyVista
+# Create a PyVista point cloud from the evaluated points
+point_cloud = pv.PolyData(eval_pts)
 
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    editor = BSplineSurfaceEditor()
-    sys.exit(app.exec_())
+# Add the input points (to show them in the visualization as well)
+input_points = np.array(points)
+
+# Create a PyVista plotter
+plotter = pv.Plotter()
+
+# Add the curve points to the plotter
+plotter.add_mesh(point_cloud, color='blue', point_size=10, render_points_as_spheres=True)
+
+# Add the input points to the plotter (with a different color)
+input_points_mesh = pv.PolyData(input_points)
+plotter.add_mesh(input_points_mesh, color='red', point_size=15, render_points_as_spheres=True)
+
+# Add the extra control points (to show them in the visualization as well)
+extra_ctrlpts_mesh = pv.PolyData(np.array(extra_ctrlpts).reshape(-1, 3))  # Reshape for correct format
+plotter.add_mesh(extra_ctrlpts_mesh, color='green', point_size=15, render_points_as_spheres=True)
+
+# Set up labels (optional)
+plotter.add_point_labels(input_points, ['Commissure 1', 'Hinge 1', 'Commissure 2'], font_size=12)
+plotter.add_point_labels(extra_ctrlpts_mesh.points, ['Extra Control Point 1', 'Extra Control Point 2'], font_size=12)
+
+# Also add the leaflet surface to the plotter
+#plotter.add_mesh(mesh, color="lightgray", opacity=0.7)
+
+# Show the plot
+plotter.show()
