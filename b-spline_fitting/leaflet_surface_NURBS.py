@@ -20,28 +20,14 @@ landmarks = np.loadtxt(landmarks_file)
 commissure_1, commissure_2, commissure_3, leaflet_tip, hinge_1, hinge_2, hinge_3 = landmarks
 cusp_landmarks = functions.calc_leaflet_landmarks(commissure_1, commissure_2, commissure_3, hinge_1, hinge_2, hinge_3)
 
-# %% SURFACE CALCULATION & RECONSTRUCTION WITHOUT HINGE POINTS
+# %% RECONSTRUCTION WTIH ADDITIONAL CONTROL POINTS
 
-# Calculate the control poitns for the surface reconstructions
-control_points_1 = functions.calc_surface_ctrlpts(commissure_1, commissure_2, leaflet_tip)
-control_points_2 = functions.calc_surface_ctrlpts(commissure_1, commissure_3, leaflet_tip)
-control_points_3 = functions.calc_surface_ctrlpts(commissure_2, commissure_3, leaflet_tip)
+leaf_1_ctrl = functions.calc_additional_ctrlpoints(cusp_landmarks[0], leaflet_tip)
+interpolated_leaf_1_ctrl = functions.interpolate_surface(leaf_1_ctrl)
+functions.export_vtk(interpolated_leaf_1_ctrl, "H:/DATA/Afstuderen/2.Code/Stenosis-Severity/reconstructions/added_leaflet_surface_1.vtk")
 
-# Define the knot vectors for the surface
-knotvector_u = [0, 0, 0,1,1,1]
-knotvector_v = [0, 0, 0, 1, 1, 1]
 
-print("\nCalculating the leaflet surfaces... \n")
 
-# # # Reconstruct the surface using the defined control points, parameters are currently hard-coded
-# leaflet_1 = functions.reconstruct_surface(control_points_1, knotvector_u = knotvector_u, knotvector_v = knotvector_v)
-# leaflet_2 = functions.reconstruct_surface(control_points_2, knotvector_u = knotvector_u, knotvector_v = knotvector_v)
-# leaflet_3 = functions.reconstruct_surface(control_points_3, knotvector_u = knotvector_u, knotvector_v = knotvector_v)
-
-# # # Save the surface as a VTK file
-# functions.export_vtk(leaflet_1, "H:/DATA/Afstuderen/2.Code/Stenosis-Severity/reconstructions/leaflet_surface_1.vtk")
-# functions.export_vtk(leaflet_2, "H:/DATA/Afstuderen/2.Code/Stenosis-Severity/reconstructions/leaflet_surface_2.vtk")
-# functions.export_vtk(leaflet_3, "H:/DATA/Afstuderen/2.Code/Stenosis-Severity/reconstructions/leaflet_surface_3.vtk")
 
 #%% RECONSTRUCTING LEAVES WITH INTEGRATED HINGE POINTS
 
@@ -56,8 +42,8 @@ interpolated_leaf_2 = functions.interpolate_surface(leaf_2)
 interpolated_leaf_3 = functions.interpolate_surface(leaf_3)
 
 # Define the knot vectors for the surface
-knotvector_u = [0, 0, 0,1,1,1]
-knotvector_v = [0, 0, 0, 1, 1, 1]
+knotvector_u = [0, 0, 0, 0.33, 0.66, 1, 1, 1]  # 5 control points → 8 knots for degree 2
+knotvector_v = [0, 0, 0, 1, 1, 1]  # Still 3 control points → remains the same
 
 # # Reconstruct the surface using the defined control points, parameters are currently hard-coded
 leaflet_1_hinge = functions.reconstruct_surface(leaf_1, knotvector_u = knotvector_u, knotvector_v = knotvector_v)
@@ -74,6 +60,3 @@ functions.export_vtk(interpolated_leaf_2, "H:/DATA/Afstuderen/2.Code/Stenosis-Se
 functions.export_vtk(interpolated_leaf_3, "H:/DATA/Afstuderen/2.Code/Stenosis-Severity/reconstructions/leaflet_surface_3_interpolated.vtk")
 
 #%% RECONSTRUCTING THE LEAVES WITH 5x3 GRID OF CONTROL POINTS
-
-eval_pts = functions.calc_additional_ctrlpoints(interpolated_leaf_1)
-print(len(eval_pts))
