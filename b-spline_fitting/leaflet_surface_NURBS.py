@@ -28,7 +28,6 @@ functions.export_vtk(interpolated_leaf_1_ctrl, "H:/DATA/Afstuderen/2.Code/Stenos
 
 
 
-
 #%% RECONSTRUCTING LEAVES WITH INTEGRATED HINGE POINTS
 
 # Calculate the control points for the surface reconstructions
