@@ -60,7 +60,7 @@ mesh = pv.read(r"H:\DATA\Afstuderen\2.Code\Stenosis-Severity\reconstructions\lea
 mesh2 = pv.read(r"H:\DATA\Afstuderen\2.Code\Stenosis-Severity\reconstructions\added_leaflet_surface_1.vtk")
 
 # Add the meshes for the leaflet
-#plotter.add_mesh(mesh, color="lightgray", opacity=0.7)
+plotter.add_mesh(mesh, color="lightgray", opacity=0.7)
 plotter.add_mesh(mesh2, color="lightgray", opacity=0.7)
 
 # Show the plot
