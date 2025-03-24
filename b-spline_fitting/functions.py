@@ -175,34 +175,38 @@ def calc_additional_ctrlpoints(cusp_landmarks, leaflet_tip):
     Returns:
         A 5x3 matrix representing additional control points based on the evaluation points.
     """
+        # Extract the relevant annotations for one cusp
         commissure_1 = cusp_landmarks[0]
         commissure_2 = cusp_landmarks[1]
         hinge = cusp_landmarks[2]
         
+        # Determining the center of the cusp. Assumed that it is just as high (Z-coordinate) as the hinge
         center = [
             (hinge[0] + leaflet_tip[0]) / 2,
             (hinge[1]+ leaflet_tip[1]) / 2,
             hinge[2]  # Keep the z-coordinate unchanged
         ]
     
-        arch_control_1=[(leaflet_tip[0]+commissure_1[0])/2, (leaflet_tip[1]+commissure_1[1])/2, (leaflet_tip[2]+commissure_1[2])/2]
-        arch_control_2=[(leaflet_tip[0]+commissure_2[0])/2, (leaflet_tip[1]+commissure_2[1])/2, (leaflet_tip[2]+commissure_2[2])/2]
+        # Determine the arch between the commissures and the leaflet tip
+        arch_control_1=[(leaflet_tip[0]+commissure_1[0])/2, (leaflet_tip[1]+commissure_1[1])/2, (leaflet_tip[2]+commissure_1[2])/2.05]
+        arch_control_2=[(leaflet_tip[0]+commissure_2[0])/2, (leaflet_tip[1]+commissure_2[1])/2, (leaflet_tip[2]+commissure_2[2])/2.05]
     
-        leaflet_tip_1 = [leaflet_tip[0]+0.0001, leaflet_tip[1]+0.00001, leaflet_tip[2]+0.00001]
-        leaflet_tip_2 = [leaflet_tip[0]-0.0001, leaflet_tip[1]-0.00001, leaflet_tip[2]-0.00001]
-        leaflet_tip_3 = [leaflet_tip[0]+0.0002, leaflet_tip[1]+0.00002, leaflet_tip[2]+0.00002]
-        leaflet_tip_4 = [leaflet_tip[0]-0.0002, leaflet_tip[1]-0.00002, leaflet_tip[2]-0.00002]
+        # Create 5 leaflet tip points in order to solve issue with 5 points being the same (reconstruct function cannot handle it)
+        leaflet_tip_1 = [leaflet_tip[0]+0.00001, leaflet_tip[1]+0.000001, leaflet_tip[2]]
+        leaflet_tip_2 = [leaflet_tip[0]-0.00001, leaflet_tip[1]-0.000001, leaflet_tip[2]]
+        leaflet_tip_3 = [leaflet_tip[0]+0.00002, leaflet_tip[1]+0.000001, leaflet_tip[2]]
+        leaflet_tip_4 = [leaflet_tip[0]-0.00002, leaflet_tip[1]-0.000001, leaflet_tip[2]]
         
         # center_1 = [center[0]+0.0001, center[1]+0.00001, center[2]+0.00001]
         # center_2 = [center[0]-0.0001, center[1]-0.00001, center[2]-0.00001]
     
+        # Determine, by means of Bsplines, other relevant landmarks based on annotations 
         hinge_arch_1, hinge_arch_2 = fit_spline_pts(commissure_1, commissure_2, hinge)
         arch_left_1, arch_left_2 = fit_spline_pts(commissure_1, leaflet_tip, arch_control_1)
         arch_right_1, arch_right_2 = fit_spline_pts(commissure_2, leaflet_tip, arch_control_2)
-        print(" Now")
         center_left, center_right= fit_spline_pts(arch_control_1, arch_control_2, center)
 
-        # Define the control grid (3x3 control points)
+        # Define the control grid (5x5 control pointsm, DOES NOT YET WORK!)
         # control_points = [
         #     [commissure_1, arch_left_1, arch_control_1, arch_left_2, leaflet_tip],
         #     [hinge_arch_1, center_1, center_left, center_2, leaflet_tip_1],
@@ -219,7 +223,7 @@ def calc_additional_ctrlpoints(cusp_landmarks, leaflet_tip):
             [commissure_2, arch_control_2, leaflet_tip_4]
         ]
         
-        print("Control Points:", control_points)
+        print("\nNOW\n", control_points)
         
         return control_points
 

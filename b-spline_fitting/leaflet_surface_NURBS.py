@@ -22,9 +22,20 @@ cusp_landmarks = functions.calc_leaflet_landmarks(commissure_1, commissure_2, co
 
 # %% RECONSTRUCTION WTIH ADDITIONAL CONTROL POINTS
 
+# First cusp
 leaf_1_ctrl = functions.calc_additional_ctrlpoints(cusp_landmarks[0], leaflet_tip)
-#interpolated_leaf_1_ctrl = functions.interpolate_surface(leaf_1_ctrl)
-#functions.export_vtk(interpolated_leaf_1_ctrl, "H:/DATA/Afstuderen/2.Code/Stenosis-Severity/reconstructions/added_leaflet_surface_1.vtk")
+interpolated_leaf_1_ctrl = functions.interpolate_surface(leaf_1_ctrl)
+functions.export_vtk(interpolated_leaf_1_ctrl, "H:/DATA/Afstuderen/2.Code/Stenosis-Severity/reconstructions/added_leaflet_surface_1.vtk")
+
+# Second cusp
+leaf_2_ctrl = functions.calc_additional_ctrlpoints(cusp_landmarks[1], leaflet_tip)
+interpolated_leaf_2_ctrl = functions.interpolate_surface(leaf_2_ctrl)
+functions.export_vtk(interpolated_leaf_2_ctrl, "H:/DATA/Afstuderen/2.Code/Stenosis-Severity/reconstructions/added_leaflet_surface_2.vtk")
+
+# Third cusp
+leaf_3_ctrl = functions.calc_additional_ctrlpoints(cusp_landmarks[2], leaflet_tip)
+interpolated_leaf_3_ctrl = functions.interpolate_surface(leaf_3_ctrl)
+functions.export_vtk(interpolated_leaf_3_ctrl, "H:/DATA/Afstuderen/2.Code/Stenosis-Severity/reconstructions/added_leaflet_surface_3.vtk")
 
 
 #%% RECONSTRUCTING LEAVES WITH INTEGRATED HINGE POINTS
