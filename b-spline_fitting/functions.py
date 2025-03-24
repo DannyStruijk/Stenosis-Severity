@@ -120,7 +120,7 @@ def fit_spline_pts(point_1: list, point_2: list, arch_control: list):
     plotter.add_point_labels(arch_points, ['Arch 1', 'Arch 2'], font_size=12)
 
     # Show the plot
-    plotter.show()
+    #plotter.show()
 
     return arch_1, arch_2
 
@@ -193,8 +193,8 @@ def calc_additional_ctrlpoints(cusp_landmarks, leaflet_tip):
         leaflet_tip_3 = [leaflet_tip[0]+0.0002, leaflet_tip[1]+0.00002, leaflet_tip[2]+0.00002]
         leaflet_tip_4 = [leaflet_tip[0]-0.0002, leaflet_tip[1]-0.00002, leaflet_tip[2]-0.00002]
         
-        center_1 = [center[0]+0.0001, center[1]+0.00001, center[2]+0.00001]
-        center_2 = [center[0]-0.0001, center[1]-0.00001, center[2]-0.00001]
+        # center_1 = [center[0]+0.0001, center[1]+0.00001, center[2]+0.00001]
+        # center_2 = [center[0]-0.0001, center[1]-0.00001, center[2]-0.00001]
     
         hinge_arch_1, hinge_arch_2 = fit_spline_pts(commissure_1, commissure_2, hinge)
         arch_left_1, arch_left_2 = fit_spline_pts(commissure_1, leaflet_tip, arch_control_1)
@@ -247,9 +247,9 @@ def reconstruct_surface(control_points, degree_u=2, degree_v=2, knotvector_u=Non
 
     # Define default knot vectors if not provided
     if knotvector_u is None:
-        knotvector_u = [0, 0, 0, 1, 1, 1]
+        knotvector_u = [0, 0, 1, 1]
     if knotvector_v is None:
-        knotvector_v = [0, 0, 0, 1, 1, 1]
+        knotvector_v = [0, 0, 1, 1]
 
     surf.knotvector_u = knotvector_u
     surf.knotvector_v = knotvector_v
