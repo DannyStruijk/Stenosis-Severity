@@ -223,8 +223,6 @@ def calc_additional_ctrlpoints(cusp_landmarks, leaflet_tip):
             [commissure_2, arch_control_2, leaflet_tip_4]
         ]
         
-        print("\nNOW\n", control_points)
-        
         return control_points
 
 def reconstruct_surface(control_points, degree_u=2, degree_v=2, knotvector_u=None, knotvector_v=None, delta=0.005):

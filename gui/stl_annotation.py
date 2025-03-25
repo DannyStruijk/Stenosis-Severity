@@ -2,8 +2,8 @@ import numpy as np
 import pyvista as pv
 
 # Load STL files
-mesh1 = pv.read(r"H:\DATA\Afstuderen\3.Data\Harde Schijf Koen\SAVI_AoS\Afstudeerproject Koen Janssens\aos14\Mimics\aos_14.stl")
-#mesh2 = pv.read(r"H:\DATA\Afstuderen\2.Code\Stenosis-Severity\reconstructions\leaflet_surface_1_hinge.vtk")  # Update with the correct path
+mesh1 = pv.read(r"H:\DATA\Afstuderen\3.Data\Harde Schijf Koen\AoS Stress\Afstudeerproject Koen Janssens\aos14\Mimics\aos_14.stl")
+#mesh1 = pv.read(r"H:/DATA/Afstuderen/2.Code/temporary/test_mesh.vtk")  # Update with the correct path
 
 # Create plotter
 plotter = pv.Plotter()

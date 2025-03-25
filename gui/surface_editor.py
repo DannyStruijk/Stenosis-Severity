@@ -1,11 +1,14 @@
 import os 
-os.chdir("H:/DATA/Afstuderen/2.Code/Stenosis-Severity/b-spline_fitting")
-
 import numpy as np
 import pyvista as pv
-import functions
 
-# Load data
+
+# Set working directory
+os.chdir("H:/DATA/Afstuderen/2.Code/Stenosis-Severity/b-spline_fitting")
+
+import functions  # Custom functions
+
+# Load initial data
 landmarks_file = r"H:\DATA\Afstuderen\2.Code\Stenosis-Severity\gui\commissures.txt"
 landmarks = np.loadtxt(landmarks_file)
 
@@ -13,61 +16,77 @@ landmarks = np.loadtxt(landmarks_file)
 commissure_1, commissure_2, commissure_3, leaflet_tip, hinge_1, hinge_2, hinge_3 = landmarks
 cusp_landmarks = functions.calc_leaflet_landmarks(commissure_1, commissure_2, commissure_3, hinge_1, hinge_2, hinge_3)
 
-# First cusp
+# First cusp control points
 leaf_1_ctrl = functions.calc_additional_ctrlpoints(cusp_landmarks[0], leaflet_tip)
-interpolated_leaf_1_ctrl = functions.interpolate_surface(leaf_1_ctrl)
-functions.export_vtk(interpolated_leaf_1_ctrl, "H:/DATA/Afstuderen/2.Code/temporary/test_mesh.vtk")
+leaf_1_ctrl_flat = np.array(leaf_1_ctrl).reshape(-1, 3)  # Flatten to Nx3 array
 
-# Load mesh
-mesh = pv.read(r"H:/DATA/Afstuderen/2.Code/temporary/test_mesh.vtk")
+# Initialize variables
+selected_point_idx = None
+click_count = 0
 
-# Create plotter
+# Create PyVista plotter
 plotter = pv.Plotter()
-plotter.add_mesh(mesh, color="lightgray", opacity=0.7)
 
-# Flatten the control points (if leaf_1_ctrl is a list of numpy arrays, flatten it)
-leaf_1_ctrl_flat = np.array(leaf_1_ctrl).reshape(-1, 3)  # Flattening into a 2D array (Nx3)
+mesh_valve = pv.read(r"H:\DATA\Afstuderen\3.Data\Harde Schijf Koen\AoS Stress\Afstudeerproject Koen Janssens\aos14\Mimics\aos_14.stl")
+plotter.add_mesh(mesh_valve, color="lightgray", opacity=0.7)
 
-# Plot the control points
-control_points_actor = plotter.add_points(leaf_1_ctrl_flat, color="red", point_size=10, render_points_as_spheres=True)
 
-# Initialize variables to track the state
-selected_point_idx = None  # This will store the index of the selected control point
-click_count = 0  # This will keep track of the number of clicks
+# Function to reconstruct and update visualization
+def reconstruct_and_update():
+    """ Updates the visualization dynamically without restarting PyVista. """
+    global leaf_1_ctrl, leaf_1_ctrl_flat
 
-# Define the callback function for click events
+    # Reconstruct surface using the updated control points
+    interpolated_leaf_1_ctrl = functions.interpolate_surface(leaf_1_ctrl)
+    functions.export_vtk(interpolated_leaf_1_ctrl, "H:/DATA/Afstuderen/2.Code/temporary/test_mesh.vtk")
+
+    # Load updated mesh
+    mesh = pv.read("H:/DATA/Afstuderen/2.Code/temporary/test_mesh.vtk")
+
+    # Clear previous elements but keep window open
+    plotter.clear()
+    plotter.add_mesh(mesh, color="lightgray", opacity=0.7)
+
+    # Re-add control points
+    plotter.add_points(leaf_1_ctrl_flat, color="red", point_size=10, render_points_as_spheres=True)
+
+    # Re-enable point picking
+    plotter.enable_surface_point_picking(on_click_callback, show_message=True, pickable_window=True)
+
+    plotter.render()  # Redraw window without closing it
+
+# Mouse click callback function
 def on_click_callback(click_pos):
-    global selected_point_idx, click_count, leaf_1_ctrl_flat, control_points_actor
+    """ Handles user interaction for moving control points. """
+    global selected_point_idx, click_count, leaf_1_ctrl, leaf_1_ctrl_flat
 
     if click_count == 0:
-        # First click: find the closest point in the control points
+        # Find the closest control point to the clicked position
         distances = np.linalg.norm(leaf_1_ctrl_flat - click_pos, axis=1)
-        closest_idx = np.argmin(distances)
-        
-        # Highlight the selected point (could change color, etc.)
-        print(f"First click - closest control point index: {closest_idx}, coordinates: {leaf_1_ctrl_flat[closest_idx]}")
-        
-        selected_point_idx = closest_idx  # Store the index of the selected control point
-        click_count += 1  # Increment click count
-        
+        selected_point_idx = np.argmin(distances)
+        print(f"Selected control point {selected_point_idx} at {leaf_1_ctrl_flat[selected_point_idx]}")
+
+        click_count = 1  # Wait for the second click
+
     elif click_count == 1:
-        # Second click: update the selected point with the new clicked position
-        print(f"Second click - new coordinates: {click_pos}")
+        # Move the selected control point
+        print(f"Moving control point {selected_point_idx} to {click_pos}")
 
-        # Update the selected control point with the new clicked coordinates
-        leaf_1_ctrl_flat[selected_point_idx] = click_pos  # Modify the control point
+        # Update both the flat array and the original structured list
+        leaf_1_ctrl_flat[selected_point_idx] = click_pos  
 
-        # Update the points in the plotter without clearing the whole plot
-        control_points_actor.points = leaf_1_ctrl_flat  # Update the points' coordinates
+        # Update the original leaf_1_ctrl structure
+        num_rows, num_cols, _ = np.shape(leaf_1_ctrl)
+        row_idx, col_idx = divmod(selected_point_idx, num_cols)
+        leaf_1_ctrl[row_idx][col_idx] = click_pos  # Update original structure
 
-        print(f"Updated control point {selected_point_idx} to new coordinates: {click_pos}")
-
-        # Reset for next interaction
+        # Reset selection
         selected_point_idx = None
         click_count = 0
 
-# Enable point picking with the callback function
-plotter.enable_surface_point_picking(on_click_callback, show_message=True)
+        # Update visualization dynamically
+        reconstruct_and_update()
 
-# Show the plot
+# Initial reconstruction and display
+reconstruct_and_update()
 plotter.show()
