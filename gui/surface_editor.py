@@ -28,7 +28,7 @@ click_count = 0
 plotter = pv.Plotter()
 
 mesh_valve = pv.read(r"H:\DATA\Afstuderen\3.Data\Harde Schijf Koen\AoS Stress\Afstudeerproject Koen Janssens\aos14\Mimics\aos_14.stl")
-plotter.add_mesh(mesh_valve, color="lightgray", opacity=0.7)
+plotter.add_mesh(mesh_valve, color="blue", opacity=0.5)
 
 
 # Function to reconstruct and update visualization
@@ -45,7 +45,7 @@ def reconstruct_and_update():
 
     # Clear previous elements but keep window open
     plotter.clear()
-    plotter.add_mesh(mesh, color="lightgray", opacity=0.7)
+    plotter.add_mesh(mesh, color="blue", opacity=0.5)
 
     # Re-add control points
     plotter.add_points(leaf_1_ctrl_flat, color="red", point_size=10, render_points_as_spheres=True)
