@@ -3,6 +3,9 @@ from tkinter import Button
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
 import os
+
+os.chdir("H:/DATA/Afstuderen/2.Code/Stenosis-Severity/gui/")
+
 import gui_functions as gf  # Import your gui_functions module
 import pydicom
 import matplotlib.pyplot as plt  # Corrected import for matplotlib
@@ -12,7 +15,7 @@ from vtk.util.numpy_support import vtk_to_numpy
 import numpy as np
 
 # Define the DICOM directory
-dicom_dir = r"T:\Research_01\CZE-2020.67 - SAVI-AoS\CZE001 02074965016\DICOM\00003852\AA44D04F\AA453F21\00007152"
+dicom_dir = r"T:\Research_01\CZE-2020.67 - SAVI-AoS\AoS stress\CT\Aosstress14\DICOM\000037EC\AA4EC564\AA3B0DE6\00006BF2"
 
 # Get sorted DICOM files based on Z position (using the function from gui_functions)
 sorted_dicom_files = gf.get_sorted_dicom_files(dicom_dir)
@@ -21,7 +24,7 @@ class DicomSliceViewer:
     def __init__(self, dicom_files):
         # Initialize variables
         self.dicom_files = dicom_files  # Sorted list of DICOM files
-        self.slice_index = 100  # Start with the first slice
+        self.slice_index = 70  # Start with the first slice
         self.image_data = gf.get_sorted_image_data(dicom_files)  # Corrected function
         self.landmarks = []
         self.annotating = False
