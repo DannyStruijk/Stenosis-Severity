@@ -3,6 +3,7 @@ import pydicom
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from scipy.spatial.transform import Rotation as R
 
 def load_dicom(dicom_file_path):
     """Loads a DICOM file and returns the pixel data."""
@@ -133,3 +134,56 @@ def get_sorted_image_data(sorted_dicom_files):
     #image_data = (image_data / 256).astype(np.uint8)  # Scale to uint8 range (0-255
     
     return image_data
+
+def rotate_dicom(image_data):
+    """
+    Rotate the image data based on the rotation matrix as calculated by STL hinge point annotation
+    
+    Parameters:
+        image_data: The image data as a 3D object
+        
+    Return:
+        rotated_image_data: The image data with the rotation matrix applied.
+        
+    """
+    
+    # Define the normal vector (calculated in "construct_annular_plane")
+    normal_vector =  [0.52356147, -0.07680965, -0.84851851]
+    normal_vector /= np.linalg.norm(normal_vector)  # Normalize
+
+    z_axis = np.array([0, 0, 1])
+    
+    # Compute the rotation axis (cross product of normal and Z-axis)
+    rotation_axis = np.cross(normal_vector, z_axis)
+    rotation_axis /= np.linalg.norm(rotation_axis)  # Normalize
+    
+    # Compute the angle between normal and Z-axis (dot product)
+    angle = np.arccos(np.dot(normal_vector, z_axis))
+    
+    # Create the rotation matrix
+    rotation_matrix = R.from_rotvec(angle * rotation_axis).as_matrix()
+    
+    # Create a grid of coordinates (assuming isotropic voxel spacing)
+    z_dim, y_dim, x_dim = image_data.shape
+    x_coords, y_coords, z_coords = np.meshgrid(np.arange(x_dim), np.arange(y_dim), np.arange(z_dim), indexing='ij')
+    
+    # Flatten and stack as [3, N] matrix
+    coords = np.vstack([x_coords.ravel(), y_coords.ravel(), z_coords.ravel()])
+    
+    # Apply the rotation
+    rotated_coords = rotation_matrix @ coords
+    
+    # Reshape back to the original shape
+    x_rotated, y_rotated, z_rotated = rotated_coords.reshape(3, x_dim, y_dim, z_dim)
+    
+    # Now, you need to re-grid the rotated volume (interpolation is required)
+    from scipy.ndimage import map_coordinates
+    
+    rotated_image_data = map_coordinates(image_data, [z_rotated, y_rotated, x_rotated], order=1, mode='nearest')
+    
+    return rotated_image_data
+
+    
+    
+    
+    
