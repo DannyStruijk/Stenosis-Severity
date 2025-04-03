@@ -17,16 +17,21 @@ import numpy as np
 # Define the DICOM directory
 dicom_dir = r"T:\Research_01\CZE-2020.67 - SAVI-AoS\AoS stress\CT\Aosstress14\DICOM\000037EC\AA4EC564\AA3B0DE6\00007EA9"
 
+# Compute normal vector of the annular plane (You already have this)
+annular_normal = np.array([-0.52356147, 0.07680965, 0.84851851])  # Example
+
 # Get sorted DICOM files based on Z position (using the function from gui_functions)
 sorted_dicom_files = gf.get_sorted_dicom_files(dicom_dir)
-# rotated_dicom_files = gf.rotate_dicom()
+volume = gf.dicom_to_matrix(sorted_dicom_files)
+image_data = gf.rotate_image_fixed(volume, angle_z = 180)
+
 
 class DicomSliceViewer:
     def __init__(self, dicom_files):
         # Initialize variables
         self.dicom_files = dicom_files  # Sorted list of DICOM files
         self.slice_index = 30  # Start with the first slice
-        self.image_data = gf.rotate_dicom(gf.get_sorted_image_data(dicom_files))  # Corrected function
+        self.image_data = image_data  # Corrected function
         self.landmarks = []
         self.annotating = False
 

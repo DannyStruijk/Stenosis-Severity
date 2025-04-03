@@ -18,7 +18,7 @@ normal_vector /= np.linalg.norm(normal_vector)  # Normalize
 
 # Ensure the normal vector points downward (negative Z direction)
 if normal_vector[2] > 0:
-    normal_vector = -normal_vector
+    normal_vector = normal_vector
 
 # Compute the centroid of the hinge points
 centroid = np.mean(hinge_points, axis=0)
