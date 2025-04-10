@@ -209,38 +209,6 @@ def rotate_3d_matrix(image_data, normal_vector):
 
     return rotated_image_data
 
-
-def rotate_image_fixed(image_data, angle_x=0, angle_y=0, angle_z=0):
-    """
-    Rotates a 3D image along the specified axes.
-
-    Parameters:
-        image_data (numpy.ndarray): The 3D volume (Z, Y, X).
-        angle_x (float): Rotation around the X-axis (in degrees).
-        angle_y (float): Rotation around the Y-axis (in degrees).
-        angle_z (float): Rotation around the Z-axis (in degrees).
-
-    Returns:
-        numpy.ndarray: The rotated 3D volume.
-    """
-    if not isinstance(image_data, np.ndarray) or image_data.ndim != 3:
-        raise ValueError("Input must be a 3D NumPy array.")
-
-    # Apply rotations sequentially
-    rotated_data = image_data.copy()
-    
-    # KEEP IN MIND: The coordinate system is (z, y, x)
-    if angle_x != 0:
-        rotated_data = rotate(rotated_data, angle_x, axes=(0, 1), reshape=True, order=1, mode='nearest')  # YZ plane
-    
-    if angle_y != 0:
-        rotated_data = rotate(rotated_data, angle_y, axes=(0, 2), reshape=True, order=1, mode='nearest')  # XZ plane
-    
-    if angle_z != 0:
-        rotated_data = rotate(rotated_data, angle_z, axes=(1, 2), reshape=True, order=1, mode='nearest')  # XY plane
-
-    return rotated_data
-
 def calculate_rotation(annular_normal):
     """
     Calculate the rotation axis and angle required to align the Z-axis with the given normal vector.
@@ -266,101 +234,24 @@ def calculate_rotation(annular_normal):
     
     return rotation_axis, rotation_angle
 
-def rotation_matrix(axis, angle):
-    """
-    Create a rotation matrix for a given axis and angle.
-    
-    Parameters:
-        axis (numpy array): The rotation axis (unit vector).
-        angle (float): The rotation angle in radians.
-    
-    Returns:
-        rotation_matrix (numpy array): The corresponding rotation matrix.
-    """
-    axis = axis / np.linalg.norm(axis)  # Normalize the axis
-    cos_angle = np.cos(angle)
-    sin_angle = np.sin(angle)
-    ux, uy, uz = axis
-    
-    # Rotation matrix using the Rodrigues' rotation formula
-    rotation_matrix = np.array([
-        [cos_angle + ux**2 * (1 - cos_angle), ux * uy * (1 - cos_angle) - uz * sin_angle, ux * uz * (1 - cos_angle) + uy * sin_angle],
-        [uy * ux * (1 - cos_angle) + uz * sin_angle, cos_angle + uy**2 * (1 - cos_angle), uy * uz * (1 - cos_angle) - ux * sin_angle],
-        [uz * ux * (1 - cos_angle) - uy * sin_angle, uz * uy * (1 - cos_angle) + ux * sin_angle, cos_angle + uz**2 * (1 - cos_angle)]
-    ])
-    
-    return rotation_matrix
-    
+   
 from scipy.ndimage import affine_transform
 
-def apply_rotation(volume, rotation_axis, rotation_angle):
+
+def rotation_matrix(axis, angle):
     """
-    Rotate the 3D volume (DICOM image data) based on the given axis and angle.
+    Create a rotation matrix for rotating around an arbitrary axis.
+    """
+    axis = axis / np.linalg.norm(axis)  # Normalize the axis
+    cos_theta = np.cos(angle)
+    sin_theta = np.sin(angle)
+    ux, uy, uz = axis
+
+    # Rodrigues' rotation formula
+    R = np.array([
+        [cos_theta + ux**2 * (1 - cos_theta), ux * uy * (1 - cos_theta) - uz * sin_theta, ux * uz * (1 - cos_theta) + uy * sin_theta],
+        [uy * ux * (1 - cos_theta) + uz * sin_theta, cos_theta + uy**2 * (1 - cos_theta), uy * uz * (1 - cos_theta) - ux * sin_theta],
+        [uz * ux * (1 - cos_theta) - uy * sin_theta, uz * uy * (1 - cos_theta) + ux * sin_theta, cos_theta + uz**2 * (1 - cos_theta)]
+    ])
     
-    Parameters:
-        volume (numpy array): The 3D volume (shape: Z, Y, X).
-        rotation_axis (numpy array): The axis around which to rotate.
-        rotation_angle (float): The angle by which to rotate (in radians).
-    
-    Returns:
-        rotated_volume (numpy array): The rotated 3D volume.
-    """
-    # Compute the rotation matrix
-    matrix = rotation_matrix(rotation_axis, rotation_angle)
-
-    # Get the shape of the volume
-    z_dim, y_dim, x_dim = volume.shape
-    center = np.array([z_dim / 2, y_dim / 2, x_dim / 2])  # Rotation center
-
-    # Create the affine transformation matrix for scipy.ndimage
-    transform_matrix = np.eye(4)
-    transform_matrix[:3, :3] = matrix  # Apply rotation to 3x3 part
-    transform_matrix[:3, 3] = center - matrix @ center  # Adjust translation
-
-    # Apply affine transform to the volume
-    rotated_volume = affine_transform(volume, transform_matrix[:3, :3], offset=transform_matrix[:3, 3], order=1, mode='nearest')
-
-    return rotated_volume
-
-def reslice_numpy_volume(volume, normal_vector, slice_thickness=1.0, num_slices=50):
-    """
-    Reslices a 3D NumPy volume along a specified normal vector.
-
-    Parameters:
-    - volume (numpy array): 3D volume (shape: [Z, Y, X]).
-    - normal_vector (array-like): Normal vector defining the slicing direction.
-    - slice_thickness (float): Distance between adjacent resampled slices.
-    - num_slices (int): Number of slices to extract.
-
-    Returns:
-    - resliced_volume (numpy array): 3D array of resampled slices.
-    """
-
-    # Normalize the normal vector
-    normal_vector = np.array(normal_vector, dtype=np.float64)
-    normal_vector /= np.linalg.norm(normal_vector)
-
-    # Get volume dimensions
-    depth, height, width = volume.shape
-
-    # Define center of the volume
-    center = np.array([depth // 2, height // 2, width // 2])
-
-    # Generate slice positions along the normal
-    slice_positions = [center + i * slice_thickness * normal_vector for i in range(-num_slices // 2, num_slices // 2)]
-
-    # Define the grid in the slice plane
-    grid_y, grid_x = np.meshgrid(np.arange(height), np.arange(width), indexing="ij")
-    
-    # Reslicing using interpolation
-    resliced_slices = []
-    for slice_position in slice_positions:
-        slice_z = np.full_like(grid_y, slice_position[0])  # Same Z-coordinate for the entire plane
-        slice_y = grid_y + slice_position[1] - center[1]
-        slice_x = grid_x + slice_position[2] - center[2]
-
-        # Interpolate using scipy.ndimage.map_coordinates
-        interpolated_slice = scipy.ndimage.map_coordinates(volume, [slice_z, slice_y, slice_x], order=1, mode="nearest")
-        resliced_slices.append(interpolated_slice)
-
-    return np.array(resliced_slices)
+    return R
