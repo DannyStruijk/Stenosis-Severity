@@ -2,19 +2,22 @@
 import pydicom
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-from scipy.spatial.transform import Rotation as R
-import scipy.ndimage 
 from scipy.ndimage import zoom
+from scipy.ndimage import affine_transform
+import os
 
 def load_dicom(dicom_file_path):
     """Loads a DICOM file and returns the pixel data."""
     dicom = pydicom.dcmread(dicom_file_path)
     return dicom.pixel_array
 
-def get_slice(image_data, slice_index):
+def get_transversal_slice(image_data, slice_index):
     """Returns the slice image data for a specific index."""
-    return image_data[slice_index, :, :]
+    return image_data[:, :, slice_index]
+
+def get_coronal_slice(image_data, slice_index):
+    """Returns the slice image data for a specific index."""
+    return image_data[:, slice_index, :]
 
 def enhance_contrast(slice_data):
     """Enhances the contrast of the slice using linear contrast stretching."""
@@ -23,34 +26,24 @@ def enhance_contrast(slice_data):
     enhanced_image = 255 * (slice_data - min_val) / (max_val - min_val)
     return enhanced_image
 
-def initialize_slice_index():
-    """Initializes and returns the starting slice index."""
-    return 90  # Start from a specific slice (e.g., 90th slice)
-
-def update_image(slice_index, image_data, canvas, landmarks, vtk_surface_points = None):
+def update_transversal(slice_index_transversal, image_data, canvas, landmarks, vtk_surface_points = None):
     """Updates the image displayed in the GUI based on the current slice index, with landmarks and overlayed surface."""
     
     # Extract slice data
-    slice_data = get_slice(image_data, slice_index)
+    slice_data = get_transversal_slice(image_data, slice_index_transversal)
     
     # Create a new figure for displaying the image
     fig, ax = plt.subplots()
     
     # Show the image slice in grayscale
-    ax.imshow(slice_data, cmap='gray')
+    ax.imshow(np.rot90(slice_data, k=1), cmap='gray', origin='upper')
+    #ax.imshow(slice_data, cmap='gray', origin='upper')
     ax.axis('off')  # Hide the axis for a clean image
 
     # Plot landmarks on the image (points or circles)
     for (x, y, z) in landmarks:
-        if z == slice_index:  # Plot landmarks only on the current slice
-            ax.plot(x, y, 'ro', markersize=10)  # 'ro' means red dots, markersize controls the size
-
-    # Overlay the surface points on the image
-    # vtk_surface_points should be a NumPy array with x, y, z coordinates (integer values)
-    # surface_points_on_slice = vtk_surface_points[np.abs(vtk_surface_points[:, 2] - slice_index) < 2]  # Allow a tolerance for z-axis
-    
-    # if len(surface_points_on_slice) > 0:
-    #     ax.scatter(surface_points_on_slice[:, 0], surface_points_on_slice[:, 1], c='b', s=10, label="Leaflet Surface", alpha=0.6)
+        if z == slice_index_transversal:  # Plot landmarks only on the current slice
+            ax.plot(x, y, 'ro', markersize=5)  # 'ro' means red dots, markersize controls the size
 
     # Update the canvas with the new figure
     canvas.figure = fig
@@ -58,22 +51,83 @@ def update_image(slice_index, image_data, canvas, landmarks, vtk_surface_points 
 
     # Close the figure to prevent memory leaks
     plt.close(fig)  # Close the figure
+    
+
+def update_coronal(slice_index_coronal, image_data, canvas, angle=None):
+    """Updates the image displayed in the GUI based on the current slice index, with landmarks and overlayed surface and optional angle line clipped to image edges."""
+    
+    # Extract slice data
+    slice_data = get_coronal_slice(image_data, slice_index_coronal)
+
+    # Create a new figure for displaying the image
+    fig, ax = plt.subplots()
+
+    # Rotate and flip for correct orientation
+    rotated_slice = np.fliplr(np.rot90(slice_data, k=-1))
+    ax.imshow(rotated_slice, cmap="gray")
+    ax.axis('off')  # Hide axes
+
+    if angle is not None:
+        height, width = rotated_slice.shape
+        center_x = width / 2
+        center_y = height / 2
+        angle_rad = np.radians(-angle)
+
+        dx = np.cos(angle_rad)
+        dy = np.sin(angle_rad)
+
+        # Avoid division by zero
+        if dx == 0:
+            x_vals = [center_x, center_x]
+            y_vals = [0, height]
+        else:
+            # Calculate intersections with image bounds
+            x0, x1 = 0, width
+            y_at_x0 = center_y + (x0 - center_x) * dy / dx
+            y_at_x1 = center_y + (x1 - center_x) * dy / dx
+
+            y0, y1 = 0, height
+            x_at_y0 = center_x + (y0 - center_y) * dx / dy if dy != 0 else center_x
+            x_at_y1 = center_x + (y1 - center_y) * dx / dy if dy != 0 else center_x
+
+            points = []
+
+            if 0 <= y_at_x0 <= height:
+                points.append((x0, y_at_x0))
+            if 0 <= y_at_x1 <= height:
+                points.append((x1, y_at_x1))
+            if 0 <= x_at_y0 <= width:
+                points.append((x_at_y0, y0))
+            if 0 <= x_at_y1 <= width:
+                points.append((x_at_y1, y1))
+
+            # If we got 2 valid points, draw the line
+            if len(points) >= 2:
+                (x1, y1), (x2, y2) = points[:2]
+                ax.plot([x1, x2], [y1, y2], 'r--', linewidth=1)
+
+    canvas.figure = fig
+    canvas.draw()
+    plt.close(fig)
+
+
+
+
 
 def next_slice(slice_index, image_data, canvas, landmarks):
     """Displays the next slice."""
     if slice_index < image_data.shape[0] - 1:
         slice_index += 1
-        update_image(slice_index, image_data, canvas, landmarks)  # Pass landmarks here
+        update_transversal(slice_index, image_data, canvas, landmarks)  # Pass landmarks here
     return slice_index
 
 def prev_slice(slice_index, image_data, canvas, landmarks):
     """Displays the previous slice."""
     if slice_index > 0:
         slice_index -= 1
-        update_image(slice_index, image_data, canvas, landmarks)  # Pass landmarks here
+        update_transversal(slice_index, image_data, canvas, landmarks)  # Pass landmarks here
     return slice_index
 
-import os
 
 def get_sorted_dicom_files(dicom_dir):
     """
@@ -137,7 +191,6 @@ def get_sorted_image_data(sorted_dicom_files):
     
     return image_data
 
-from scipy.ndimage import map_coordinates
 
 def dicom_to_matrix(image_data):
     """
@@ -155,60 +208,6 @@ def dicom_to_matrix(image_data):
     
     return volume
 
-def rotate_3d_matrix(image_data, normal_vector):
-    """
-    Rotates the 3D DICOM volume so that the annular plane normal aligns with the Z-axis.
-
-    Parameters:
-        image_data (numpy.ndarray): 3D array of shape (Z, Y, X).
-        normal_vector (numpy.ndarray): Normal vector of the annular plane.
-
-    Returns:
-        numpy.ndarray: Rotated 3D image volume.
-    """
-    # Normalize the annular plane normal vector
-    normal_vector = normal_vector / np.linalg.norm(normal_vector)
-
-    # Define the target viewing direction (Z-axis)
-    z_axis = np.array([0, 0, 1])
-
-    # Compute rotation axis and angle
-    rotation_axis = np.cross(normal_vector, z_axis)
-    rotation_norm = np.linalg.norm(rotation_axis)
-
-    if rotation_norm < 1e-6:  # If already aligned, return original data
-        return image_data
-
-    rotation_axis /= rotation_norm  # Normalize axis
-    angle = np.arccos(np.clip(np.dot(normal_vector, z_axis), -1.0, 1.0))  # Ensure numerical stability
-
-    # Compute rotation matrix
-    rotation_matrix = R.from_rotvec(angle * rotation_axis).as_matrix()
-
-    # Get volume dimensions
-    z_dim, y_dim, x_dim = image_data.shape
-    center = np.array([z_dim / 2, y_dim / 2, x_dim / 2])  # Rotation center
-
-    # Generate coordinate grid
-    z_coords, y_coords, x_coords = np.meshgrid(
-        np.arange(z_dim), np.arange(y_dim), np.arange(x_dim), indexing='ij'
-    )
-
-    # Flatten and shift coordinates to center
-    coords = np.vstack([z_coords.ravel(), y_coords.ravel(), x_coords.ravel()])
-    coords_centered = coords - center[:, np.newaxis]  # Move to origin
-
-    # Apply rotation
-    rotated_coords = rotation_matrix @ coords_centered
-    rotated_coords += center[:, np.newaxis]  # Move back
-
-    # Reshape rotated coordinates
-    z_rotated, y_rotated, x_rotated = rotated_coords.reshape(3, z_dim, y_dim, x_dim)
-
-    # Interpolate the rotated image
-    rotated_image_data = map_coordinates(image_data, [z_rotated, y_rotated, x_rotated], order=1, mode='nearest')
-
-    return rotated_image_data
 
 def calculate_rotation(annular_normal):
     """
@@ -236,12 +235,17 @@ def calculate_rotation(annular_normal):
     return rotation_axis, rotation_angle
 
    
-from scipy.ndimage import affine_transform
-
-
 def rotation_matrix(axis, angle):
     """
     Create a rotation matrix for rotating around an arbitrary axis.
+    
+    Input: 
+        - axis: this determines around which axis the rotation matrix is. Format (X Y Z) is expected. [0 1 0] indicates Y-axis rotation
+        - angle: angle in radians 
+    
+    Output:
+        - R: the rotation matrix (Rodriguez Method) which is to be applied for affine transformation.
+    
     """
     axis = axis / np.linalg.norm(axis)  # Normalize the axis
     cos_theta = np.cos(angle)
@@ -255,11 +259,20 @@ def rotation_matrix(axis, angle):
         [uz * ux * (1 - cos_theta) - uy * sin_theta, uz * uy * (1 - cos_theta) + ux * sin_theta, cos_theta + uz**2 * (1 - cos_theta)]
     ])
     
+        
     return R
 
 def rescale_volume(dicom, volume):
     """ 
     Rescale the volume so that it matches the real spacing of the DICOM, instead of assuming the voxels to be isotropic
+    
+    Input:
+        - dicom: one dicom file, in order to extract properties of the dicom for the pixel spacing
+        - volume: volume, in (X Y Z) format, which is to be rescaled.
+        
+    Output:
+        rescaled_volume: the rescaled format according to the pixel spacing of the DICOM. Pay attention whether
+        the physical distance between slices and the slice thickness is similar
     """
     # Get pixel spacing correctly as a tuple of floats (Y, X)
     pixel_spacing = tuple(map(float, dicom.PixelSpacing))  # (Y, X)
@@ -274,4 +287,28 @@ def rescale_volume(dicom, volume):
     rescale_factors = np.array(original_spacing) / np.array(desired_spacing)
     rescaled_volume = zoom(volume, rescale_factors, order=1)
     return rescaled_volume
+
+def rotated_volume(volume, rotation_matrix):
+    """ 
+    Rotate the matrix depending on the given rotation matrix
+    
+    Input:
+        - volume: this is the (rescaled!) volume in the format (X Y Z) which is to be rotated.
+        - rotation_matrix: this is the rodriguez matrix as calculated by rotation_matrix()
+        
+    Output:
+        rotated_volume: rotated volume
+    
+    The offset is needed to determine around which center the transformation takes place
+    
+    """
+    
+    # Determine the center before rotating the structure
+    center = 0.5 * np.array(volume.shape)
+    offset = center - rotation_matrix @ center
+    
+    # Rotate the volume around the specified axis
+    rotated_volume = affine_transform(volume, rotation_matrix, offset=offset, order=1)
+    
+    return rotated_volume
     
