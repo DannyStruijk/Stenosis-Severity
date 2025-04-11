@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from scipy.spatial.transform import Rotation as R
 import scipy.ndimage 
+from scipy.ndimage import zoom
 
 def load_dicom(dicom_file_path):
     """Loads a DICOM file and returns the pixel data."""
@@ -255,3 +256,22 @@ def rotation_matrix(axis, angle):
     ])
     
     return R
+
+def rescale_volume(dicom, volume):
+    """ 
+    Rescale the volume so that it matches the real spacing of the DICOM, instead of assuming the voxels to be isotropic
+    """
+    # Get pixel spacing correctly as a tuple of floats (Y, X)
+    pixel_spacing = tuple(map(float, dicom.PixelSpacing))  # (Y, X)
+
+    # Get slice thickness
+    slice_thickness = float(dicom.SliceThickness)
+
+    # Combine into new_spacing (Z, Y, X)
+    original_spacing = (slice_thickness, pixel_spacing[0], pixel_spacing[1])
+    desired_spacing = (pixel_spacing[0], pixel_spacing[1], pixel_spacing[1])
+    
+    rescale_factors = np.array(original_spacing) / np.array(desired_spacing)
+    rescaled_volume = zoom(volume, rescale_factors, order=1)
+    return rescaled_volume
+    

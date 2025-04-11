@@ -13,6 +13,8 @@ import subprocess
 import vtk
 from vtk.util.numpy_support import vtk_to_numpy
 import numpy as np
+from scipy.ndimage import affine_transform
+import scipy.ndimage as ndi
 
 # Define the DICOM directory
 dicom_dir = r"T:\Research_01\CZE-2020.67 - SAVI-AoS\AoS stress\CT\Aosstress14\DICOM\000037EC\AA4EC564\AA3B0DE6\00007EA9"
@@ -24,14 +26,28 @@ annular_normal = np.array([ 0.66, 0, 0.746])  # Example
 sorted_dicom_files = gf.get_sorted_dicom_files(dicom_dir)
 volume = gf.dicom_to_matrix(sorted_dicom_files)
 
+# Load the first DICOM file for the image properties
+dicom = pydicom.dcmread(sorted_dicom_files[0][0])
+
+# Determine the angle and the plane in which you roate
+angle = np.radians(45)
+axis = [0,1]
+
+# Rotate the volume around the specified axis
+rescaled_volume = gf.rescale_volume(dicom, volume)
+
+# Rotate the volume around the specified axis
+rotated_volume = ndi.rotate(rescaled_volume, angle, axis, reshape=True, mode='nearest', order=1)
+
+
 # Calcualte the rotation needed to look perpendicular to the annular plane
-image_data = gf.reslice_numpy_volume(volume, annular_normal)
+image_data = rotated_volume
 
 class DicomSliceViewer:
     def __init__(self, dicom_files):
         # Initialize variables
         self.dicom_files = dicom_files  # Sorted list of DICOM files
-        self.slice_index = 25  # Start with the first slice
+        self.slice_index = 40  # Start with the first slice
         self.image_data = image_data  # Corrected function
         self.landmarks = []
         self.annotating = False
@@ -105,7 +121,7 @@ class DicomSliceViewer:
 
     def next_button_func(self):
         """Go to the next slice."""
-        if self.slice_index < len(self.dicom_files) - 1:
+        if self.slice_index < 274 - 1:
             self.slice_index += 1
             self.update_slice()
 

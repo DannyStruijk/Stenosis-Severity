@@ -8,6 +8,8 @@ from scipy.ndimage import map_coordinates
 import scipy.ndimage
 import pydicom
 import matplotlib.pyplot as plt
+import pyvista as pv
+from scipy.ndimage import affine_transform
 
 # Set working directory
 
@@ -19,49 +21,70 @@ dicom_dir = r"T:\Research_01\CZE-2020.67 - SAVI-AoS\AoS stress\CT\Aosstress14\DI
 # Get a list of all .dcm files (you can filter as needed)
 dicom_files = [os.path.join(dicom_dir, f) for f in os.listdir(dicom_dir)]
 
-# Load the first DICOM file
-ds = pydicom.dcmread(dicom_files[0])
-
-# Print pixel spacing and slice thickness to understand the spacing
-print("Pixel Spacing:", ds.PixelSpacing)
-print("Slice Thickness:", ds.SliceThickness)
-
 # Assuming you have the necessary function to load and sort the DICOM files
 sorted_dicom_files = gf.get_sorted_dicom_files(dicom_dir)
 volume = np.stack([gf.load_dicom(file[0]) for file in sorted_dicom_files], axis=0)
 
-#%%%%%%%% ANALYSIS 
-# Get the pixel spacing (assuming it's the same for all slices)
-pixel_spacing = ds.PixelSpacing  # [mm/pixel] for (x, y)
-slice_thickness = ds.SliceThickness  # [mm] for z-axis
-
-# Define the voxel spacing in X, Y, and Z directions
-voxel_spacing = np.array([pixel_spacing[0], pixel_spacing[1], slice_thickness])
-
-# Now perform the rotation while taking the voxel spacing into account
-# First, adjust the scaling according to the voxel spacing
-scaling_factors = np.array([1 / voxel_spacing[0], 1 / voxel_spacing[1], 1 / voxel_spacing[2]])
-
-# Scale the volume along each axis separately
-scaled_volume_x = scipy.ndimage.zoom(volume, (scaling_factors[0], 1, 1), order=1)
-scaled_volume_y = scipy.ndimage.zoom(scaled_volume_x, (1, scaling_factors[1], 1), order=1)
-scaled_volume_z = scipy.ndimage.zoom(scaled_volume_y, (1, 1, scaling_factors[2]), order=1)
+# Load the first DICOM file for the image properties
+dicom = pydicom.dcmread(sorted_dicom_files[0][0])
 
 
-#%%%%%%%% Now you can rotate the volume if needed
-rotated_scaled_volume = scipy.ndimage.rotate(scaled_volume_z, angle=-1, axes=(0, 2), reshape=False, order=1)
+#%%%%%%%% Rescaling of the volume 
 
-# Create figure to display a slice
+rescaled_volume = gf.rescale_volume(dicom, volume)
+
+
+#%%%%%%%% Visualization of the slice in 3D space
+
+slice_index = 22
+
+# Create figure
 fig, ax = plt.subplots(figsize=(10, 8))
 
-# Display the slice from the rotated volume
-ax.imshow(rotated_scaled_volume[25, :, :], cmap="gray")
+# Display the inclined slice
+ax.imshow(rescaled_volume[87], cmap="gray")
 
 # Labels and title
 ax.set_xlabel("X")
 ax.set_ylabel("Y")
-ax.set_title("Inclined Slice with Mapped Coordinates")
+ax.set_title("Inclined Slice with Mapped Coordinates (-45 degrees)")
 
 # Show the plot
 plt.legend()
 plt.show()
+
+# Wrap the volume as a PyVista object
+volume_mesh = pv.wrap(rescaled_volume)
+
+# Set up the plotter
+plotter = pv.Plotter()
+plotter.add_volume(volume_mesh, cmap="gray", opacity="sigmoid")
+plotter.show()
+
+#%%%%%%%%%%% ROTATE THE STRUCTURE
+
+# Determine the angle and the plane in which you roate
+angle = np.radians(45)
+axis = [1,0,0]
+R = gf.rotation_matrix(axis, angle)
+
+# Rotate the volume around the specified axis
+rotated_volume = affine_transform(rescaled_volume, R, order=1)
+
+#%%%%%%%%% VISUALIZATION OF THE RESCALED VOLUME
+
+# Create figure
+fig, ax = plt.subplots(figsize=(10, 8))
+
+# Display the inclined slice
+ax.imshow(rotated_volume[90], cmap="gray")
+
+# Labels and title
+ax.set_xlabel("X")
+ax.set_ylabel("Y")
+ax.set_title("Inclined Slice with Mapped Coordinates (-45 degrees)")
+
+# Show the plot
+plt.legend()
+plt.show()
+

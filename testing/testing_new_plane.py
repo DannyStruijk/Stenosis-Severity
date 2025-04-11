@@ -8,7 +8,7 @@ os.chdir("H:/DATA/Afstuderen/2.Code/Stenosis-Severity/gui")
 import gui_functions as gf
 import pyvista as pv
 from math import pi
-
+from scipy.ndimage import rotate
 import sys
 from PyQt5 import QtWidgets, QtCore, QtGui
 
