@@ -33,6 +33,9 @@ dicom = pydicom.dcmread(sorted_dicom_files[0][0])
 
 rescaled_volume = gf.rescale_volume(dicom, volume)
 
+# Transpose from (Z, Y, X) → (X, Y, Z)
+rescaled_volume = np.transpose(rescaled_volume, (2, 1, 0))
+
 
 #%%%%%%%% Visualization of the slice in 3D space
 
@@ -65,11 +68,11 @@ plotter.show()
 
 # Determine the angle and the plane in which you roate
 angle = np.radians(45)
-axis = [1,0,0]
+axis = [0,1,0]
 R = gf.rotation_matrix(axis, angle)
 
 # Rotate the volume around the specified axis
-rotated_volume = affine_transform(rescaled_volume, R, order=1)
+rotated_volume = gf.rotated_volume(rescaled_volume, R)
 
 #%%%%%%%%% VISUALIZATION OF THE RESCALED VOLUME
 
@@ -77,7 +80,7 @@ rotated_volume = affine_transform(rescaled_volume, R, order=1)
 fig, ax = plt.subplots(figsize=(10, 8))
 
 # Display the inclined slice
-ax.imshow(rotated_volume[90], cmap="gray")
+ax.imshow(rotated_volume[180], cmap="gray")
 
 # Labels and title
 ax.set_xlabel("X")
