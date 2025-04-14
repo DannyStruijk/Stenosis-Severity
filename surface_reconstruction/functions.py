@@ -165,7 +165,7 @@ def calc_surface_ctrlpts_hinge(cusp_landmarks, leaflet_tip: list):
     
     return control_points
 
-def calc_additional_ctrlpoints(cusp_landmarks, leaflet_tip):
+def calc_ctrlpoints(cusp_landmarks, leaflet_tip):
         """
     Function to calculate additional control points based on the evaluation points of a B-spline surface.
     
@@ -286,32 +286,5 @@ def interpolate_surface(interp_points):
     surf.evaluate()
 
     return surf
-
-
-# Function to export circle to VTK
-def export_to_vtk(circle_points, filename="circle.vtp"):
-    # Convert numpy array to vtk
-    vtk_points = vtk.vtkPoints()
-    for point in circle_points:
-        vtk_points.InsertNextPoint(point)
-    
-    # Create a polyline to connect the points
-    polyline = vtk.vtkCellArray()
-    for i in range(len(circle_points) - 1):
-        polyline.InsertNextCell(2)
-        polyline.InsertCellPoint(i)
-        polyline.InsertCellPoint(i + 1)
-    
-    # Create a PolyData object to hold the circle data
-    circle_polydata = vtk.vtkPolyData()
-    circle_polydata.SetPoints(vtk_points)
-    circle_polydata.SetLines(polyline)
-    
-    # Write the PolyData to a VTK XML file
-    writer = vtk.vtkXMLPolyDataWriter()
-    writer.SetFileName(filename)
-    writer.SetInputData(circle_polydata)
-    writer.Write()
-    print(f"VTK file saved as: {filename}")
 
 

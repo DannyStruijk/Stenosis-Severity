@@ -312,3 +312,8 @@ def rotated_volume(volume, rotation_matrix):
     
     return rotated_volume
     
+def reconstruct_leaflets():
+    script_path = "H:/DATA/Afstuderen/2.Code/Stenosis-Severity/surface_reconstruction/leaflet_interpolation.py"
+    with open(script_path, "r") as file:
+        script_content = file.read()
+        exec(script_content, globals())
