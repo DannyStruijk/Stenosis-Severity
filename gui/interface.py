@@ -59,7 +59,7 @@ class DicomSliceViewer:
         # Set up the window and canvas
         self.window = tk.Tk()
         self.window.title("DICOM Slice Viewer")
-        self.window.geometry("1400x900")
+        self.window.geometry("1100x650")
 
         # Setup Figure and Axes for Matplotlib
         self.fig = Figure()
@@ -71,17 +71,12 @@ class DicomSliceViewer:
         self.canvas2 = FigureCanvasTkAgg(self.fig2, master = self.window)
         self.canvas2.get_tk_widget().place(x=500, y=0)
 
-
-        # Setup Slice Label     
-        self.slice_label = tk.Label(self.window, text=f"Current Slice: {self.slice_index_transversal}")
-        self.slice_label.pack()
-
         # Setup Buttons
         self.create_buttons()
 
         # Setup Instruction Label
-        self.instruction = tk.Label(self.window, text="Please annotate the three commissures.")
-        self.instruction.pack(side='bottom')
+        self.instruction = tk.Label(self.window, text="Please annotate the three commissures.", font=("Helvetica", 12))
+        self.instruction.place(relx=0.3, rely=1.0, anchor = 's', x=0, y = -100)
 
         # Display the first slice
         self.update_slice()
@@ -91,30 +86,56 @@ class DicomSliceViewer:
 
     def create_buttons(self):
         """Create the navigation and annotation buttons."""
-        self.prev_button = Button(self.window, text="Previous Slice", command=self.prev_button_func)
-        self.prev_button.place(relx=0.0, rely=1.0, anchor="sw", x=10, y=-10)
+               
+        # Create frame for the Next/Previous Slice buttons
+        self.slice_frame = tk.Frame(self.window, bg="lightyellow", padx=10, pady=10, height = 150)
+        self.slice_frame.place(relx=0.81, rely=1.0, anchor='sw', x=0, y=-10, height = 140, width = 180)
+        
+        self.slice_label = tk.Label(self.slice_frame, text=f"Current Slice: {self.slice_index_transversal}", font=("Helvetica", 10, "bold"))
+        self.slice_label.pack(side="top", pady=(0,15))
+        
+        self.prev_button = Button(self.slice_frame, text="Previous Slice", command=self.prev_button_func)
+        self.prev_button.pack()
+        
+        self.next_button = Button(self.slice_frame, text="Next Slice", command=self.next_button_func)
+        self.next_button.pack()
+        
+        # Create frame for the annotation buttons
+        self.annotation_frame = tk.Frame(self.window, bg = "lightblue", padx=10, pady=10)
+        self.annotation_frame.place(relx=0.45, rely=1.0, anchor='sw', x=0, y=-10, height = 140, width = 180)
+        
+        self.annotate_label = tk.Label(self.annotation_frame, text="Not annotating", font=("Helvetica", 10, "bold"))
+        self.annotate_label.pack(side="top", pady=(0,15))
+        
+        self.annotate_button = Button(self.annotation_frame, text="Enable Annotation", command=self.toggle_annotation)
+        self.annotate_button.pack()
+        
+        self.no_button = Button(self.annotation_frame, text="No, start over", command=self.start_over)
+        self.no_button.pack()
+        
+        # Create frame for rotating the figure
+        self.rotate_frame = tk.Frame(self.window, bg="lightgreen", padx=10, pady=10)
+        self.rotate_frame.place(relx=0.63, rely=1.0, anchor='sw', x=0, y=-10, height=140, width=180)
+        
+        # Place the label at the top with extra bottom padding
+        self.rotate_label = tk.Label(self.rotate_frame, text=f"Current Angle: {self.degree}", font=("Helvetica", 10, "bold"))
+        self.rotate_label.pack(side="top", pady=(0, 15))  # more space below the label
+        
+        # Create a sub-frame to hold and vertically center the buttons
+        self.rotate_buttons_frame = tk.Frame(self.rotate_frame, bg="lightgreen")
+        self.rotate_buttons_frame.pack(expand=True)
+        
+        # Add buttons to the sub-frame
+        self.decrease_button = Button(self.rotate_buttons_frame, text="Decrease angle", command=self.decrease_degree)
+        self.decrease_button.pack()
+        
+        self.increase_button = Button(self.rotate_buttons_frame, text="Increase angle", command=self.increase_degree)
+        self.increase_button.pack()
+        
+        self.rotate_button = Button(self.rotate_buttons_frame, text="Rotate volume", command=self.rotate_and_display)
+        self.rotate_button.pack()
 
-        self.next_button = Button(self.window, text="Next Slice", command=self.next_button_func)
-        self.next_button.place(relx=1.0, rely=1.0, anchor="se", x=-10, y=-10)
         
-        self.annotate_button = Button(self.window, text="Enable Annotation", command=self.toggle_annotation)
-        self.annotate_button.place(relx= 0.5, rely=1.0, anchor="sw", x=10, y=-20)
-        
-        self.no_button = Button(self.window, text="No, start over", command=self.start_over)
-        self.no_button.place(relx= 0.5, rely=1.0, anchor="sw", x=10, y=-50)
-        
-        self.decrease_button = Button(self.window, text=str(self.degree - 1), command=self.decrease_degree)
-        self.decrease_button.place(relx= 0.7, rely=1.0, anchor="sw", x=10, y=-20)
-        
-        self.increase_button = Button(self.window, text=str(self.degree + 1), command=self.increase_degree)
-        self.increase_button.place(relx= 0.7, rely=1.0, anchor="sw", x=10, y=-40)
-        
-        self.rotate_button = Button(self.window, text="Rotate volume", command = self.rotate_and_display)
-        self.rotate_button.place(relx= 0.8, rely=1.0, anchor="sw", x=10, y=-20)
-
-        
-        print(self.image_data.shape)
-
     def update_slice(self):
         """Update the image displayed in the GUI with the current slice."""
         ax = self.fig.gca()
@@ -152,14 +173,12 @@ class DicomSliceViewer:
     def decrease_degree(self):
         self.degree -= 1
         self.rotation -= 1
-        self.decrease_button.config(text=str(self.degree - 1))
-        self.increase_button.config(text=str(self.degree + 1))
+        self.rotate_label.config(text=f"Current Angle: {self.degree}")
         
     def increase_degree(self):
         self.degree += 1
         self.rotation += 1
-        self.decrease_button.config(text=str(self.degree - 1))
-        self.increase_button.config(text=str(self.degree + 1))
+        self.rotate_label.config(text=f"Current Angle: {self.degree}")
         
         
     def rotate_and_display(self):
@@ -177,43 +196,55 @@ class DicomSliceViewer:
         self.annotating = not self.annotating  # Toggle the flag
         if self.annotating:
             self.annotate_button.config(text="Disable Annotation")
+            self.annotate_label.config(text="Currently annotating...")
+
+            
         else:
             self.annotate_button.config(text="Enable Annotation")
+            self.annotate_label.config(text="Not annotating")
+
 
     def on_click(self, event):
         """Handle mouse click on the image and add annotation."""
         if event.xdata is None or event.ydata is None:
             print("Clicked outside the figure. Ignoring.")
             return
-
+    
         if self.annotating:
             x, y = int(event.xdata), int(event.ydata)
             z = self.slice_index_transversal
             self.landmarks.append((x, y, z))  # Add the clicked point to the landmarks
             self.update_slice()  # Update the display with the new annotation
-
+    
+        # Update instructions based on how many points have been annotated
         if len(self.landmarks) == 3:
-            self.instruction.config(text="Now annotate the leaflet tip")
+            self.instruction.config(text="Now annotate the center of the aortic valve.")
         elif len(self.landmarks) == 4:
+            self.instruction.config(text="Now annotate the three hinge points.")
+        elif len(self.landmarks) == 7:
             self.annotation_complete()
-            print("The coordinates of the commissures are: ", self.landmarks[0:3])
-            print("And the coordinates of the leaflet tip is: ", self.landmarks[3])
+            print("The coordinates of the commissures are:", self.landmarks[0:3])
+            print("The coordinate of the center is:", self.landmarks[3])
+            print("The coordinates of the hinge points are:", self.landmarks[4:7])
 
     def annotation_complete(self):
         """Disable annotation and create an exit button once all landmarks are set."""
         self.annotating = False
         self.annotate_button.config(state=tk.DISABLED)
-        self.instruction.config(text="Annotation complete. You may exit.")
+        self.instruction.config(text="Annotation complete. Click Reconstruct.")
     
-        with open("H:/DATA/Afstuderen/2.Code/Stenosis-Severity/b-spline_fitting/landmarks.txt", "w") as f:
+        with open("H:/DATA/Afstuderen/2.Code/Stenosis-Severity/annotations/landmarks.txt", "w") as f:
             for landmark in self.landmarks:
                 f.write(f"{landmark[0]} {landmark[1]} {landmark[2]}\n")
-                
-        reconstruct_button = Button(self.window, text = "Reconstruct", command = self.run_script)
-        reconstruct_button.pack(side="right")
+    
+        reconstruct_button = Button(self.window, text="Reconstruct", command=self.run_script)
+        reconstruct_button.place(relx = 0.3, rely=1.0, y=-50, anchor = 's')
     
         exit_button = Button(self.window, text="Exit", command=self.window.destroy)
-        exit_button.pack(side="bottom")
+        exit_button.place(relx = 0.3, rely=1.0, y=-25, anchor = 's')
+        
+        self.annotate_label.config(text="Done.")
+
 
     def start_over(self):
         """Reset annotations and allow the user to restart the process."""
@@ -224,8 +255,9 @@ class DicomSliceViewer:
         
     def run_script(self):
         """Execute an external Python script."""
-        script_path = r"H:\DATA\Afstuderen\2.Code\Stenosis-Severity\b-spline_fitting\leaflet_surface_NURBS.py"  
+        script_path = r"H:/DATA/Afstuderen/2.Code/Stenosis-Severity/surface_reconstruction/leaflet_interpolation.py"
         subprocess.run(["python", script_path], check=True) 
+        self.instruction.config(text="The reconstructions have been made.")
 
     def run(self):
         """Start the Tkinter main loop."""
