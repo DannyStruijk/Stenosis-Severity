@@ -37,6 +37,8 @@ def update_transversal(slice_index_transversal, image_data, canvas, landmarks, v
     
     # Show the image slice in grayscale
     ax.imshow(np.rot90(slice_data, k=1), cmap='gray', origin='upper')
+    if vtk_surface_points is not None:
+       overlay_leaflet_points(ax, slice_index_transversal, vtk_surface_points, plane='transversal')
     #ax.imshow(slice_data, cmap='gray', origin='upper')
     ax.axis('off')  # Hide the axis for a clean image
 
@@ -53,7 +55,7 @@ def update_transversal(slice_index_transversal, image_data, canvas, landmarks, v
     plt.close(fig)  # Close the figure
     
 
-def update_coronal(slice_index_coronal, image_data, canvas, angle=None):
+def update_coronal(slice_index_coronal, image_data, canvas, angle=None, vtk_surface_points = None):
     """Updates the image displayed in the GUI based on the current slice index, with landmarks and overlayed surface and optional angle line clipped to image edges."""
     
     # Extract slice data
@@ -65,6 +67,9 @@ def update_coronal(slice_index_coronal, image_data, canvas, angle=None):
     # Rotate and flip for correct orientation
     rotated_slice = np.fliplr(np.rot90(slice_data, k=-1))
     ax.imshow(rotated_slice, cmap="gray")
+    if vtk_surface_points is not None:
+        height, width = rotated_slice.shape
+        overlay_leaflet_points(ax, slice_index_coronal, vtk_surface_points, plane='coronal')
     ax.axis('off')  # Hide axes
 
     if angle is not None:
@@ -75,7 +80,6 @@ def update_coronal(slice_index_coronal, image_data, canvas, angle=None):
 
         dx = np.cos(angle_rad)
         dy = np.sin(angle_rad)
-
         # Avoid division by zero
         if dx == 0:
             x_vals = [center_x, center_x]
@@ -105,14 +109,9 @@ def update_coronal(slice_index_coronal, image_data, canvas, angle=None):
             if len(points) >= 2:
                 (x1, y1), (x2, y2) = points[:2]
                 ax.plot([x1, x2], [y1, y2], 'r--', linewidth=1)
-
     canvas.figure = fig
     canvas.draw()
     plt.close(fig)
-
-
-
-
 
 def next_slice(slice_index, image_data, canvas, landmarks):
     """Displays the next slice."""
@@ -126,6 +125,20 @@ def prev_slice(slice_index, image_data, canvas, landmarks):
     if slice_index > 0:
         slice_index -= 1
         update_transversal(slice_index, image_data, canvas, landmarks)  # Pass landmarks here
+    return slice_index
+
+def next_coronal_slice(slice_index, image_data, canvas, landmarks, vtk_surface_points=None):
+    """Displays the next coronal slice."""
+    if slice_index < image_data.shape[1] - 1:
+        slice_index += 1
+        update_coronal(slice_index, image_data, canvas, vtk_surface_points=vtk_surface_points)
+    return slice_index
+
+def prev_coronal_slice(slice_index, image_data, canvas, landmarks, vtk_surface_points=None):
+    """Displays the previous coronal slice."""
+    if slice_index > 0:
+        slice_index -= 1
+        update_coronal(slice_index, image_data, canvas, vtk_surface_points=vtk_surface_points)
     return slice_index
 
 
@@ -317,3 +330,33 @@ def reconstruct_leaflets():
     with open(script_path, "r") as file:
         script_content = file.read()
         exec(script_content, globals())
+        
+def load_leaflet_points(base_path):
+    """Loads evaluated leaflet surface points from text files."""
+    leaflet_points = []
+    for i in range(1, 4):
+        file_path = os.path.join(base_path, f"leaflet_{i}_points.txt")
+        if os.path.exists(file_path):
+            points = np.loadtxt(file_path)
+            if points.ndim == 1:
+                points = np.expand_dims(points, axis=0)
+            leaflet_points.append(points)
+    return leaflet_points  # Returning as a list of arrays, one for each leaflet
+
+
+def overlay_leaflet_points(ax, slice_index, leaflet_points, plane='transversal'):
+    """Overlays leaflet points on the image slice with correct transformation."""
+    leaflet_colors = ['go', 'bo', 'ro']  # green, blue, red for 3 leaflets
+
+    for i, points in enumerate(leaflet_points):
+        color = leaflet_colors[i]
+        for point in points:
+            x, y, z = point
+            if plane == 'transversal' and round(z) == slice_index:
+                ax.plot(x, y, color, markersize=2)
+
+            elif plane == 'coronal' and round(y) == slice_index:
+                # Image is rotated 90 degrees and flipped left-right
+                # original coronal image axes: (x, z) => after rot90(-1) + fliplr => (z, x)
+                ax.plot(x, z, color, markersize=2)
+

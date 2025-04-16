@@ -23,14 +23,17 @@ recon_path = "H:/DATA/Afstuderen/2.Code/Stenosis-Severity/reconstructions/"
 # First cusp
 leaf_1 = functions.calc_ctrlpoints(cusp_landmarks[0], center)
 interpolated_leaf_1 = functions.interpolate_surface(leaf_1)
-functions.export_vtk(interpolated_leaf_1, recon_path + "reconstructed_leaflet_1.vtk")
+functions.save_surface_evalpts(interpolated_leaf_1, recon_path + "leaflet_1_points.txt") # Save the points seperately
+functions.export_vtk(interpolated_leaf_1, recon_path + "reconstructed_leaflet_1.vtk") # Save as VTK
 
 # Second cusp
 leaf_2 = functions.calc_ctrlpoints(cusp_landmarks[1], center)
 interpolated_leaf_2 = functions.interpolate_surface(leaf_2)
-functions.export_vtk(interpolated_leaf_2, recon_path + "reconstructed_leaflet_2.vtk")
+functions.save_surface_evalpts(interpolated_leaf_2, recon_path + "leaflet_2_points.txt") #Save the points individually
+functions.export_vtk(interpolated_leaf_2, recon_path + "reconstructed_leaflet_2.vtk") # Save as VTK
 
 # Third cusp
 leaf_3 = functions.calc_ctrlpoints(cusp_landmarks[2], center)
 interpolated_leaf_3 = functions.interpolate_surface(leaf_3)
-functions.export_vtk(interpolated_leaf_3, recon_path + "reconstructed_leaflet_3.vtk")
+functions.save_surface_evalpts(interpolated_leaf_3, recon_path + "leaflet_3_points.txt") # Save the points seperately
+functions.export_vtk(interpolated_leaf_3, recon_path + "reconstructed_leaflet_3.vtk") # Save as VTK

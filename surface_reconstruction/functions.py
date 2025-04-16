@@ -1,13 +1,9 @@
 from geomdl import BSpline
-from geomdl.visualization import VisVTK
 import numpy as np
 import vtk
-import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
-from scipy.optimize import least_squares
 from geomdl import fitting
 import pyvista as pv
-
+import os
 
 def export_vtk(surface, filename="surface.vtk"):
     """
@@ -288,3 +284,24 @@ def interpolate_surface(interp_points):
     return surf
 
 
+def save_surface_evalpts(surface, save_path):
+    """
+    Saves the evaluated points (evalpts) of a NURBS surface to a .npy file.
+
+    Parameters:
+        surface : geomdl.NURBS.Surface
+            The surface object after evaluation.
+        save_path : str
+            Path to save the .npy file.
+    """
+    if not surface.evalpts:
+        raise ValueError("Surface has not been evaluated. Run surface.evaluate() first.")
+
+    evalpts_array = np.array(surface.evalpts)
+    
+    # Ensure the output directory exists
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+
+    np.savetxt(save_path, evalpts_array)
+    print(f"Surface evalpts saved to {save_path}")
+    
