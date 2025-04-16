@@ -55,11 +55,12 @@ class DicomSliceViewer:
         self.degree = 45 # Determine the degree on which the volume is rotated.
         self.axis = [0,1,0] # Determine the axis for the rotation for the volume
         self.rotation = 0
+        self.evalpts = None
 
         # Set up the window and canvas
         self.window = tk.Tk()
         self.window.title("DICOM Slice Viewer")
-        self.window.geometry("1100x650")
+        self.window.geometry("1300x650")
 
         # Setup Figure and Axes for Matplotlib
         self.fig = Figure()
@@ -76,7 +77,7 @@ class DicomSliceViewer:
 
         # Setup Instruction Label
         self.instruction = tk.Label(self.window, text="Please annotate the three commissures.", font=("Helvetica", 12))
-        self.instruction.place(relx=0.3, rely=1.0, anchor = 's', x=0, y = -100)
+        self.instruction.place(relx=0.15, rely=1.0, anchor = 's', x=0, y = -100)
 
         # Display the first slice
         self.update_slice()
@@ -89,9 +90,9 @@ class DicomSliceViewer:
                
         # Create frame for the Next/Previous Slice buttons
         self.slice_frame = tk.Frame(self.window, bg="lightyellow", padx=10, pady=10, height = 150)
-        self.slice_frame.place(relx=0.81, rely=1.0, anchor='sw', x=0, y=-10, height = 140, width = 180)
+        self.slice_frame.place(relx=0.65, rely=1.0, anchor='sw', x=0, y=-10, height = 140, width = 180)
         
-        self.slice_label = tk.Label(self.slice_frame, text=f"Current Slice: {self.slice_index_transversal}", font=("Helvetica", 10, "bold"))
+        self.slice_label = tk.Label(self.slice_frame, text=f"Current T Slice: {self.slice_index_transversal}", font=("Helvetica", 10, "bold"))
         self.slice_label.pack(side="top", pady=(0,15))
         
         self.prev_button = Button(self.slice_frame, text="Previous Slice", command=self.prev_button_func)
@@ -100,9 +101,23 @@ class DicomSliceViewer:
         self.next_button = Button(self.slice_frame, text="Next Slice", command=self.next_button_func)
         self.next_button.pack()
         
+        # Create frame for the Coronal Slice navigation buttons
+        self.coronal_slice_frame = tk.Frame(self.window, bg="lightyellow", padx=10, pady=10, height=150)
+        self.coronal_slice_frame.place(relx=0.80, rely=1.0, anchor='sw', x=0, y=-10, height=140, width=180)
+        
+        self.coronal_slice_label = tk.Label(self.coronal_slice_frame, text=f"Current C Slice: {self.slice_index_coronal}", font=("Helvetica", 10, "bold"))
+        self.coronal_slice_label.pack(side="top", pady=(0, 15))
+        
+        self.prev_coronal_button = Button(self.coronal_slice_frame, text="Previous Slice", command=self.prev_coronal_func)
+        self.prev_coronal_button.pack()
+        
+        self.next_coronal_button = Button(self.coronal_slice_frame, text="Next Slice", command=self.next_coronal_func)
+        self.next_coronal_button.pack()
+
+        
         # Create frame for the annotation buttons
         self.annotation_frame = tk.Frame(self.window, bg = "lightblue", padx=10, pady=10)
-        self.annotation_frame.place(relx=0.45, rely=1.0, anchor='sw', x=0, y=-10, height = 140, width = 180)
+        self.annotation_frame.place(relx=0.35, rely=1.0, anchor='sw', x=0, y=-10, height = 140, width = 180)
         
         self.annotate_label = tk.Label(self.annotation_frame, text="Not annotating", font=("Helvetica", 10, "bold"))
         self.annotate_label.pack(side="top", pady=(0,15))
@@ -113,9 +128,11 @@ class DicomSliceViewer:
         self.no_button = Button(self.annotation_frame, text="No, start over", command=self.start_over)
         self.no_button.pack()
         
+
+        
         # Create frame for rotating the figure
         self.rotate_frame = tk.Frame(self.window, bg="lightgreen", padx=10, pady=10)
-        self.rotate_frame.place(relx=0.63, rely=1.0, anchor='sw', x=0, y=-10, height=140, width=180)
+        self.rotate_frame.place(relx=0.50, rely=1.0, anchor='sw', x=0, y=-10, height=140, width=180)
         
         # Place the label at the top with extra bottom padding
         self.rotate_label = tk.Label(self.rotate_frame, text=f"Current Angle: {self.degree}", font=("Helvetica", 10, "bold"))
@@ -135,7 +152,12 @@ class DicomSliceViewer:
         self.rotate_button = Button(self.rotate_buttons_frame, text="Rotate volume", command=self.rotate_and_display)
         self.rotate_button.pack()
 
-        
+        # NOTE: ONILY FOR TESTING PURPOSES!!! OVERLAY SHOULD NORMALLY ONLY BE AFTER RECONSTRUCT
+        self.overlay_button = Button(self.annotation_frame, text = "Overlay", command=self.overlay)
+        self.overlay_button.pack()
+
+
+
     def update_slice(self):
         """Update the image displayed in the GUI with the current slice."""
         ax = self.fig.gca()
@@ -146,11 +168,13 @@ class DicomSliceViewer:
         ax.clear()  # Clear the previous image
         
         # Update the image with the current slice
-        gf.update_transversal(self.slice_index_transversal, self.image_data, self.canvas, self.landmarks)
-        gf.update_coronal(self.slice_index_coronal, rescaled_volume, self.canvas2, self.degree)
+        gf.update_transversal(self.slice_index_transversal, self.image_data, self.canvas, self.landmarks, self.evalpts)
+        gf.update_coronal(self.slice_index_coronal, rotated_volume, self.canvas2, self.degree, self.evalpts)
         
         # Update the slice label
-        self.slice_label.config(text=f"Current Slice: {self.slice_index_transversal}")
+        self.slice_label.config(text=f"Current T Slice: {self.slice_index_transversal}")
+        self.coronal_slice_label.config(text=f"Current C Slice: {self.slice_index_coronal}")
+
         
         # Redraw the canvas to reflect the updated image
         self.canvas.draw()
@@ -168,6 +192,16 @@ class DicomSliceViewer:
         """Go to the next slice."""
         if self.slice_index_transversal < 274 - 1:
             self.slice_index_transversal += 1
+            self.update_slice()
+            
+    def prev_coronal_func(self):
+        if self.slice_index_coronal > 0:
+            self.slice_index_coronal -= 1
+            self.update_slice()
+
+    def next_coronal_func(self):
+        if self.slice_index_coronal < rescaled_volume.shape[1] - 1:
+            self.slice_index_coronal += 1
             self.update_slice()
             
     def decrease_degree(self):
@@ -238,14 +272,19 @@ class DicomSliceViewer:
                 f.write(f"{landmark[0]} {landmark[1]} {landmark[2]}\n")
     
         reconstruct_button = Button(self.window, text="Reconstruct", command=self.run_script)
-        reconstruct_button.place(relx = 0.3, rely=1.0, y=-50, anchor = 's')
+        reconstruct_button.place(relx = 0.1, rely=1.0, y=-50, anchor = 's')
     
         exit_button = Button(self.window, text="Exit", command=self.window.destroy)
-        exit_button.place(relx = 0.3, rely=1.0, y=-25, anchor = 's')
+        exit_button.place(relx = 0.1, rely=1.0, y=-25, anchor = 's')
         
         self.annotate_label.config(text="Done.")
-
-
+        
+        
+        
+    def overlay(self):
+        base_path = r"H:\DATA\Afstuderen\2.Code\Stenosis-Severity\reconstructions"
+        self.evalpts = gf.load_leaflet_points(base_path)
+        
     def start_over(self):
         """Reset annotations and allow the user to restart the process."""
         self.landmarks = []
@@ -258,6 +297,9 @@ class DicomSliceViewer:
         script_path = r"H:/DATA/Afstuderen/2.Code/Stenosis-Severity/surface_reconstruction/leaflet_interpolation.py"
         subprocess.run(["python", script_path], check=True) 
         self.instruction.config(text="The reconstructions have been made.")
+        
+        self.overlay_button = Button(self.annotation_frame, text = "Overlay", command=self.overlay)
+        self.overlay_button.pack()
 
     def run(self):
         """Start the Tkinter main loop."""
