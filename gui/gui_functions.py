@@ -11,13 +11,19 @@ def load_dicom(dicom_file_path):
     dicom = pydicom.dcmread(dicom_file_path)
     return dicom.pixel_array
 
-def get_transversal_slice(image_data, slice_index):
+def get_transversal_slice(image_data, slice_index, zoom_enabled = False, zoom_x = None, zoom_y = None):
     """Returns the slice image data for a specific index."""
-    return image_data[:, :, slice_index]
+    if zoom_enabled == False:
+        transversal_slice = image_data[:, :, slice_index]
+    else: 
+        
+        transversal_slice = image_data[zoom_x[0]:zoom_x[1], zoom_y[0]:zoom_y[1], slice_index]
+    return transversal_slice
 
 def get_coronal_slice(image_data, slice_index):
-    """Returns the slice image data for a specific index."""
-    return image_data[:, slice_index, :]
+    """Returns the coronal slice at a specific index, with anterior ↔ posterior reversed."""
+    reversed_index = image_data.shape[1] - 1 - slice_index
+    return image_data[:, reversed_index, :]
 
 def enhance_contrast(slice_data):
     """Enhances the contrast of the slice using linear contrast stretching."""
@@ -26,20 +32,22 @@ def enhance_contrast(slice_data):
     enhanced_image = 255 * (slice_data - min_val) / (max_val - min_val)
     return enhanced_image
 
-def update_transversal(slice_index_transversal, image_data, canvas, landmarks, vtk_surface_points = None):
+def update_transversal(slice_index_transversal, image_data, canvas, landmarks, overlay_enabled, vtk_surface_points, zoom_x, zoom_y, zoom_enabled=False):
     """Updates the image displayed in the GUI based on the current slice index, with landmarks and overlayed surface."""
     
     # Extract slice data
-    slice_data = get_transversal_slice(image_data, slice_index_transversal)
+    slice_data = get_transversal_slice(image_data, slice_index_transversal, zoom_enabled, zoom_x, zoom_y)
     
     # Create a new figure for displaying the image
     fig, ax = plt.subplots()
     
     # Show the image slice in grayscale
     ax.imshow(np.rot90(slice_data, k=1), cmap='gray', origin='upper')
-    if vtk_surface_points is not None:
-       overlay_leaflet_points(ax, slice_index_transversal, vtk_surface_points, plane='transversal')
-    #ax.imshow(slice_data, cmap='gray', origin='upper')
+    
+    # Overlay points if enabled
+    if vtk_surface_points is not None and overlay_enabled == True:
+        overlay_leaflet_points(ax, slice_index_transversal, vtk_surface_points, zoom_x, zoom_y, zoom_enabled, plane='transversal')
+    
     ax.axis('off')  # Hide the axis for a clean image
 
     # Plot landmarks on the image (points or circles)
@@ -55,7 +63,7 @@ def update_transversal(slice_index_transversal, image_data, canvas, landmarks, v
     plt.close(fig)  # Close the figure
     
 
-def update_coronal(slice_index_coronal, image_data, canvas, angle=None, vtk_surface_points = None):
+def update_coronal(slice_index_coronal, image_data, canvas, rotation_matrix, overlay_enabled, angle=None, vtk_surface_points=None, landmarks=None):
     """Updates the image displayed in the GUI based on the current slice index, with landmarks and overlayed surface and optional angle line clipped to image edges."""
     
     # Extract slice data
@@ -67,9 +75,25 @@ def update_coronal(slice_index_coronal, image_data, canvas, angle=None, vtk_surf
     # Rotate and flip for correct orientation
     rotated_slice = np.fliplr(np.rot90(slice_data, k=-1))
     ax.imshow(rotated_slice, cmap="gray")
-    if vtk_surface_points is not None:
+    shape = image_data.shape
+    
+    if vtk_surface_points is not None and overlay_enabled == True:
         height, width = rotated_slice.shape
-        overlay_leaflet_points(ax, slice_index_coronal, vtk_surface_points, plane='coronal')
+        overlay_leaflet_points(ax, slice_index_coronal, vtk_surface_points, rotation_matrix, shape, plane='coronal')
+    
+    # Plot landmarks on the image (points or circles)
+    if landmarks is not None:
+        for (x, y, z) in landmarks:
+            if round(y) == slice_index_coronal:  # Plot landmarks only on the current coronal slice
+                if rotation_matrix is not None:
+                    # Apply rotation transformation to landmarks
+                    tx, ty, tz = rotate_points(x, y, z, rotation_matrix, shape)
+
+                    # Image is rotated 90 degrees and flipped left-right
+                    ax.plot(tx, tz, 'ro', markersize=5)  # 'ro' means red dots, markersize controls the size
+                else:
+                    ax.plot(x, z, 'ro', markersize=5)
+
     ax.axis('off')  # Hide axes
 
     if angle is not None:
@@ -109,9 +133,11 @@ def update_coronal(slice_index_coronal, image_data, canvas, angle=None, vtk_surf
             if len(points) >= 2:
                 (x1, y1), (x2, y2) = points[:2]
                 ax.plot([x1, x2], [y1, y2], 'r--', linewidth=1)
+
     canvas.figure = fig
     canvas.draw()
     plt.close(fig)
+
 
 def next_slice(slice_index, image_data, canvas, landmarks):
     """Displays the next slice."""
@@ -199,8 +225,6 @@ def get_sorted_image_data(sorted_dicom_files):
     
     # Stack the 2D slices into a 3D NumPy array (axis 0 is the slice dimension)
     image_data = np.stack(image_data_list, axis=0)
-    #image_data = np.clip(image_data, 0, 65535)  # Clamp values to the max uint16 range
-    #image_data = (image_data / 256).astype(np.uint8)  # Scale to uint8 range (0-255
     
     return image_data
 
@@ -220,32 +244,6 @@ def dicom_to_matrix(image_data):
     volume = np.stack([load_dicom(file[0]) for file in image_data], axis=0)
     
     return volume
-
-
-def calculate_rotation(annular_normal):
-    """
-    Calculate the rotation axis and angle required to align the Z-axis with the given normal vector.
-    
-    Parameters:
-        annular_normal (numpy array): The normal vector of the annular plane.
-        
-    Returns:
-        rotation_axis (numpy array): The axis around which the rotation should be performed.
-        rotation_angle (float): The angle (in radians) required to align the Z-axis with the normal vector.
-    """
-    # Default normal vector (Z-axis)
-    z_axis = np.array([1, 0, 0])
-    
-    # Compute the rotation axis (cross product of Z-axis and annular normal)
-    rotation_axis = np.cross(z_axis, annular_normal)
-    
-    # Compute the rotation angle (using dot product and arccos)
-    rotation_angle = np.arccos(np.dot(z_axis, annular_normal) / (np.linalg.norm(z_axis) * np.linalg.norm(annular_normal)))
-    
-    # Normalize the rotation axis (to ensure it's a unit vector)
-    rotation_axis = rotation_axis / np.linalg.norm(rotation_axis) if np.linalg.norm(rotation_axis) != 0 else rotation_axis
-    
-    return rotation_axis, rotation_angle
 
    
 def rotation_matrix(axis, angle):
@@ -320,11 +318,48 @@ def rotated_volume(volume, rotation_matrix):
     center = 0.5 * np.array(volume.shape)
     offset = center - rotation_matrix @ center
     
+    print(offset)
+    
     # Rotate the volume around the specified axis
     rotated_volume = affine_transform(volume, rotation_matrix, offset=offset, order=1)
     
     return rotated_volume
-    
+
+def rotate_points(x, y, z, rotation_matrix, volume_shape):
+    """
+    Apply the inverse of the given rotation matrix to a point (x, y, z),
+    rotating around the center of the volume.
+
+    Input:
+        - x, y, z: coordinates of the point to be rotated
+        - rotation_matrix: original rotation matrix (3x3)
+        - volume_shape: shape of the volume (X, Y, Z) to compute the center
+
+    Output:
+        rotated_point: rotated (x, y, z) coordinates after applying inverse rotation
+    """
+    point = np.array([x, y, z])
+    center = 0.5 * np.array(volume_shape)
+    # print(center)
+
+    # Compute the inverse rotation matrix (transpose)
+    inv_rotation = np.linalg.inv(rotation_matrix)
+
+    # Adjust the offset to rotate around the center
+    offset = center - inv_rotation @ center
+    # print(offset)
+
+    # Apply affine transformation using the inverse rotation and adjusted offset
+    rotated_point = affine_transform(point.reshape(1, 1, 3), inv_rotation, offset=offset, order=1)
+
+    # Flatten the result to 1D
+    rotated_point = rotated_point.reshape(3,)
+    # print(rotated_point)
+    return rotated_point
+
+
+
+
 def reconstruct_leaflets():
     script_path = "H:/DATA/Afstuderen/2.Code/Stenosis-Severity/surface_reconstruction/leaflet_interpolation.py"
     with open(script_path, "r") as file:
@@ -344,7 +379,7 @@ def load_leaflet_points(base_path):
     return leaflet_points  # Returning as a list of arrays, one for each leaflet
 
 
-def overlay_leaflet_points(ax, slice_index, leaflet_points, plane='transversal'):
+def overlay_leaflet_points(ax, slice_index, leaflet_points, zoom_x, zoom_y, zoom_enabled=False, plane='transversal'):
     """Overlays leaflet points on the image slice with correct transformation."""
     leaflet_colors = ['go', 'bo', 'ro']  # green, blue, red for 3 leaflets
 
@@ -352,11 +387,16 @@ def overlay_leaflet_points(ax, slice_index, leaflet_points, plane='transversal')
         color = leaflet_colors[i]
         for point in points:
             x, y, z = point
-            if plane == 'transversal' and round(z) == slice_index:
-                ax.plot(x, y, color, markersize=2)
 
-            elif plane == 'coronal' and round(y) == slice_index:
-                # Image is rotated 90 degrees and flipped left-right
-                # original coronal image axes: (x, z) => after rot90(-1) + fliplr => (z, x)
-                ax.plot(x, z, color, markersize=2)
+            # Adjust for zoomed region
+            if plane == 'transversal' and round(z) == slice_index:
+                # Subtract zoom_x[0] and zoom_y[0] to match the zoomed-in region
+                if zoom_enabled==True:
+                    ax.plot(x - zoom_x[0], y - zoom_y[0], color, markersize=2)
+                else: 
+                    ax.plot(x, y, color, markersize=2)
+                    
+
+            # elif plane == 'coronal' and round(y) == slice_index:
+            #     ax.plot(x, z, color, markersize=2)
 
