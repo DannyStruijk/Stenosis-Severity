@@ -2,7 +2,6 @@ from geomdl import BSpline
 import numpy as np
 import vtk
 from geomdl import fitting
-import pyvista as pv
 import os
 
 def export_vtk(surface, filename="surface.vtk"):
@@ -88,32 +87,32 @@ def fit_spline_pts(point_1: list, point_2: list, arch_control: list):
     # Define the points where we want to show the additional control points
     arch_1, arch_2 = eval_pts[25], eval_pts[75]
     
-    # Visualize the results using PyVista
-    # Convert the evaluated points into a format PyVista can visualize (array of points)
-    eval_pts = np.array(eval_pts)
+    # # Visualize the results using PyVista
+    # # Convert the evaluated points into a format PyVista can visualize (array of points)
+    # eval_pts = np.array(eval_pts)
     
-    # Create a PyVista point cloud from the evaluated points
-    point_cloud = pv.PolyData(eval_pts)
+    # # Create a PyVista point cloud from the evaluated points
+    # point_cloud = pv.PolyData(eval_pts)
     
-    # Create a PyVista plotter
-    plotter = pv.Plotter()
+    # # Create a PyVista plotter
+    # plotter = pv.Plotter()
 
-    # Add the B-spline curve points to the plotter
-    plotter.add_mesh(point_cloud, color='blue', point_size=10, render_points_as_spheres=True)
+    # # Add the B-spline curve points to the plotter
+    # plotter.add_mesh(point_cloud, color='blue', point_size=10, render_points_as_spheres=True)
 
-    # Add the input points (to show them in the visualization as well)
-    input_points = np.array([point_1, point_2, arch_control])
-    input_points_mesh = pv.PolyData(input_points)
-    plotter.add_mesh(input_points_mesh, color='red', point_size=15, render_points_as_spheres=True)
+    # # Add the input points (to show them in the visualization as well)
+    # input_points = np.array([point_1, point_2, arch_control])
+    # input_points_mesh = pv.PolyData(input_points)
+    # plotter.add_mesh(input_points_mesh, color='red', point_size=15, render_points_as_spheres=True)
 
-    # Add arch_1 and arch_2 points
-    arch_points = np.array([arch_1, arch_2])
-    arch_points_mesh = pv.PolyData(arch_points)
-    plotter.add_mesh(arch_points_mesh, color='green', point_size=15, render_points_as_spheres=True)
+    # # Add arch_1 and arch_2 points
+    # arch_points = np.array([arch_1, arch_2])
+    # arch_points_mesh = pv.PolyData(arch_points)
+    # plotter.add_mesh(arch_points_mesh, color='green', point_size=15, render_points_as_spheres=True)
 
-    # Optionally, add labels to the input points
-    plotter.add_point_labels(input_points, ['Point 1', 'Point 2', 'Arch Control'], font_size=12)
-    plotter.add_point_labels(arch_points, ['Arch 1', 'Arch 2'], font_size=12)
+    # # Optionally, add labels to the input points
+    # plotter.add_point_labels(input_points, ['Point 1', 'Point 2', 'Arch Control'], font_size=12)
+    # plotter.add_point_labels(arch_points, ['Arch 1', 'Arch 2'], font_size=12)
 
     # Show the plot
     #plotter.show()
@@ -221,7 +220,7 @@ def calc_ctrlpoints(cusp_landmarks, leaflet_tip):
         
         return control_points
 
-def reconstruct_surface(control_points, degree_u=2, degree_v=2, knotvector_u=None, knotvector_v=None, delta=0.005):
+def reconstruct_surface(control_points, degree_u=2, degree_v=2, knotvector_u=None, knotvector_v=None, delta=0.01):
     """
     Constructs and evaluates a NURBS surface from given control points.
 

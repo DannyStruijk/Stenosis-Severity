@@ -3,7 +3,7 @@ import functions
 import numpy as np
 
 # Read landmarks from file, which were annotated using the GUI
-landmarks_file = r"H:\DATA\Afstuderen\2.Code\Stenosis-Severity\annotations\commissures.txt"
+landmarks_file = r"H:\DATA\Afstuderen\2.Code\Stenosis-Severity\annotations\ras_coordinates.txt"
 landmarks = np.loadtxt(landmarks_file)
 
 # Assign commissures and leaflet tip from file
