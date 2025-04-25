@@ -9,12 +9,14 @@ from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
 from slicer.parameterNodeWrapper import parameterNodeWrapper
 from DICOMLib import DICOMUtils
+from slicer import vtkMRMLMarkupsFiducialNode
+
 
 
 class Interface(ScriptedLoadableModule):
     def __init__(self, parent):
         ScriptedLoadableModule.__init__(self, parent)
-        self.parent.title = _("Interface")
+        self.parent.title = _("Stenosis Severity")
         self.parent.categories = ["Examples"]
         self.parent.dependencies = []
         self.parent.contributors = ["Your Name (Your Organization)"]
@@ -35,7 +37,12 @@ class InterfaceWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.logic = None
         self._parameterNode = None
         self._parameterNodeGuiTag = None
-        self.annotating = False
+        self.IsAnnotating = False
+        self.landmarkIndex = 0
+        self.annotationObserverTag = None
+        self.annotationNode = None
+        self.annotationStage = "commissures"
+        self.numPoints = 0
 
     def setup(self):
         
@@ -59,7 +66,11 @@ class InterfaceWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.populate_dicoms("T:\Research_01\CZE-2020.67 - SAVI-AoS\AoS stress\CT\Aosstress14\DICOM\000037EC\AA4EC564\AA3B0DE6\00007EA9")
         self.ui.load_dicom_button.connect("clicked()", self.load_dicom_button)
 
+        self.ui.reconstructButton.connect("clicked()", self.disable_annotation)
+
         self.initializeParameterNode()
+        
+        
         
     def populate_dicoms(self, dicom_folder):
         # Clear existing items in the dropdown
@@ -91,14 +102,17 @@ class InterfaceWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.initializeParameterNode()
 
     def exit(self):
+        self.clear_annotation_points()
         if self._parameterNode:
             self._parameterNode.disconnectGui(self._parameterNodeGuiTag)
             self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._checkCanApply)
 
     def onSceneStartClose(self, caller, event):
+        self.clear_annotation_points()
         self.setParameterNode(None)
 
     def onSceneEndClose(self, caller, event):
+        self.clear_annotation_points()
         if self.parent.isEntered:
             self.initializeParameterNode()
 
@@ -125,13 +139,79 @@ class InterfaceWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             pass
         
     def enable_annotation(self):
-        self.ui.annotation_label.setText("Currently annotating: annotate the first commissure")
-        self.annotating = True
+        self.landmarkIndex = 0
+        self.create_annotation_node()
+        
+
+        if self.numPoints < 4:
+            self.ui.annotation_label.setText("Annotate the commissures")
+        elif self.numPoints == 4:
+            self.ui.annotation_label.setText("Now annotate the center")
+        elif self.numPoints < 8:
+            self.ui.annotation_label.setText("Now annotate the hinge points")
+        elif self.numPoints == 8:
+            self.ui.annotation_label.setText("Done annotating. Reconstruct.")
+        self.ui.annotation_label.repaint()
+        self.activate_placement_widget()
+ 
 
     def disable_annotation(self):
-        self.ui.annotation_label.setText("Currently not annotating")
-        self.annotating = False
+        self.isAnnotating = False
+        self.ui.annotation_label.setText("Annotation: Disabled")
+        self.ui.MarkupsPlaceWidget.setMRMLScene(None)  # Disconnect from MRML scene
+        self.ui.MarkupsPlaceWidget.setPlaceModeEnabled(False)  # Ensure place mode is disabled
+        
+    def activate_placement_widget(self):
+        self.ui.MarkupsPlaceWidget.setMRMLScene(slicer.mrmlScene)
+        self.ui.MarkupsPlaceWidget.setCurrentNode(self.annotationNode)
 
+    def create_annotation_node(self):
+        if not self.annotationNode:
+            self.annotationNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode", "Commissure")
+            self.annotationObserverTag = self.annotationNode.AddObserver(
+                slicer.vtkMRMLMarkupsNode.PointAddedEvent,
+                self.onAnnotationPointAdded
+            )
+      
+    def onClick(self, caller, event):
+        return
+        
+    def onAnnotationPointAdded(self, caller, event):
+        print(self.annotationNode.GetNumberOfControlPoints())
+        self.numPoints = self.annotationNode.GetNumberOfControlPoints()
+    
+        # Assign names based on the number of points
+        if self.numPoints < 4:
+            # The first four points are "Commissure"
+            self.annotationNode.SetNthControlPointLabel(self.numPoints - 1, f"Commissure {self.numPoints}")
+        elif self.numPoints == 4:
+            # The fifth point is "Center"
+            self.annotationNode.SetNthControlPointLabel(self.numPoints - 1, "Center")
+        elif self.numPoints < 8:
+            # Points 6 and 7 are "Hinge"
+            self.annotationNode.SetNthControlPointLabel(self.numPoints - 1, f"Hinge Point {self.numPoints - 4}")
+        elif self.numPoints == 8:
+            # Done annotating
+            self.ui.annotation_label.setText("Done annotating. Reconstruct.")
+            self.disable_annotation()
+            self.ui.MarkupsPlaceWidget.setPlaceModeEnabled(False)
+            self.annotationNode.RemoveObserver(self.annotationObserverTag)
+            self.ui.MarkupsPlaceWidget.setEnabled(False)
+
+
+
+            
+    def clear_annotation_points(self):
+        if self.annotationNode:
+            numPoints = self.annotationNode.GetNumberOfControlPoints()
+            for i in range(numPoints):
+                self.annotationNode.RemoveNthControlPoint(0)  # Remove first control point iteratively
+                # Re-enable annotation after clearing points
+        self.enable_annotation()
+
+
+            
+    
 
 class InterfaceLogic(ScriptedLoadableModuleLogic):
     def __init__(self):
