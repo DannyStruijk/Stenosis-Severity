@@ -4,7 +4,7 @@ import pyvista as pv
 
 
 # Set working directory
-os.chdir("H:/DATA/Afstuderen/2.Code/Stenosis-Severity/b-spline_fitting")
+os.chdir("H:/DATA/Afstuderen/2.Code/Stenosis-Severity/gui")
 
 import functions  # Custom functions
 
