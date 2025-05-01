@@ -80,7 +80,9 @@ class InterfaceWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         # Clear existing items in the dropdown
         self.ui.dicom_dropdown.clear()
         self.ui.dicom_dropdown.addItem("Aosstress14", "T:/Research_01/CZE-2020.67 - SAVI-AoS/AoS stress/CT/Aosstress14/DICOM/000037EC/AA4EC564/AA3B0DE6/00007EA9")
-     
+
+                
+            
     def load_dicom_button(self):
         # Get the path which DICOM to open
         dicomFolderPath = self.ui.dicom_dropdown.currentData  # Get the full path stored as data
