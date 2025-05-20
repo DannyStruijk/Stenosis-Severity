@@ -1,43 +1,77 @@
 import numpy as np
 import pyvista as pv
+import os
+import sys
+import pandas as pd
 
-# Load STL files
-mesh1 = pv.read(r"H:\DATA\Afstuderen\3.Data\Harde Schijf Koen\AoS Stress\Afstudeerproject Koen Janssens\aos14\Mimics\aos_14.stl")
-#mesh1 = pv.read(r"H:/DATA/Afstuderen/2.Code/temporary/test_mesh.vtk")  # Update with the correct path
+# Add functions.py path
+sys.path.append(r"H:\DATA\Afstuderen\2.Code\Stenosis-Severity\surface_reconstruction")
+from functions import calc_leaflet_landmarks  # Optional
 
-# Create plotter
+# Patient info
+patient_id = 15
+
+# File paths
+stl_path = fr"H:\DATA\Afstuderen\3.Data\SSM\aos{patient_id}\cusps\ncc_simplified_mesh_{patient_id}.stl"
+save_txt = fr"H:\DATA\Afstuderen\3.Data\SSM\aos{patient_id}\landmarks\landmarks_ncc_patient_{patient_id}.txt"
+save_excel = fr"H:\DATA\Afstuderen\3.Data\SSM\aos{patient_id}\landmarks\landmarks_ncc_patient_{patient_id}.xlsx"
+
+# Load STL
+mesh = pv.read(stl_path)
+
+# Setup plotter
 plotter = pv.Plotter()
-plotter.add_mesh(mesh1, color="lightgray", opacity=0.7)
-#plotter.add_mesh(mesh2, color="blue", opacity=0.5)  # Adjust color and opacity as needed
+plotter.add_mesh(mesh, color="lightgray", opacity=1)
 
-# List to store selected points
-commissures = []
-labels = ["Commissure 1", "Commissure 2", "Commissure 3", "Leaflet Tip", "Hinge 1", "Hinge 2", "Hinge 3"]
+# Landmark setup
+landmarks = []
+labels = ["Commissure 1 (clockwise)", "Commissure 2 (clockwise)", "Center", "Hinge"]
+text_actor = None  # Placeholder for text actor
 
-# Callback function for selecting points
+# Add or update instruction text (bottom left)
+def update_instruction_text(current_index):
+    global text_actor
+    if text_actor:
+        plotter.remove_actor(text_actor)
+    if current_index < len(labels):
+        text = f"Click to annotate: {labels[current_index]}"
+    else:
+        text = "All landmarks selected."
+    text_actor = plotter.add_text(text, position='lower_left', font_size=10, color='red')
+
+# Initialize with first instruction
+update_instruction_text(0)
+
+# Point picking callback
 def callback(point):
-    if len(commissures) < 7:
-        landmark = point
-        print(f"{labels[len(commissures)]}: {landmark}")
-        commissures.append(point)
+    if len(landmarks) < len(labels):
+        print(f"{labels[len(landmarks)]}: {point}")
+        landmarks.append(point)
 
-        # Add new point labels
-        plotter.add_point_labels([point], [labels[len(commissures)-1]], 
-                                 point_size=10, render_points_as_spheres=True, always_visible=True,
-                                 text_color="red")
-
-        # Ensure annotations remain visible
+        plotter.add_point_labels([point], [labels[len(landmarks)-1]],
+                                 point_size=10, render_points_as_spheres=True,
+                                 always_visible=True, text_color="red")
+        
+        update_instruction_text(len(landmarks))
         plotter.render()
     else:
-        print("All landmarks selected. Restart the program to reselect.")
+        print("All landmarks selected.")
 
-# Enable picking with left-click
+# Enable point picking and show
 plotter.enable_surface_point_picking(callback, show_message=True)
-
-# Show interactive window
 plotter.show()
 
-# Save the selected points (optional)
-if len(commissures) == 7:
-    np.savetxt("commissures.txt", np.array(commissures))
-    print("Commissures saved to 'commissures.txt'.")
+# Save output
+if len(landmarks) == len(labels):
+    # Ensure output directory exists
+    os.makedirs(os.path.dirname(save_txt), exist_ok=True)
+
+    np.savetxt(save_txt, np.array(landmarks))
+    print(f"Saved landmarks to: {save_txt}")
+
+    df = pd.DataFrame(landmarks, columns=["x", "y", "z"])
+    df.insert(0, "label", labels)
+    df.to_excel(save_excel, index=False)
+    print(f"Saved Excel file to: {save_excel}")
+else:
+    print("Not all landmarks were selected. Nothing saved.")

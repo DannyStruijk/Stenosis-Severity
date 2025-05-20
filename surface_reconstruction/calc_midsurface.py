@@ -1,33 +1,67 @@
+# import pyvista as pv
+# import numpy as np
+
+# # Load the mesh
+# mesh = pv.read(r"H:\DATA\Afstuderen\3.Data\SSM\aos14\aos_14.stl")
+
+# # Extract vertices (x, y, z coordinates) from the mesh
+# points = mesh.points
+
+# # Estimate resolution
+# bounds = mesh.bounds  # xmin, xmax, ymin, ymax, zmin, zmax
+# extent = [bounds[1]-bounds[0], bounds[3]-bounds[2], bounds[5]-bounds[4]]
+
+# # Estimate mean distance between points
+# from sklearn.neighbors import NearestNeighbors
+
+# nbrs = NearestNeighbors(n_neighbors=2).fit(points)
+# distances, _ = nbrs.kneighbors(points)
+# avg_spacing = np.mean(distances[:, 1])
+
+# print(f"Estimated average point spacing: {avg_spacing:.3f}")
+# print(f"Bounding box extent: {extent}")
+
 import pyvista as pv
 import numpy as np
+from sklearn.neighbors import NearestNeighbors
 
-# Load the mesh
-mesh = pv.read(r"H:\DATA\Afstuderen\3.Data\Edited STLs\aos14\aos_14.stl")
+# Load STL mesh
+mesh = pv.read(r"H:\DATA\Afstuderen\3.Data\SSM\aos14\aos_14.stl")  # Update with your path
 
-# Extract vertices (x, y, z coordinates) from the mesh
+# Step 1: Estimate average point spacing
 points = mesh.points
+nbrs = NearestNeighbors(n_neighbors=2).fit(points)
+distances, _ = nbrs.kneighbors(points)
+avg_spacing = np.mean(distances[:, 1])
+print(f"Average spacing: {avg_spacing:.3f} mm")
 
-# Create a dictionary to store the highest z-value for each unique (x, y) coordinate
-unique_points = {}
+# Step 2: Set voxel size slightly below average spacing
+voxel_size = round(avg_spacing * 0.95, 3)  # E.g. 0.5 mm
+bounds = mesh.bounds  # (xmin, xmax, ymin, ymax, zmin, zmax)
+extent = [bounds[1]-bounds[0], bounds[3]-bounds[2], bounds[5]-bounds[4]]
 
-for point in points:
-    x, y, z = point
-    # Use (x, y) as the key, and keep the point with the highest z-value
-    if (x, y) not in unique_points:
-        unique_points[(x, y)] = point
-    else:
-        if z > unique_points[(x, y)][2]:  # Compare z-coordinate
-            unique_points[(x, y)] = point
+dims = [
+    int(np.ceil(extent[0] / voxel_size)),
+    int(np.ceil(extent[1] / voxel_size)),
+    int(np.ceil(extent[2] / voxel_size)),
+]
+print(f"Voxel dimensions: {dims}")
 
-# Convert the dictionary of unique points into an array of points
-unique_vertices = np.array(list(unique_points.values()))
+# Step 3: Convert mesh to signed distance function
+implicit = mesh.compute_implicit_distance(bound=2.0)
 
-# Create a new mesh with the unique points
-# This will essentially create the inner surface by only keeping the points with the highest z for each (x, y)
-inner_surface_mesh = pv.PolyData(unique_vertices)
+# Step 4: Sample over regular grid (voxelize)
+grid = implicit.sample_over_regular_grid(
+    dimensions=dims,
+    bounds=mesh.bounds,
+    compute_normals=False
+)
 
-# Visualize the mesh to confirm it looks like the desired surface
-inner_surface_mesh.plot()
+# Step 5: Threshold to fill inside (inside = negative)
+filled = grid.threshold(value=0.0, invert=True)
 
-# Optionally, save the resulting mesh to an STL file
-inner_surface_mesh.save("inner_surface.stl")
+# Optional: Visualize result
+filled.plot(opacity=0.6)
+
+# Save as VTK or VTI for 3D Slicer if needed
+# filled.save("filled_volume.vtk")
