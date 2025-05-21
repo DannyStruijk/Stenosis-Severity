@@ -1,13 +1,13 @@
-import os
 import numpy as np
 import open3d as o3d
-import copy
 import ssm_functions as fun
 from pycpd import DeformableRegistration
+from sklearn.decomposition import PCA
+import copy
 
 #%%%%%%%%%%%%%%%%%% SETTINGS
 
-patient_ids = [13, 14]
+patient_ids = [13, 14, 15]
 base_path = r"H:\DATA\Afstuderen\3.Data\SSM"
 
 #%%%%%%%%%%%%%%%%%% LOAD DATA
@@ -19,47 +19,71 @@ pointclouds, landmarks = fun.load_meshes_and_landmarks(stl_paths, landmark_paths
 
 landmark_spheres = fun.create_all_landmark_spheres(landmarks)
 
-#%%%%%%%%%%%%%%%%%% REGISTER ALL TO PATIENT 13 (index 0)
+#%%%%%%%%%%%%%%%%%% SET TEMPLATE (PATIENT 13)
 
-reference_landmarks = landmarks[0]
-reference_pcd = pointclouds[0]
+template_pcd = pointclouds[0]
+template_landmarks = landmarks[0]
+template_points = np.asarray(template_pcd.points)
 
-# Prepare geometries list with the fixed reference pointcloud painted green
-reference_pcd.paint_uniform_color([0, 1, 0])  # green
-geometries = [reference_pcd]  # show fixed landmarks as well
+template_pcd.paint_uniform_color([0, 1, 0])  # green for template
+
+idx_points = [100,500]
+
+#%%%%%%%%%%%%%%%%%% REGISTER TEMPLATE TO EACH PATIENT AND STORE DEFORMATIONS
+
+registered_pointclouds = []
+registered_TY = []
 
 for i in range(1, len(patient_ids)):
-    moving_landmarks = landmarks[i]
-    moving_pcd = pointclouds[i]
+    patient_pcd = pointclouds[i]
+    patient_landmarks = landmarks[i]
+    patient_points = np.asarray(patient_pcd.points)
 
-    T_rigid, transformed_pcd, transformed_landmarks = fun.perform_rigid_registration(
-        moving_landmarks, reference_landmarks, moving_pcd
+    # Rigid registration of patient landmarks to template landmarks
+    # Note: patient is moving, template is fixed
+    T_rigid, aligned_patient_pcd, aligned_patient_landmarks = fun.perform_rigid_registration(
+        patient_landmarks, template_landmarks, patient_pcd
     )
     
-    # Calculate the RMS error of the rigid registration
-    rms_error = fun.compute_rms_error(transformed_landmarks, reference_landmarks)
-    print(f"RMS landmark error after registering patient {patient_ids[i]} to patient {patient_ids[0]}: {rms_error:.6f}")
+    # Visual check correspondence of selected points after rigid registration
+    idx_points = [0]  # example indices to check
+    fun.visualize_corresponding_points(template_pcd, aligned_patient_pcd, idx_points)
 
-    # Preparing the geomtries to be drawn
-    transformed_pcd.paint_uniform_color([0, 0, 1])  # blue for moving patient
-    transformed_lm_spheres = fun.create_landmark_spheres(transformed_landmarks, [0, 0, 1])
+    rms_error = fun.compute_rms_error(template_landmarks, aligned_patient_landmarks)
+    print(f"RMS landmark error after rigid registration (patient {patient_ids[i]} to template): {rms_error:.6f}")
+
+    # Non-rigid registration: deform template to the aligned patient (same frame)
+    Y = np.asarray(template_pcd.points)  # static template points (same every time)
+    X = np.asarray(aligned_patient_pcd.points)  # now in the template frame
+
+    nonrigid_reg = DeformableRegistration(X=X, Y=Y, alpha=100)
+    TY, _ = nonrigid_reg.register()
+    registered_pointclouds.append(TY)
+
+    # Visualization
+    TY_pcd = o3d.geometry.PointCloud()
+    TY_pcd.points = o3d.utility.Vector3dVector(TY)
+    registered_TY.append(TY_pcd)
     
-    geometries += [transformed_pcd]
+    TY_pcd.paint_uniform_color([1, 0, 0])  # red for deformed template
 
-#%%%%%%%%%%%%%%%%%% VISUALIZATION
+    aligned_patient_pcd.paint_uniform_color([0, 1, 0])  # green for aligned patient
 
-# Perform non-rigid registration
-X = np.asarray(pointclouds[0].points)  # fixed/reference point cloud
-Y = np.asarray(transformed_pcd.points)  # moving point cloud (after rigid registration)
+    o3d.visualization.draw_geometries([aligned_patient_pcd, TY_pcd])
 
-nonrigid_reg = DeformableRegistration(X=X, Y=Y)
-TY, _ = nonrigid_reg.register()
 
-TY_pcd = o3d.geometry.PointCloud()
-TY_pcd.points = o3d.utility.Vector3dVector(TY)
+#%%%%%%%%%%%%%%%%%% BUILD SSM FROM DEFORMATION VECTORS
 
-# o3d.visualization.draw_geometries(geometries)
-pointclouds[0].paint_uniform_color([0, 1, 0])  # green fixed
-TY_pcd.paint_uniform_color([1, 0, 0])  # red moving after non-rigid deformation
+# Now calculate the average shape directly from registered warped point clouds:
+mean_shape_points = fun.average_pointcloud(registered_pointclouds)
 
-o3d.visualization.draw_geometries([pointclouds[0], TY_pcd])
+mean_shape_pcd = o3d.geometry.PointCloud()
+mean_shape_pcd.points = o3d.utility.Vector3dVector(mean_shape_points)
+mean_shape_pcd.paint_uniform_color([1, 0.5, 0])  # orange for mean shape
+
+registered_TY[1].paint_uniform_color([0, 1, 0])  # green for aligned patient
+o3d.visualization.draw_geometries([mean_shape_pcd])
+
+idx_points=[0,1,3]
+fun.visualize_corresponding_points(template_pcd, registered_TY[1], idx_points)
+
