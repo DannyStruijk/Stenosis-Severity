@@ -3,7 +3,7 @@ import numpy as np
 import open3d as o3d
 
 saved_data = r"H:\DATA\Afstuderen\3.Data\SSM\ssm_saved_data"
-vtk_file = r"H:\DATA\Afstuderen\3.Data\SSM\ssm_saved_data\ncc_reconstruction.vtk"
+vtk_file = r"H:\DATA\Afstuderen\3.Data\SSM\ssm_saved_data\ncc_reconstruction_14.vtk"
 
 # Read surface
 reader = vtk.vtkPolyDataReader()
@@ -28,14 +28,13 @@ plane_normal = np.array([0, 0, 1])
 plane_normal = plane_normal / np.linalg.norm(plane_normal)
 
 # Define thickness (distance to expand perpendicular to plane)
-thickness = 0.2
+thickness = 2
 
-# Offset points along plane normal both ways
-points_plus = points_np + (thickness / 2) * plane_normal
-points_minus = points_np - (thickness / 2) * plane_normal
-
-# Combine original + offsets
-thickened_points = np.vstack((points_np, points_plus, points_minus))
+# Randomly displace each point along the normal within the thickness range
+num_samples = 5  # number of random samples per point
+displacements = np.random.uniform(-thickness/2, thickness/2, size=(points_np.shape[0] * num_samples, 1))
+repeated_points = np.repeat(points_np, num_samples, axis=0)
+thickened_points = repeated_points + displacements * plane_normal
 
 # Create Open3D PointCloud
 pcd_thick = o3d.geometry.PointCloud()
@@ -46,5 +45,5 @@ o3d.visualization.draw_geometries([pcd_thick], window_name="Thickness Perpendicu
 
 # Save the thickened point cloud as a PLY file
 # Save path inside your saved_data folder
-save_path = saved_data + r"\thickened_points.ply"
-o3d.io.write_point_cloud("thickened_points.ply", pcd_thick)
+save_path = saved_data + r"\thickened_points_14.ply"
+o3d.io.write_point_cloud(save_path, pcd_thick)
