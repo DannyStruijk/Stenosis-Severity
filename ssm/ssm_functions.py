@@ -2,7 +2,7 @@ import os
 import numpy as np
 import open3d as o3d
 import copy
-
+import matplotlib as plt
 
 # Helper function to center point clouds
 def center_point_cloud(pcd):
@@ -166,3 +166,90 @@ def perform_rigid_registration(lm_src, lm_tgt, pcd_src):
 def compute_rms_error(pred, gt):
     diff = pred - gt
     return np.sqrt(np.mean(np.sum(diff**2, axis=1)))
+
+def vectorize_pointcloud(pcd):
+    return np.asarray(pcd.points).flatten()
+
+def pointwise_distances(pcd1, pcd2):
+    pts1 = np.asarray(pcd1.points)
+    pts2 = np.asarray(pcd2.points)
+    return np.linalg.norm(pts1 - pts2, axis=1)
+
+def colorize_pointcloud_distance(pcd1, pcd2):
+    distances = np.linalg.norm(np.asarray(pcd1.points) - np.asarray(pcd2.points), axis=1)
+    # Normalize distances to [0,1] for color mapping
+    distances_normalized = (distances - distances.min()) / (distances.max() - distances.min())
+
+    # Use a colormap, e.g. 'jet'
+    cmap = plt.cm.get_cmap('jet')
+    colors = cmap(distances_normalized)[:, :3]  # RGB only
+
+    pcd1.colors = o3d.utility.Vector3dVector(colors)
+    return pcd1, distances
+
+def average_pointcloud(pointclouds):
+    """
+    Calculate the average point cloud from a list of point clouds.
+
+    Parameters:
+    -----------
+    pointclouds : list of np.ndarray
+        List where each element is a numpy array of shape (n_points, 3),
+        representing a point cloud with consistent point ordering.
+
+    Returns:
+    --------
+    avg_pointcloud : np.ndarray
+        The average point cloud, shape (n_points, 3).
+    """
+    if not pointclouds:
+        raise ValueError("Input list is empty")
+
+    # Check that all point clouds have the same shape
+    n_points = pointclouds[0].shape[0]
+    for pc in pointclouds:
+        if pc.shape != (n_points, 3):
+            raise ValueError("All point clouds must have the same shape and 3 coordinates per point")
+
+    # Stack into a 3D array (n_samples, n_points, 3)
+    stacked = np.stack(pointclouds, axis=0)
+
+    # Compute mean along the samples axis
+    avg_pointcloud = np.mean(stacked, axis=0)
+
+    return avg_pointcloud
+
+def visualize_corresponding_points(pcd1, pcd2, idx_points, sphere_radius=0.05):
+    """
+    Visualize two point clouds with corresponding points highlighted as spheres.
+
+    Parameters:
+    -----------
+    pcd1, pcd2 : open3d.geometry.PointCloud
+        The two point clouds to visualize.
+    idx_points : list of int
+        Indices of points to highlight in both point clouds.
+    sphere_radius : float, optional
+        Radius of the spheres highlighting the points (default: 0.005).
+    """
+    points_1 = np.asarray(pcd1.points)
+    points_2 = np.asarray(pcd2.points)
+
+    # Paint point clouds with distinct colors
+    pcd1.paint_uniform_color([1, 0.7, 0.7])  # light red
+    pcd2.paint_uniform_color([0.7, 0.7, 1])  # light blue
+
+    highlight_spheres = []
+
+    for idx in idx_points:
+        sphere_1 = o3d.geometry.TriangleMesh.create_sphere(radius=sphere_radius)
+        sphere_1.translate(points_1[idx])
+        sphere_1.paint_uniform_color([1, 0, 0])  # red for pcd1
+        highlight_spheres.append(sphere_1)
+
+        sphere_2 = o3d.geometry.TriangleMesh.create_sphere(radius=sphere_radius)
+        sphere_2.translate(points_2[idx])
+        sphere_2.paint_uniform_color([0, 0, 1])  # blue for pcd2
+        highlight_spheres.append(sphere_2)
+
+    o3d.visualization.draw_geometries([pcd1, pcd2, *highlight_spheres])
