@@ -253,3 +253,21 @@ def visualize_corresponding_points(pcd1, pcd2, idx_points, sphere_radius=0.05):
         highlight_spheres.append(sphere_2)
 
     o3d.visualization.draw_geometries([pcd1, pcd2, *highlight_spheres])
+
+def load_and_preprocess_reconstruction(path, target_num_points=None):
+    pcd = o3d.io.read_point_cloud(path)
+    if pcd.is_empty():
+        raise ValueError(f"Loaded point cloud is empty: {path}")
+
+    if target_num_points is not None:
+        current_num_points = np.asarray(pcd.points).shape[0]
+        if current_num_points > target_num_points:
+            # Simple random downsampling of points
+            points = np.asarray(pcd.points)
+            indices = np.random.choice(current_num_points, target_num_points, replace=False)
+            downsampled_points = points[indices]
+            pcd.points = o3d.utility.Vector3dVector(downsampled_points)
+        elif current_num_points < target_num_points:
+            print(f"Warning: Point cloud has fewer points ({current_num_points}) than target ({target_num_points}). No upsampling done.")
+
+    return pcd

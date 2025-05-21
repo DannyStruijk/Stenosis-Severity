@@ -9,11 +9,18 @@ import copy
 
 patient_ids = [13, 14, 15]
 base_path = r"H:\DATA\Afstuderen\3.Data\SSM"
+reconstruction_path = r"H:\DATA\Afstuderen\3.Data\SSM\ssm_saved_data\thickened_points_14.ply"
 
 #%%%%%%%%%%%%%%%%%% LOAD DATA
 
 stl_paths, landmark_paths = fun.generate_paths(patient_ids, base_path)
 pointclouds, landmarks = fun.load_meshes_and_landmarks(stl_paths, landmark_paths)
+
+# Loading the reconstruction and assuring it has the same amoutn of vertices
+target_num_points = np.asarray(pointclouds[0].points).shape[0]
+reconstruction = fun.load_and_preprocess_reconstruction(reconstruction_path, target_num_points=target_num_points)
+print(f"Reconstruction original points: {len(reconstruction.points)}")
+
 
 #%%%%%%%%%%%%%%%%%% CREATE LANDMARK SPHERES FOR VISUALIZATION
 
@@ -44,6 +51,16 @@ for i in range(1, len(patient_ids)):
     T_rigid, aligned_patient_pcd, aligned_patient_landmarks = fun.perform_rigid_registration(
         patient_landmarks, template_landmarks, patient_pcd
     )
+    # Create landmark spheres for template and aligned patient landmarks
+    template_spheres = fun.create_landmark_spheres(template_landmarks, color=[0, 1, 0], radius=0.03)  # Green
+    aligned_spheres = fun.create_landmark_spheres(aligned_patient_landmarks, color=[1, 0, 0], radius=0.03)  # Red
+    aligned_patient_pcd.paint_uniform_color([1,0,0])
+    # Visualize point clouds + landmark spheres
+    o3d.visualization.draw_geometries(
+        [template_pcd, aligned_patient_pcd] + template_spheres + aligned_spheres,
+        window_name=f"Rigid Registration: Template vs Patient {patient_ids[i]}"
+        )
+
     
     # Visual check correspondence of selected points after rigid registration
     idx_points = [0]  # example indices to check
@@ -86,4 +103,9 @@ o3d.visualization.draw_geometries([mean_shape_pcd])
 
 idx_points=[0,1,3]
 fun.visualize_corresponding_points(template_pcd, registered_TY[1], idx_points)
+
+#%%%%%%%%%%%%%%%%%%%% PLAYING WITH THE RECONSTRUCTION
+
+o3d.visualization.draw_geometries([aligned_patient_pcd])
+print(len(reconstruction.points))
 
