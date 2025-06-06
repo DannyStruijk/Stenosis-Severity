@@ -9,12 +9,12 @@ sys.path.append(r"H:\DATA\Afstuderen\2.Code\Stenosis-Severity\surface_reconstruc
 from functions import calc_leaflet_landmarks  # Optional
 
 # Patient info
-patient_id = 15
+patient_id = 14
 
 # File paths
-stl_path = fr"H:\DATA\Afstuderen\3.Data\SSM\aos{patient_id}\cusps\ncc_simplified_mesh_{patient_id}.stl"
-save_txt = fr"H:\DATA\Afstuderen\3.Data\SSM\aos{patient_id}\landmarks\landmarks_ncc_patient_{patient_id}.txt"
-save_excel = fr"H:\DATA\Afstuderen\3.Data\SSM\aos{patient_id}\landmarks\landmarks_ncc_patient_{patient_id}.xlsx"
+stl_path = fr"H:\DATA\Afstuderen\3.Data\SSM\ssm_saved_data\aos{patient_id}\ncc_reconstruction_{patient_id}.vtk"
+save_txt = fr"H:\DATA\Afstuderen\3.Data\SSM\ssm_saved_data\aos{patient_id}\landmarks_template_ncc_{patient_id}.txt"
+save_excel = fr"H:\DATA\Afstuderen\3.Data\SSM\ssm_saved_data\aos{patient_id}\landmarks_template_ncc_{patient_id}.xlsx"
 
 # Load STL
 mesh = pv.read(stl_path)

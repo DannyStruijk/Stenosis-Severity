@@ -9,7 +9,8 @@ import copy
 
 patient_ids = [13, 14, 15]
 base_path = r"H:\DATA\Afstuderen\3.Data\SSM"
-reconstruction_path = r"H:\DATA\Afstuderen\3.Data\SSM\ssm_saved_data\thickened_points_14.ply"
+reconstruction_path = r"H:\DATA\Afstuderen\3.Data\SSM\ssm_saved_data\aos14\thickened_points_14.ply"
+reconstruction_landmarks_path = r"H:\DATA\Afstuderen\3.Data\SSM\ssm_saved_data\aos14\landmarks_template_ncc_14.txt"
 
 #%%%%%%%%%%%%%%%%%% LOAD DATA
 
@@ -18,8 +19,14 @@ pointclouds, landmarks = fun.load_meshes_and_landmarks(stl_paths, landmark_paths
 
 # Loading the reconstruction and assuring it has the same amoutn of vertices
 target_num_points = np.asarray(pointclouds[0].points).shape[0]
-reconstruction = fun.load_and_preprocess_reconstruction(reconstruction_path, target_num_points=target_num_points)
-print(f"Reconstruction original points: {len(reconstruction.points)}")
+reconstruction, reconstruction_landmarks, centroid_template, scaling_factor = fun.load_and_preprocess_reconstruction(reconstruction_path, 
+                                                                                  reconstruction_landmarks_path, 
+                                                                                  target_num_points)
+
+# print(f"Reconstruction original points: {len(reconstruction.points)}")
+reconstruction.paint_uniform_color([0,0,1])
+o3d.visualization.draw_geometries([reconstruction])
+reconstruction_spheres = fun.create_landmark_spheres(reconstruction_landmarks, color=[0, 0, 1])
 
 
 #%%%%%%%%%%%%%%%%%% CREATE LANDMARK SPHERES FOR VISUALIZATION
@@ -28,13 +35,17 @@ landmark_spheres = fun.create_all_landmark_spheres(landmarks)
 
 #%%%%%%%%%%%%%%%%%% SET TEMPLATE (PATIENT 13)
 
-template_pcd = pointclouds[0]
-template_landmarks = landmarks[0]
+# Note: change this if the template needs to change - also change the landmarks!
+template_pcd = reconstruction
+template_landmarks = reconstruction_landmarks
 template_points = np.asarray(template_pcd.points)
 
-template_pcd.paint_uniform_color([0, 1, 0])  # green for template
+template_pcd.paint_uniform_color([0, 0,1])  # green for template
 
 idx_points = [100,500]
+# o3d.visualization.draw_geometries([template_pcd])
+
+
 
 #%%%%%%%%%%%%%%%%%% REGISTER TEMPLATE TO EACH PATIENT AND STORE DEFORMATIONS
 
@@ -55,16 +66,17 @@ for i in range(1, len(patient_ids)):
     template_spheres = fun.create_landmark_spheres(template_landmarks, color=[0, 1, 0], radius=0.03)  # Green
     aligned_spheres = fun.create_landmark_spheres(aligned_patient_landmarks, color=[1, 0, 0], radius=0.03)  # Red
     aligned_patient_pcd.paint_uniform_color([1,0,0])
+    
     # Visualize point clouds + landmark spheres
-    o3d.visualization.draw_geometries(
-        [template_pcd, aligned_patient_pcd] + template_spheres + aligned_spheres,
-        window_name=f"Rigid Registration: Template vs Patient {patient_ids[i]}"
-        )
+    # o3d.visualization.draw_geometries(
+        # [template_pcd, aligned_patient_pcd] + template_spheres + aligned_spheres,
+        # window_name=f"Rigid Registration: Template vs Patient {patient_ids[i]}"
+        # )
 
     
     # Visual check correspondence of selected points after rigid registration
-    idx_points = [0]  # example indices to check
-    fun.visualize_corresponding_points(template_pcd, aligned_patient_pcd, idx_points)
+    # idx_points = [0]  # example indices to check
+    # fun.visualize_corresponding_points(template_pcd, aligned_patient_pcd, idx_points)
 
     rms_error = fun.compute_rms_error(template_landmarks, aligned_patient_landmarks)
     print(f"RMS landmark error after rigid registration (patient {patient_ids[i]} to template): {rms_error:.6f}")
@@ -86,26 +98,31 @@ for i in range(1, len(patient_ids)):
 
     aligned_patient_pcd.paint_uniform_color([0, 1, 0])  # green for aligned patient
 
-    o3d.visualization.draw_geometries([aligned_patient_pcd, TY_pcd])
+    # o3d.visualization.draw_geometries([aligned_patient_pcd, TY_pcd])
 
 
 #%%%%%%%%%%%%%%%%%% BUILD SSM FROM DEFORMATION VECTORS
 
 # Now calculate the average shape directly from registered warped point clouds:
 mean_shape_points = fun.average_pointcloud(registered_pointclouds)
+mean_shape_points_scaled = mean_shape_points * scaling_factor
+mean_shape_points_translated  = mean_shape_points_scaled + centroid_template
+
 
 mean_shape_pcd = o3d.geometry.PointCloud()
-mean_shape_pcd.points = o3d.utility.Vector3dVector(mean_shape_points)
+mean_shape_pcd.points = o3d.utility.Vector3dVector(mean_shape_points_translated)
 mean_shape_pcd.paint_uniform_color([1, 0.5, 0])  # orange for mean shape
 
 registered_TY[1].paint_uniform_color([0, 1, 0])  # green for aligned patient
-o3d.visualization.draw_geometries([mean_shape_pcd])
+o3d.visualization.draw_geometries([mean_shape_pcd, template_pcd])
 
-idx_points=[0,1,3]
-fun.visualize_corresponding_points(template_pcd, registered_TY[1], idx_points)
+# idx_points=[0,1,3]
+# fun.visualize_corresponding_points(template_pcd, registered_TY[1], idx_points)
 
-#%%%%%%%%%%%%%%%%%%%% PLAYING WITH THE RECONSTRUCTION
 
-o3d.visualization.draw_geometries([aligned_patient_pcd])
-print(len(reconstruction.points))
+#%%%%%%%%%%%%%%%%%%%% SAVE MEAN SHAPE POINTCLOUD
+
+output_path = r"H:\DATA\Afstuderen\3.Data\SSM\ssm_saved_data\aos14\mean_shape_reconstruction_14.ply"
+o3d.io.write_point_cloud(output_path, mean_shape_pcd)
+print(f"Mean shape saved to: {output_path}")
 
