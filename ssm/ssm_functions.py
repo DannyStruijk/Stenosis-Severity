@@ -254,8 +254,9 @@ def visualize_corresponding_points(pcd1, pcd2, idx_points, sphere_radius=0.05):
 
     o3d.visualization.draw_geometries([pcd1, pcd2, *highlight_spheres])
 
-def load_and_preprocess_reconstruction(path, target_num_points=None):
+def load_and_preprocess_reconstruction(path, lm_path, target_num_points=None):
     pcd = o3d.io.read_point_cloud(path)
+    print(np.asarray(pcd.points))
     if pcd.is_empty():
         raise ValueError(f"Loaded point cloud is empty: {path}")
 
@@ -269,5 +270,12 @@ def load_and_preprocess_reconstruction(path, target_num_points=None):
             pcd.points = o3d.utility.Vector3dVector(downsampled_points)
         elif current_num_points < target_num_points:
             print(f"Warning: Point cloud has fewer points ({current_num_points}) than target ({target_num_points}). No upsampling done.")
-
-    return pcd
+    pcd, centroid = center_point_cloud(pcd)
+    print("The centroid of the template is: ", centroid)
+    pcd, scale = normalize_scale(pcd)
+    print("The scaling factor that was used was: ", scale)
+    
+    lm = np.loadtxt(lm_path)
+    lm_centered = lm - centroid
+    lm_scaled = lm_centered / scale
+    return pcd, lm_scaled, centroid, scale
