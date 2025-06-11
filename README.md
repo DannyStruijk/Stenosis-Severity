@@ -27,4 +27,9 @@ The code in this repository is a step-for-step guide to create the semi-automati
 - Example output path for patient 14, ncc: "H:\DATA\Afstuderen\3.Data\SSM\non-coronary\input_patients\aos14"
 - In addition, the annotated landmarks should be saved in the same folder.
 
-### 
+### Step 2: Run the pipeline
+When all of the preprocessed data is ready, you are able to run the pipeline. The pipeline is, currently, only able to run for one cusp. The pipeline uses a main file which calls the following function:
+- preprocessing_meshes.py - Loads the meshes from the database (the trimmed leaflets) and converts them into a pointcloud. Hyperparameter target_vertices dictate the resolution which is used. 
+- reconstruction_to_template.py - It converts the reconstructed leaflets into a pointcloud and gives a certain thickness (given by hyperparameter "thickness") to the reconstruction.
+- 
+- 
