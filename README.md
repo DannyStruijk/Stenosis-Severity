@@ -13,6 +13,6 @@ The aim of this research is to predict the stress aorta valve index (SAVI), whic
 
 The code in this repository is a step-for-step guide to create the semi-automatic implementation and showcases how the necessary code predicts the SAVI. 
 
-* UPDATE 11-06-2025 *: Currently, the step-for-step guide shows how to prepare the data for the statistical shape model (SSM).
+*UPDATE 11-06-2025*: Currently, the step-for-step guide shows how to prepare the data for the statistical shape model (SSM).
 
 ## 
