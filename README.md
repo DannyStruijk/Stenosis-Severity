@@ -17,7 +17,14 @@ The code in this repository is a step-for-step guide to create the semi-automati
 
 ## Statistical Shape Model
 
+### Step 0: Input - Create database for the SSM
+- Use the exisisting segmentations of the AoS Stress study and import these into 3DSlicer.
+- Annotatate the landmarks and use these as guides in order to slice the segmentation into three different cusps.
+- If needed, smooth the cusps when there are gaps/inconsistencies present with a gaussian filter of width 0.2 mm. 
+
 ### Step 1: Input - Create reconstruction based on CT image
 - Use the "Stenosis Severity" module in order to annotate the CT images and to create a reconstruction of the three cusps.
 - Example output path for patient 14, ncc: "H:\DATA\Afstuderen\3.Data\SSM\non-coronary\input_patients\aos14"
 - In addition, the annotated landmarks should be saved in the same folder.
+
+### 
