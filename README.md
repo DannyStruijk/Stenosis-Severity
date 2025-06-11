@@ -15,4 +15,8 @@ The code in this repository is a step-for-step guide to create the semi-automati
 
 *UPDATE 11-06-2025*: Currently, the step-for-step guide shows how to prepare the data for the statistical shape model (SSM).
 
-## 
+## Statistical Shape Model
+
+# Step 1: Create reconstruction based on CT image
+- Use the "Stenosis Severity" module in order to annotate the CT images and to create a reconstruction of the three cusps.
+- This template 
