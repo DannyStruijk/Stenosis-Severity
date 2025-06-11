@@ -17,6 +17,6 @@ The code in this repository is a step-for-step guide to create the semi-automati
 
 ## Statistical Shape Model
 
-# Step 1: Create reconstruction based on CT image
+### Step 1: Create reconstruction based on CT image
 - Use the "Stenosis Severity" module in order to annotate the CT images and to create a reconstruction of the three cusps.
 - This template 
