@@ -31,7 +31,6 @@ The code in this repository is a step-for-step guide to create the semi-automati
 When all of the preprocessed data is ready, you are able to run the pipeline. The pipeline is, currently, only able to run for one cusp. The pipeline uses a main file which calls the following function:
 
 preprocessing_meshes.py - Loads the meshes from the database (the trimmed leaflets) and converts them into a pointcloud. Hyperparameter target_vertices dictate the resolution which is used.
-- **Output files**
     - Simplified meshes where the amount of vertices is reduced. Output path: "H:\DATA\Afstuderen\3.Data\SSM\non-coronary\output_patients\{patient}\simplified_meshes"
   
 - reconstruction_to_template.py - It converts the reconstructed leaflets into a pointcloud and gives a certain thickness (given by hyperparameter "thickness") to the reconstruction. Output is the template for the SSM.
