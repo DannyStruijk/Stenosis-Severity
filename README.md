@@ -49,3 +49,7 @@ When all of the preprocessed data is ready, you are able to run the pipeline. Th
     - NRRD segmentation. Output path: "H:\DATA\Afstuderen\3.Data\SSM\non-coronary\output_patients\{patient}\mean_shape_voxelized_14.nrrd"
   
 During the registration pipeline, the patient leaflets are rigidly registered onto the template. The template is then non-rigidly transformed onto the leaflets. The result of this non-rigid registration, by using CPD, is constantly visualized for each patient in order to inspect the quality of the registration. 
+
+## Stenosis Severity 3DSlicer Extension
+
+For the segmentation of aortic leaflets of new data, software has been created in the form of an extension which can be used in 3DSlicer. In this section, the usability will be explained, also with explanations on the underlying code. 
