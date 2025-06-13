@@ -53,3 +53,22 @@ During the registration pipeline, the patient leaflets are rigidly registered on
 ## Stenosis Severity 3DSlicer Extension
 
 For the segmentation of aortic leaflets of new data, software has been created in the form of an extension which can be used in 3DSlicer. In this section, the usability will be explained, also with explanations on the underlying code. 
+
+### Output
+
+When landmarks have been annotated by the user, a text file will be created which contains the LPS coordinates of the landmarks. It is then calculated when hinge point belongs to which aortic valve. Note that simple assumptions have been made in order to determine which landmarks belong to a certain leaflet. The assumptions are as follows:
+- The hinge point with the most "left" coordinate, which is the highest L (LPS) coordinate, represents the left coronary leaflet.
+- The hinge point with the most anterior coordinate, which is the lowest P (LPS) coordinate, represents the right coronary leaflet.
+- The hinge point which is then left over belongs the the non-coronary leaflet.
+  
+Using these assumptions, the output file is structured as follows: 
+NCC_commissure_1
+NCC_commissure_2
+NCC_hinge
+LCC_commissure_1
+LCC_commissure_2
+LCC_hinge
+RCC_commissure_1
+RCC_commissure_2
+RCC_hinge
+center
