@@ -304,3 +304,23 @@ def save_surface_evalpts(surface, save_path):
     np.savetxt(save_path, evalpts_array)
     print(f"Surface evalpts saved to {save_path}")
     
+    
+def save_ordered_landmarks(cusp_landmarks, center, output_path):
+    hinges = [cusp[2] for cusp in cusp_landmarks]
+    L_values = [h[0] for h in hinges]
+    P_values = [h[1] for h in hinges]
+    print("L_values: ", L_values)
+    print("P_values: ", P_values)
+
+    rcc_idx = np.argmin(P_values)  # most anterior
+    lcc_idx = np.argmax(L_values)  # most left
+    ncc_idx = list({0, 1, 2} - {rcc_idx, lcc_idx})[0]
+
+    ordered = (
+        cusp_landmarks[ncc_idx][0:2] + [cusp_landmarks[ncc_idx][2]] +
+        cusp_landmarks[lcc_idx][0:2] + [cusp_landmarks[lcc_idx][2]] +
+        cusp_landmarks[rcc_idx][0:2] + [cusp_landmarks[rcc_idx][2]] +
+        [center]
+    )
+
+    np.savetxt(output_path, np.array(ordered), fmt="%.6f")
