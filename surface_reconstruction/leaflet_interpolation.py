@@ -1,4 +1,3 @@
-import os 
 import functions
 import numpy as np
 
@@ -6,9 +5,13 @@ import numpy as np
 landmarks_file = r"H:\DATA\Afstuderen\2.Code\Stenosis-Severity\annotations\ras_coordinates.txt"
 landmarks = np.loadtxt(landmarks_file)
 
+output_path = output_path = r"H:\DATA\Afstuderen\2.Code\Stenosis-Severity\annotations\ordered_landmarks.txt"
+
 # Assign commissures and leaflet tip from file
 commissure_1, commissure_2, commissure_3, center, hinge_1, hinge_2, hinge_3 = landmarks
 cusp_landmarks = functions.calc_leaflet_landmarks(commissure_1, commissure_2, commissure_3, hinge_1, hinge_2, hinge_3)
+print("The landmarks are: ", cusp_landmarks)
+functions.save_ordered_landmarks(cusp_landmarks, center, output_path)
 
 # %% RECONSTRUCTION WTIH ADDITIONAL CONTROL POINTS
 
