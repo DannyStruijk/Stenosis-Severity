@@ -20,7 +20,11 @@ The code in this repository is a step-for-step guide to create the semi-automati
 ### Step 0: Input - Create database for the SSM
 - Use the exisisting segmentations of the AoS Stress study and import these into 3DSlicer.
 - Annotatate the landmarks and use these as guides in order to slice the segmentation into three different cusps.
-- If needed, smooth the cusps when there are gaps/inconsistencies present with a gaussian filter of width 0.2 mm. 
+- If needed, smooth the cusps when there are gaps/inconsistencies present with a gaussian filter of width 0.2 mm.
+
+- In addition, the STLs of the segmentations of the patients which are used, need to be supplemented with their corresponding landmarks.
+  These need to be located in: "H:\DATA\Afstuderen\3.Data\SSM\patient_database\aos14\landmarks\landmarks_rcc_patient_14.txt".
+  The code "stl_annotation.py" can be used to annotate the STLs. 
 
 ### Step 1: Input - Create reconstruction based on CT image
 - Use the "Stenosis Severity" module in order to annotate the CT images and to create a reconstruction of the three cusps.
