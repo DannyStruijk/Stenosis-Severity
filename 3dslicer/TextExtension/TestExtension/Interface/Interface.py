@@ -232,10 +232,13 @@ class InterfaceWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
                 f.write(f"{point_lps[0]}\t{point_lps[1]}\t{point_lps[2]}\n")
         
         print(f"LPS coordinates saved to {full_output_path}")
+        print("The leaflets are now being calculated based on the annotated landmarks.")
         # Path to the script you want to run externally
         script_path = "H:/DATA/Afstuderen/2.Code/Stenosis-Severity/surface_reconstruction/leaflet_interpolation.py"
         # Run the script using subprocess
         subprocess.run([sys.executable, script_path], check=True)
+        print("The leaflets are now reconstructed. Continue with the SSM to achieve the final results.")
+        
         return
     
     def transform_to_lps(self, point_Ras):

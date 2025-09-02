@@ -86,13 +86,14 @@ def get_rigid_transform(A, B):
     return T
 
 
-def generate_paths(patient_ids, base_path):
+def generate_paths_stl(patient_ids, base_path):
+    
     stl_paths = [
         os.path.join(base_path, "patient_database", f"aos{pid}", "cusps", "rcc", f"rcc_simplified_mesh_aos{pid}.stl")
         for pid in patient_ids
     ]
     landmark_paths = [
-        os.path.join(base_path, "patient_database", f"aos{pid}", "landmarks", f"landmarks_rcc_patient_{pid}.txt")
+        os.path.join(base_path, "patient_database", f"aos{pid}", "landmarks", f"landmarks_rcc_patient_{pid}_stl.txt")
         for pid in patient_ids
     ]
     return stl_paths, landmark_paths

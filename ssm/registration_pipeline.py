@@ -23,7 +23,7 @@ def load_and_prepare_data(patient_ids, base_path, reconstruction_path, reconstru
         scaling_factor (float): Scaling factor applied to the reconstruction.
     """
     # Generate file paths for STL meshes and landmarks of patients
-    stl_paths, landmark_paths = fun.generate_paths(patient_ids, base_path)
+    stl_paths, landmark_paths = fun.generate_paths_stl(patient_ids, base_path)
     # Load patient meshes and landmarks
     pointclouds, landmarks = fun.load_meshes_and_landmarks(stl_paths, landmark_paths)
 
