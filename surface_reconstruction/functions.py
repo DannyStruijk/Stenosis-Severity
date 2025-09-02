@@ -3,6 +3,11 @@ import numpy as np
 import vtk
 from geomdl import fitting
 import os
+import pyvista as pv
+import matplotlib.pyplot as plt
+import pydicom
+from scipy.ndimage import zoom
+from scipy.ndimage import affine_transform
 
 def export_vtk(surface, filename="surface.vtk"):
     """
@@ -87,138 +92,74 @@ def fit_spline_pts(point_1: list, point_2: list, arch_control: list):
     # Define the points where we want to show the additional control points
     arch_1, arch_2 = eval_pts[25], eval_pts[75]
     
-    # # Visualize the results using PyVista
-    # # Convert the evaluated points into a format PyVista can visualize (array of points)
-    # eval_pts = np.array(eval_pts)
-    
-    # # Create a PyVista point cloud from the evaluated points
-    # point_cloud = pv.PolyData(eval_pts)
-    
-    # # Create a PyVista plotter
-    # plotter = pv.Plotter()
-
-    # # Add the B-spline curve points to the plotter
-    # plotter.add_mesh(point_cloud, color='blue', point_size=10, render_points_as_spheres=True)
-
-    # # Add the input points (to show them in the visualization as well)
-    # input_points = np.array([point_1, point_2, arch_control])
-    # input_points_mesh = pv.PolyData(input_points)
-    # plotter.add_mesh(input_points_mesh, color='red', point_size=15, render_points_as_spheres=True)
-
-    # # Add arch_1 and arch_2 points
-    # arch_points = np.array([arch_1, arch_2])
-    # arch_points_mesh = pv.PolyData(arch_points)
-    # plotter.add_mesh(arch_points_mesh, color='green', point_size=15, render_points_as_spheres=True)
-
-    # # Optionally, add labels to the input points
-    # plotter.add_point_labels(input_points, ['Point 1', 'Point 2', 'Arch Control'], font_size=12)
-    # plotter.add_point_labels(arch_points, ['Arch 1', 'Arch 2'], font_size=12)
-
-    # Show the plot
-    #plotter.show()
-
     return arch_1, arch_2
 
-def calc_surface_ctrlpts_hinge(cusp_landmarks, leaflet_tip: list):
+
+def calc_ctrlpoints(cusp_landmarks, leaflet_tip, delta=1e-3):
     """
-    Calculate the control points of the boundaries of a leaflet tip based on landmarks
-    
+    Function to calculate control points for a B-spline surface,
+    estimating intermediate points by averaging instead of spline fitting.
+
     Parameters:
-        Cusp_landmarks comprises the commissures and the hinge point of a specific cusp
-        leaflet_tip, which is the tip of the leaflet
-    Note that the function now only works for a single leaflet. The way that the
-    curvature of the arch is now calculate is based on hard-coding
-    
+        cusp_landmarks: List of three points [commissure_1, commissure_2, hinge]
+        leaflet_tip: The leaflet tip coordinate [x, y, z]
+        delta: Small value used to differentiate the leaflet tip points
+
     Returns:
-        grid of control points representing the control points reconstructing the 
-        boundaries of the leaflet.
+        A 5x3 matrix representing control points for surface interpolation.
     """
+    # Extract the relevant annotations for one cusp
+    commissure_1 = np.array(cusp_landmarks[0])
+    commissure_2 = np.array(cusp_landmarks[1])
+    hinge = np.array(cusp_landmarks[2])
+    leaflet_tip = np.array(leaflet_tip)
     
-    commissure_1 = cusp_landmarks[0]
-    commissure_2 = cusp_landmarks[1]
-    hinge = cusp_landmarks[2]
-    
-    center = [
-        (hinge[0] + leaflet_tip[0]) / 2,
-        (hinge[1]+ leaflet_tip[1]) / 2,
-        hinge[2]  # Keep the z-coordinate unchanged
-    ]
+    # Center point between hinge and leaflet tip
+    center = (hinge + leaflet_tip) / 2
 
-    arch_control_1=[(leaflet_tip[0]+commissure_1[0])/2, (leaflet_tip[1]+commissure_1[1])/2, (leaflet_tip[2]+commissure_1[2])/2.05]
-    arch_control_2=[(leaflet_tip[0]+commissure_2[0])/2, (leaflet_tip[1]+commissure_2[1])/2, (leaflet_tip[2]+commissure_2[2])/2.05]
+    # Arch control points between leaflet tip and commissures
+    arch_control_1 = (leaflet_tip + commissure_1) / 2
+    arch_control_2 = (leaflet_tip + commissure_2) / 2
 
-    leaflet_tip_1 = [leaflet_tip[0]+0.0001, leaflet_tip[1]+0.00001, leaflet_tip[2]+0.00001]
-    leaflet_tip_2 = [leaflet_tip[0]-0.0001, leaflet_tip[1]-0.00001, leaflet_tip[2]-0.00001]
+    # Small perturbations around the leaflet tip
+    leaflet_tip_1 = leaflet_tip + np.array([delta,     delta / 10, 0])
+    leaflet_tip_2 = leaflet_tip - np.array([delta,     delta / 10, 0])
+    leaflet_tip_3 = leaflet_tip + np.array([2*delta,   delta / 10, 0])
+    leaflet_tip_4 = leaflet_tip - np.array([2*delta,   delta / 10, 0])
 
-    # Define the control grid (3x3 control points)
-    control_points = [
-        [commissure_1, arch_control_1, leaflet_tip_1],
-        [hinge, center, leaflet_tip],
-        [commissure_2, arch_control_2, leaflet_tip_2]
-    ]
-    
-    
+    # Estimate intermediate points as averages instead of spline fitting
+    hinge_arch_1 = (commissure_1 + hinge) / 2
+    hinge_arch_2 = (commissure_2 + hinge) / 2
+
+    center_left = (arch_control_1 + center) / 2
+    center_right = (arch_control_2 + center) / 2
+
+    arch_left_1 = (commissure_1 + arch_control_1) / 2
+    arch_left_2 = (arch_control_1 + leaflet_tip) / 2
+
+    arch_right_1 = (commissure_2 + arch_control_2) / 2
+    arch_right_2 = (arch_control_2 + leaflet_tip) / 2
+
+    left_hinge_1 = (hinge_arch_1 + center_left) / 2
+    left_hinge_2 = (center_left + leaflet_tip_1) / 2
+
+    right_hinge_1 = (hinge_arch_2 + center_right) / 2
+    right_hinge_2 = (center_right + leaflet_tip_3) / 2
+
+    center_mid_1 = (hinge + center) / 2
+    center_mid_2 = (center + leaflet_tip_2) / 2
+
+    # Final 5x3 control grid
+    control_points = np.array([
+        [commissure_1, arch_left_1, arch_control_1, arch_left_2, leaflet_tip],
+        [hinge_arch_1, left_hinge_1, center_left,   left_hinge_2, leaflet_tip_1],
+        [hinge,       center_mid_1,  center,        center_mid_2,  leaflet_tip_2],
+        [hinge_arch_2, right_hinge_1, center_right, right_hinge_2, leaflet_tip_3],
+        [commissure_2, arch_right_1, arch_control_2, arch_right_2, leaflet_tip_4]
+    ], dtype=np.float64)
+
     return control_points
 
-def calc_ctrlpoints(cusp_landmarks, leaflet_tip):
-        """
-    Function to calculate additional control points based on the evaluation points of a B-spline surface.
-    
-    Parameters:
-        surf: A B-spline surface object generated by a 3x3 grid of control points.
-        
-    Returns:
-        A 5x3 matrix representing additional control points based on the evaluation points.
-    """
-        # Extract the relevant annotations for one cusp
-        commissure_1 = cusp_landmarks[0]
-        commissure_2 = cusp_landmarks[1]
-        hinge = cusp_landmarks[2]
-        
-        # Determining the center of the cusp. Assumed that it is just as high (Z-coordinate) as the hinge
-        center = [
-            (hinge[0] + leaflet_tip[0]) / 2,
-            (hinge[1]+ leaflet_tip[1]) / 2,
-            hinge[2]  # Keep the z-coordinate unchanged
-        ]
-    
-        # Determine the arch between the commissures and the leaflet tip
-        arch_control_1=[(leaflet_tip[0]+commissure_1[0])/2, (leaflet_tip[1]+commissure_1[1])/2, (leaflet_tip[2]+commissure_1[2])/2.05]
-        arch_control_2=[(leaflet_tip[0]+commissure_2[0])/2, (leaflet_tip[1]+commissure_2[1])/2, (leaflet_tip[2]+commissure_2[2])/2.05]
-    
-        # Create 5 leaflet tip points in order to solve issue with 5 points being the same (reconstruct function cannot handle it)
-        leaflet_tip_1 = [leaflet_tip[0]+0.00001, leaflet_tip[1]+0.000001, leaflet_tip[2]]
-        leaflet_tip_2 = [leaflet_tip[0]-0.00001, leaflet_tip[1]-0.000001, leaflet_tip[2]]
-        leaflet_tip_3 = [leaflet_tip[0]+0.00002, leaflet_tip[1]+0.000001, leaflet_tip[2]]
-        leaflet_tip_4 = [leaflet_tip[0]-0.00002, leaflet_tip[1]-0.000001, leaflet_tip[2]]
-        
-        # center_1 = [center[0]+0.0001, center[1]+0.00001, center[2]+0.00001]
-        # center_2 = [center[0]-0.0001, center[1]-0.00001, center[2]-0.00001]
-    
-        # Determine, by means of Bsplines, other relevant landmarks based on annotations 
-        hinge_arch_1, hinge_arch_2 = fit_spline_pts(commissure_1, commissure_2, hinge)
-        arch_left_1, arch_left_2 = fit_spline_pts(commissure_1, leaflet_tip, arch_control_1)
-        arch_right_1, arch_right_2 = fit_spline_pts(commissure_2, leaflet_tip, arch_control_2)
-        center_left, center_right= fit_spline_pts(arch_control_1, arch_control_2, center)
-
-        # Define the control grid (5x5 control pointsm, DOES NOT YET WORK!)
-        # control_points = [
-        #     [commissure_1, arch_left_1, arch_control_1, arch_left_2, leaflet_tip],
-        #     [hinge_arch_1, center_1, center_left, center_2, leaflet_tip_1],
-        #     [hinge, center_1, center, center_2, leaflet_tip_2],
-        #     [hinge_arch_2, center_1, center_right, center_2, leaflet_tip_3],
-        #     [commissure_2, arch_right_1, arch_control_2, arch_right_2, leaflet_tip_4]
-        # ]
-        
-        control_points = [
-            [commissure_1, arch_control_1, leaflet_tip],
-            [hinge_arch_1, center_left, leaflet_tip_1],
-            [hinge, center, leaflet_tip_2],
-            [hinge_arch_2, center_right,leaflet_tip_3],
-            [commissure_2, arch_control_2, leaflet_tip_4]
-        ]
-        
-        return control_points
 
 def reconstruct_surface(control_points, degree_u=2, degree_v=2, knotvector_u=None, knotvector_v=None, delta=0.01):
     """
@@ -259,28 +200,32 @@ def reconstruct_surface(control_points, degree_u=2, degree_v=2, knotvector_u=Non
 
 def interpolate_surface(interp_points):
     """
-    Constructs a NURBS surface that exactly passes through the hinge point.
-    
-    Parameters:
-        interp_points: List of points (some might be NumPy arrays or Python lists).
-    
-    Returns:
-        Interpolated NURBS surface object.
+    Constructs a NURBS surface from interp_points and prints debug info.
     """
-    # Convert all points to lists if they are NumPy arrays
-    interp_points = [pt for row in interp_points for pt in row]
 
+    print(f"Input interp_points type: {type(interp_points)}")
+    print(f"Input interp_points shape: {getattr(interp_points, 'shape', 'no shape attribute')}")
 
-    # Define the number of points in each direction (3x3 grid)
-    size_u, size_v = 5, 3
+    size_u = interp_points.shape[0]
+    size_v = interp_points.shape[1]
+    print(f"Size_u: {size_u}, Size_v: {size_v}")
 
-    # Construct interpolated surface
-    surf = fitting.interpolate_surface(interp_points, size_u, size_v, degree_u=2, degree_v=2)
+    # Convert points to a flat tuple of 3D tuples matching the working example format
+    interp_points_2d = tuple(tuple(pt) for pt in interp_points.reshape(-1, 3))
 
-    # Evaluate surface
+    print(f"Reshaped interp_points_2d type: {type(interp_points_2d)}")
+    print(f"Number of points: {len(interp_points_2d)}")
+    print(interp_points_2d)
+
+    degree_u = 2
+    degree_v = 2
+    print(f"Degree_u: {degree_u}, Degree_v: {degree_v}")
+
+    surf = fitting.approximate_surface(interp_points_2d, size_u, size_v, degree_u, degree_v)
+
     surf.evaluate()
-
     return surf
+
 
 
 def save_surface_evalpts(surface, save_path):
@@ -304,23 +249,369 @@ def save_surface_evalpts(surface, save_path):
     np.savetxt(save_path, evalpts_array)
     print(f"Surface evalpts saved to {save_path}")
     
+
+def save_ordered_landmarks(cusp_landmarks, center, base_folder):
+    """
+    Saves landmarks of each leaflet (NCC, LCC, RCC) separately, 
+    each containing its 3 landmarks (2 commissures and 1 hinge) plus the center point,
+    into separate text files under the specified base folder.
+
+    Commissures are saved in a fixed clockwise order, with rules defined per cusp:
     
-def save_ordered_landmarks(cusp_landmarks, center, output_path):
+    - RCC (most anterior cusp): save commissure with lower L (rightmost) first
+    - LCC (most left cusp): save commissure with lower P (most anterior) first
+    - NCC (remaining cusp): save commissure with higher P (most posterior) first
+
+    Args:
+        cusp_landmarks (list or np.ndarray): List of 3 cusp landmarks, each with 3 points (each point is length 3).
+                                             Each cusp: [commissure_1, commissure_2, hinge]
+        center (list or np.ndarray): Center landmark (length 3).
+        base_folder (str): Folder path where landmark files are saved.
+    """
     hinges = [cusp[2] for cusp in cusp_landmarks]
     L_values = [h[0] for h in hinges]
     P_values = [h[1] for h in hinges]
-    print("L_values: ", L_values)
-    print("P_values: ", P_values)
 
-    rcc_idx = np.argmin(P_values)  # most anterior
-    lcc_idx = np.argmax(L_values)  # most left
-    ncc_idx = list({0, 1, 2} - {rcc_idx, lcc_idx})[0]
+    rcc_idx = np.argmin(P_values)  # most anterior (smallest P)
+    lcc_idx = np.argmax(L_values)  # most left (largest L)
+    ncc_idx = list({0, 1, 2} - {rcc_idx, lcc_idx})[0]  # remaining index
 
-    ordered = (
-        cusp_landmarks[ncc_idx][0:2] + [cusp_landmarks[ncc_idx][2]] +
-        cusp_landmarks[lcc_idx][0:2] + [cusp_landmarks[lcc_idx][2]] +
-        cusp_landmarks[rcc_idx][0:2] + [cusp_landmarks[rcc_idx][2]] +
-        [center]
-    )
+    leaflet_indices = {
+        "rcc": rcc_idx,
+        "lcc": lcc_idx,
+        "ncc": ncc_idx
+    }
 
-    np.savetxt(output_path, np.array(ordered), fmt="%.6f")
+    os.makedirs(base_folder, exist_ok=True)
+
+    for leaflet_name, idx in leaflet_indices.items():
+        commissure_1, commissure_2, hinge = cusp_landmarks[idx]
+
+        if leaflet_name == "rcc":
+            # Rightmost commissure (lowest L) first
+            if commissure_1[0] < commissure_2[0]:
+                ordered_commissures = [commissure_1, commissure_2]
+            else:
+                ordered_commissures = [commissure_2, commissure_1]
+
+        elif leaflet_name == "lcc":
+            # Most anterior commissure (lowest P) first
+            if commissure_1[1] < commissure_2[1]:
+                ordered_commissures = [commissure_1, commissure_2]
+            else:
+                ordered_commissures = [commissure_2, commissure_1]
+
+        elif leaflet_name == "ncc":
+            # Most posterior commissure (highest P) first
+            if commissure_1[1] > commissure_2[1]:
+                ordered_commissures = [commissure_1, commissure_2]
+            else:
+                ordered_commissures = [commissure_2, commissure_1]
+
+        leaflet_landmarks = ordered_commissures + [hinge, center]
+
+        arr_to_save = np.array(leaflet_landmarks)
+        output_path = os.path.join(base_folder, f"{leaflet_name}_template_landmarks_test.txt")
+        np.savetxt(output_path, arr_to_save, fmt="%.6f")
+
+        print(f"Saved {leaflet_name} landmarks to: {output_path}")
+        
+        
+
+
+def load_leaflet_landmarks(file_path):
+    """
+    Loads 4 landmarks from a leaflet landmark .txt file.
+    
+    The file is expected to contain 4 rows, each with 3 float values:
+        - commissure 1
+        - commissure 2
+        - hinge
+        - center
+
+    Args:
+        file_path (str): Path to the leaflet .txt file.
+
+    Returns:
+        np.ndarray: A (4, 3) array of landmark coordinates.
+    """
+    try:
+        landmarks = np.loadtxt(file_path)
+        if landmarks.shape != (4, 3):
+            raise ValueError(f"Unexpected shape {landmarks.shape} in {file_path}; expected (4, 3).")
+        return landmarks
+    except Exception as e:
+        print(f"Error reading landmarks from {file_path}: {e}")
+        return None
+
+
+def plot_control_points(control_points):
+    """
+    Plots control points with PyVista, including labels and connecting lines.
+    
+    Parameters:
+        control_points: List or 2D array of control points with shape (rows, cols, 3)
+    """
+    control_points = np.array(control_points)
+    rows, cols = control_points.shape[:2]
+
+    # Flatten points for plotting
+    points_flat = control_points.reshape(-1, 3)
+
+    # Create PyVista point cloud
+    point_cloud = pv.PolyData(points_flat)
+
+    # Create plotter
+    plotter = pv.Plotter()
+    plotter.add_mesh(point_cloud, color='red', point_size=10, render_points_as_spheres=True)
+
+    # Add labels for each control point as (row, col)
+    for r in range(rows):
+        for c in range(cols):
+            point = control_points[r, c]
+            label = f"({r},{c})"
+            plotter.add_point_labels(point, [label], font_size=12, text_color='black', point_color='yellow', shape_opacity=0.6)
+
+
+    plotter.add_axes()
+    plotter.show()
+
+
+def get_annular_normal(patient_number, base_path="H:/DATA/Afstuderen/3.Data/SSM/patient_database"):
+    """
+    Computes the perpendicular vector to the aortic annulus plane
+    defined by the hinge points of the three aortic cusps.
+    
+    Parameters:
+    - patient_number: string or int, e.g., "aos14"
+    - base_path: base folder containing patient landmark subfolders
+    
+    Returns:
+    - normal_vector: 3-element numpy array, unit vector perpendicular to the plane
+    """
+    
+    # Construct paths to landmark files
+    patient_folder = os.path.join(base_path, str(patient_number), "landmarks")
+    lcc_file = os.path.join(patient_folder, "lcc_template_landmarks.txt")
+    ncc_file = os.path.join(patient_folder, "ncc_template_landmarks.txt")
+    rcc_file = os.path.join(patient_folder, "rcc_template_landmarks.txt")
+    
+    # Load hinge points (third row in each file)
+    lcc_hinge = np.loadtxt(lcc_file)[2, :]
+    ncc_hinge = np.loadtxt(ncc_file)[2, :]
+    rcc_hinge = np.loadtxt(rcc_file)[2, :]
+    
+    # Define two vectors on the plane
+    v1 = ncc_hinge - lcc_hinge
+    v2 = rcc_hinge - lcc_hinge
+    
+    # Compute perpendicular vector via cross product
+    normal_vector = np.cross(v1, v2)
+    
+    # Normalize
+    normal_vector /= np.linalg.norm(normal_vector)
+    
+    return normal_vector
+
+def space_volume(volume: np.ndarray, spacing: tuple):
+    """
+    Rescale a 3D volume so that voxel spacing becomes isotropic (1 mm per voxel).
+
+    Parameters
+    ----------
+    volume : np.ndarray
+        3D volume (z, y, x)
+    spacing : tuple of floats
+        Pixel spacing in mm: (spacing_y, spacing_x, slice_thickness)
+
+    Returns
+    -------
+    rescaled_volume : np.ndarray
+        Volume rescaled to isotropic voxel spacing
+    """
+    # Ensure spacing is in the same order as volume axes (z, y, x)
+    z_spacing, y_spacing, x_spacing = spacing
+
+    # Compute zoom factors: target spacing = 1 mm
+    zoom_factors = (z_spacing, y_spacing, x_spacing)
+
+    # Apply zoom (rescale)
+    rescaled_volume = zoom(volume, zoom=zoom_factors, order=1)  # linear interpolation
+
+    return rescaled_volume
+
+
+def reorient_volume(volume, annular_normal, dicom_origin, spacing):
+    """
+    Reorient a 3D volume so that the annular_normal aligns with the volume z-axis,
+    rotating around the DICOM origin instead of the volume center.
+
+    Parameters
+    ----------
+    volume : np.ndarray
+        3D numpy array in (z, y, x) order.
+    annular_normal : array-like
+        Unit vector normal to the annular plane, in physical coordinates (x, y, z).
+    dicom_origin : array-like
+        Origin of the DICOM volume in physical coordinates (x, y, z).
+    spacing : array-like
+        Voxel spacing (dz, dy, dx).
+
+    Returns
+    -------
+    reoriented_volume : np.ndarray
+        Rotated 3D volume.
+    R : np.ndarray
+        3x3 rotation matrix applied to the volume.
+    """
+
+    # Convert normal from physical (x,y,z) → array axes (z,y,x)
+    normal = np.array([annular_normal[2], annular_normal[1], annular_normal[0]])
+    normal /= np.linalg.norm(normal)
+    normal = -normal
+    print("Normal is: ", normal)
+
+    # Target z-axis in array coordinates (first axis)
+    target_z = np.array([1, 0, 0])  # +Z in (z, y, x) corresponds to first axis
+
+    # Compute rotation axis and angle
+    axis = np.cross(normal, target_z)
+    axis_norm = np.linalg.norm(axis)
+    
+    print("Rotation axis is:", axis)
+    
+    if axis_norm < 1e-8:  # already aligned
+        return volume.copy(), np.eye(3)
+    axis /= axis_norm
+    angle = np.arccos(np.clip(np.dot(normal, target_z), -1.0, 1.0))
+    
+    print("Angle is: ", angle)
+
+    # Rodrigues rotation matrix
+    K = np.array([[0, -axis[2], axis[1]],
+                  [axis[2], 0, -axis[0]],
+                  [-axis[1], axis[0], 0]])
+    R = np.eye(3) + np.sin(angle) * K + (1 - np.cos(angle)) * (K @ K)
+    
+    print("Rotation matrix: ", R)
+
+    M = np.linalg.inv(R)
+
+    # Offset so rotation is around this point
+    center = np.array(volume.shape) / 2
+    offset = center - M @ center
+    
+    reoriented_volume = affine_transform(volume, M, offset=offset, order=1)
+
+    return reoriented_volume, R
+
+
+
+
+def vtk_to_volume_space(surface, origin, spacing):
+    """
+    Transform VTK PolyData points from DICOM patient coordinates to NumPy volume voxel space.
+
+    Parameters
+    ----------
+    surface : vtk.vtkPolyData
+        VTK surface in DICOM patient coordinates.
+    origin : array-like of shape (3,)
+        DICOM ImagePositionPatient of the first slice.
+    spacing : array-like of shape (3,)
+        Voxel spacing (dz, dy, dx) of the volume.
+
+    Returns
+    -------
+    vtk.vtkPolyData
+        The modified surface in volume voxel space.
+    """
+    points = surface.GetPoints()
+    n_points = points.GetNumberOfPoints()
+    
+    for i in range(n_points):
+        x, y, z = points.GetPoint(i)
+        vx = (z - origin[0])/spacing[0]
+        vy = (y - origin[1])/spacing[1]
+        vz = (x - origin[2])/spacing[2] 
+        points.SetPoint(i, vx, vy, vz)
+    
+    surface.Modified()
+    return surface
+
+def landmarks_to_voxel(txt_file, origin, spacing):
+    """
+    Converts landmark coordinates from a text file into voxel coordinates.
+    
+    Parameters:
+        txt_file (str): Path to the text file containing landmarks (LPS/RAS coordinates).
+        origin (np.ndarray or list): Origin of the volume (LPS coordinates of voxel [0,0,0]).
+        spacing (np.ndarray or list): Voxel spacing in mm for (x, y, z) directions.
+    
+    Returns:
+        np.ndarray: N x 3 array of voxel coordinates.
+    """
+    landmarks_lps = np.loadtxt(txt_file)
+    voxel_coords = (landmarks_lps-origin)/spacing
+    voxel_coords = np.round(voxel_coords).astype(int)
+    
+    return voxel_coords
+
+import numpy as np
+
+def reorient_landmarks(landmarks_zyx, R, dicom_origin, spacing, orig_shape, output_shape):
+    """
+    Reorient landmarks using the same affine transform as the volume.
+    The grid is the size of the original volume; output is in the rotated volume grid.
+
+    Parameters
+    ----------
+    landmarks_voxel : (N,3) array
+        Landmarks in voxel coordinates (x,y,z) of the original volume.
+    R : (3,3) array
+        Rotation matrix used for the volume (zyx convention).
+    dicom_origin : array-like
+        ImagePositionPatient of the first voxel (LPS), in z,y,x order.
+    spacing : array-like
+        Voxel spacing (dz,dy,dx), matching z,y,x order.
+    orig_shape : tuple
+        Shape of the original volume (z,y,x)
+    output_shape : tuple
+        Shape of the reoriented volume (z,y,x)
+
+    Returns
+    -------
+    rotated_landmarks_voxel : (M,3) array
+        Landmark coordinates in the reoriented volume grid (z,y,x order).
+    """
+    # Create empty grid of the original volume size
+    landmark_grid = np.zeros(output_shape, dtype=np.uint8)
+    # Place landmarks in the grid
+    for z, y, x in landmarks_zyx:
+        landmark_grid[z, y, x] = 1
+        
+    # Check: how many 1s before rotation
+    n_before = np.count_nonzero(landmark_grid)
+    print(f"Number of landmarks before affine transform: {n_before}")
+
+    # Compute offset for rotation around DICOM origin
+    dicom_origin = np.array(dicom_origin, dtype=float)
+    spacing = np.array(spacing, dtype=float)
+    origin_voxel = dicom_origin / spacing  # z,y,x order
+    offset = origin_voxel - R @ origin_voxel
+
+    # Apply affine transform to match rotated volume
+    rotated_grid = affine_transform(
+        landmark_grid,
+        R,
+        offset=offset,
+        order=0)
+    
+    # Check: how many 1s before rotation
+    n_before = np.count_nonzero(rotated_grid)
+    print(f"Number of landmarks after affine transform: {n_before}")
+
+    # Extract coordinates of landmarks in the rotated volume
+    rotated_landmarks = np.argwhere(rotated_grid > 0)  # z,y,x
+
+    return rotated_landmarks

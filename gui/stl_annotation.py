@@ -9,12 +9,12 @@ sys.path.append(r"H:\DATA\Afstuderen\2.Code\Stenosis-Severity\surface_reconstruc
 from functions import calc_leaflet_landmarks  # Optional
 
 # Patient info
-patient_id = 14
+patient_id = 15
+cusp = "ncc"
 
 # File paths
-stl_path = fr"H:\DATA\Afstuderen\3.Data\SSM\ssm_saved_data\aos{patient_id}\ncc_reconstruction_{patient_id}.vtk"
-save_txt = fr"H:\DATA\Afstuderen\3.Data\SSM\ssm_saved_data\aos{patient_id}\landmarks_template_ncc_{patient_id}.txt"
-save_excel = fr"H:\DATA\Afstuderen\3.Data\SSM\ssm_saved_data\aos{patient_id}\landmarks_template_ncc_{patient_id}.xlsx"
+stl_path = fr"H:\DATA\Afstuderen\3.Data\SSM\patient_database\aos{patient_id}\cusps\{cusp}\{cusp}_trimmed.stl"
+save_txt = fr"H:\DATA\Afstuderen\3.Data\SSM\patient_database\aos{patient_id}\landmarks\landmarks_{cusp}_patient_{patient_id}_stl"
 
 # Load STL
 mesh = pv.read(stl_path)
@@ -69,9 +69,5 @@ if len(landmarks) == len(labels):
     np.savetxt(save_txt, np.array(landmarks))
     print(f"Saved landmarks to: {save_txt}")
 
-    df = pd.DataFrame(landmarks, columns=["x", "y", "z"])
-    df.insert(0, "label", labels)
-    df.to_excel(save_excel, index=False)
-    print(f"Saved Excel file to: {save_excel}")
 else:
     print("Not all landmarks were selected. Nothing saved.")
