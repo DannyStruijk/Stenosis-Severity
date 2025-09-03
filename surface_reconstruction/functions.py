@@ -539,7 +539,7 @@ def vtk_to_volume_space(surface, origin, spacing):
     surface.Modified()
     return surface
 
-def landmarks_to_voxel(txt_file, origin, spacing):
+def landmarks_to_voxel(txt_file, origin, pixel_spacing):
     """
     Converts landmark coordinates from a text file into voxel coordinates.
     
@@ -551,6 +551,8 @@ def landmarks_to_voxel(txt_file, origin, spacing):
     Returns:
         np.ndarray: N x 3 array of voxel coordinates.
     """
+    spacing = pixel_spacing[::-1]
+    
     landmarks_lps = np.loadtxt(txt_file)
     voxel_coords = (landmarks_lps-origin)/spacing
     voxel_coords = np.round(voxel_coords).astype(int)
@@ -559,7 +561,7 @@ def landmarks_to_voxel(txt_file, origin, spacing):
 
 import numpy as np
 
-def reorient_landmarks(landmarks_zyx, R, dicom_origin, spacing, orig_shape, output_shape):
+def reorient_landmarks(landmarks_zyx, R, dicom_origin, spacing, output_shape):
     """
     Reorient landmarks using the same affine transform as the volume.
     The grid is the size of the original volume; output is in the rotated volume grid.
@@ -593,19 +595,16 @@ def reorient_landmarks(landmarks_zyx, R, dicom_origin, spacing, orig_shape, outp
     # Check: how many 1s before rotation
     n_before = np.count_nonzero(landmark_grid)
     print(f"Number of landmarks before affine transform: {n_before}")
+    
+    # Inverse matrix as affine_transform is backwards mapping
+    M = np.linalg.inv(R)
 
-    # Compute offset for rotation around DICOM origin
-    dicom_origin = np.array(dicom_origin, dtype=float)
-    spacing = np.array(spacing, dtype=float)
-    origin_voxel = dicom_origin / spacing  # z,y,x order
-    offset = origin_voxel - R @ origin_voxel
+    # Offset so rotation is around this point, using the center of the image
+    center = np.array(output_shape) / 2
+    offset = center - M @ center
 
     # Apply affine transform to match rotated volume
-    rotated_grid = affine_transform(
-        landmark_grid,
-        R,
-        offset=offset,
-        order=0)
+    rotated_grid = affine_transform(landmark_grid, M, offset=offset, order=0)
     
     # Check: how many 1s before rotation
     n_before = np.count_nonzero(rotated_grid)
@@ -615,3 +614,5 @@ def reorient_landmarks(landmarks_zyx, R, dicom_origin, spacing, orig_shape, outp
     rotated_landmarks = np.argwhere(rotated_grid > 0)  # z,y,x
 
     return rotated_landmarks
+
+
