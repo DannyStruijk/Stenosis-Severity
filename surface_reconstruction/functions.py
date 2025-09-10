@@ -503,7 +503,7 @@ def reorient_volume(volume, annular_normal, dicom_origin, spacing):
     
     reoriented_volume = affine_transform(volume, M, offset=offset, order=1)
 
-    return reoriented_volume, R
+    return reoriented_volume, R, center
 
 
 
@@ -552,6 +552,7 @@ def landmarks_to_voxel(txt_file, origin, pixel_spacing):
         np.ndarray: N x 3 array of voxel coordinates.
     """
     spacing = pixel_spacing[::-1]
+    print("Spacing" , spacing)
     
     landmarks_lps = np.loadtxt(txt_file)
     voxel_coords = (landmarks_lps-origin)/spacing
@@ -616,3 +617,241 @@ def reorient_landmarks(landmarks_zyx, R, dicom_origin, spacing, output_shape):
     return rotated_landmarks
 
 
+def vtk_to_pointcloud(filename, origin, pixel_spacing):
+    """
+    Load a VTK PolyData surface and return points in voxel coordinates
+    aligned with a DICOM volume grid.
+
+    Parameters
+    ----------
+    filename : str
+        Path to VTK PolyData file.
+    origin : tuple of float
+        DICOM origin (LPS coordinates of voxel 0,0,0).
+    spacing : tuple of float
+        DICOM voxel spacing (dx, dy, dz).
+
+    Returns
+    -------
+    voxel_points : ndarray
+        Array of shape (N,3) containing points in voxel coordinates (z,y,x order if desired).
+    """
+    # Load VTK
+    reader = vtk.vtkPolyDataReader()
+    reader.SetFileName(filename)
+    reader.Update()
+    polydata = reader.GetOutput()
+
+    spacing = pixel_spacing[::-1]
+    
+    # Extract points
+    points_vtk = polydata.GetPoints()
+    points = np.array([points_vtk.GetPoint(i) for i in range(points_vtk.GetNumberOfPoints())])
+
+    # Convert LPS coordinates to voxel coordinates
+    voxel_points = np.array(points - np.array(origin)) / np.array(spacing)
+
+    return voxel_points
+
+
+def rotate_vtk_landmarks(vtk_points, rotation_matrix, rotation_offset):
+    """
+    Rotate VTK landmarks (or any 3D points) using a known rotation matrix
+    and the same rotation pivot as the volume.
+
+    Parameters
+    ----------
+    vtk_points : (N,3) array
+        VTK points to rotate (z, y, x order or voxel coordinates).
+    rotation_matrix : (3,3) array
+        Rotation matrix applied to the volume.
+    rotation_offset : (3,) array-like
+        The pivot (center) used when rotating the volume in voxel coordinates
+        (the same as used to compute the volume offset in affine_transform).
+
+    Returns
+    -------
+    rotated_points : (N,3) array
+        Rotated VTK points, same shape as input.
+    """
+    vtk_points = np.array(vtk_points, dtype=float)
+    rotation_offset = np.array(rotation_offset, dtype=float)
+
+    # Rotate around the center (rotation_offset acts as the pivot)
+    rotated_points = (rotation_matrix @ (vtk_points - rotation_offset).T).T + rotation_offset
+
+    return rotated_points
+
+def order_points_by_angle(points):
+    """
+    Order a set of 2D points to form a closed loop by sorting them
+    according to their angle relative to the centroid.
+    
+    Parameters
+    ----------
+    points : ndarray of shape (N, 2)
+        Points in (row, col) = (y, x) format.
+
+    Returns
+    -------
+    ordered_points : ndarray of shape (N, 2)
+        Points ordered to form a smooth closed loop.
+    """
+    # Compute centroid
+    centroid = points.mean(axis=0)
+    
+    # Compute angles relative to centroid
+    angles = np.arctan2(points[:,0] - centroid[0], points[:,1] - centroid[1])
+    
+    # Sort points by angle
+    sort_idx = np.argsort(angles)
+    ordered_points = points[sort_idx]
+    
+    return ordered_points
+
+from scipy.spatial.distance import cdist
+
+def order_points_nn(points):
+    """
+    Order points along a 2D open contour using a greedy nearest-neighbor approach.
+
+    Parameters
+    ----------
+    points : ndarray of shape (N, 2)
+        Points in (y, x) format.
+
+    Returns
+    -------
+    ordered_points : ndarray of shape (N, 2)
+        Points ordered along the contour.
+    """
+    if len(points) == 0:
+        return points
+
+    points = points.copy()
+    # Start from the first point (or pick any)
+    ordered = [points[0]]
+    points = np.delete(points, 0, axis=0)
+
+    while len(points) > 0:
+        last = ordered[-1]
+        dists = cdist([last], points)[0]
+        idx = np.argmin(dists)
+        ordered.append(points[idx])
+        points = np.delete(points, idx, axis=0)
+
+    return np.array(ordered)
+
+
+def find_closest_point(points, reference_point):
+    """
+    Finds the point in `points` closest to `reference_point`.
+
+    Parameters
+    ----------
+    points : ndarray of shape (N, D)
+        Array of points (2D or 3D).
+    reference_point : array-like of shape (D,)
+        The reference point to compare distances to.
+
+    Returns
+    -------
+    closest_idx : int
+        Index of the point in `points` closest to `reference_point`.
+    closest_point : ndarray
+        Coordinates of the closest point.
+    """
+    points = np.array(points)
+    reference_point = np.array(reference_point)
+    distances = np.linalg.norm(points - reference_point, axis=1)
+    closest_idx = np.argmin(distances)
+    closest_point = points[closest_idx]
+    return closest_idx, closest_point
+
+
+from scipy.sparse.csgraph import minimum_spanning_tree
+
+def mst_order_with_start(points, start_idx=0):
+    """
+    Orders 3D points along a curve using MST traversal, starting from a specified point.
+
+    Parameters:
+    - points: (N,3) array of 3D points
+    - start_idx: index of the point to start traversal from
+
+    Returns:
+    - ordered_points: (N,3) array of points in MST traversal order
+    """
+    P = np.array(points)
+    N = len(P)
+
+    # 1. Compute full distance matrix
+    D = cdist(P, P)
+    np.fill_diagonal(D, np.inf)  # prevent self-loops
+
+    # 2. Compute MST and adjacency matrix
+    T = minimum_spanning_tree(D).toarray()
+    adjacency = ((T + T.T) > 0).astype(int)
+
+    # 3. Traverse MST starting from the specified point
+    ordered_idx = [start_idx]
+    visited = np.zeros(N, dtype=bool)
+    visited[start_idx] = True
+    prev, cur = -1, start_idx
+
+    for _ in range(N - 1):
+        neighbors = np.where(adjacency[cur] == 1)[0]
+        nxt = None
+        # pick unvisited neighbor first
+        for n in neighbors:
+            if not visited[n]:
+                nxt = n
+                break
+        # fallback: pick neighbor that is not the previous point
+        if nxt is None:
+            for n in neighbors:
+                if n != prev:
+                    nxt = n
+                    break
+        prev, cur = cur, nxt
+        ordered_idx.append(cur)
+        visited[cur] = True
+
+    # 4. Return points in traversal order
+    ordered_idx = np.array(ordered_idx, dtype=int)  # <-- ensure integer indices
+    return P[ordered_idx]
+
+import networkx as nx
+from scipy.spatial import distance_matrix
+
+def mst_backbone_path(point_cloud, start_idx, end_idx):
+    """
+    Extract the backbone from a 2D point cloud as the unique path in MST
+    between start and end nodes.
+    
+    Parameters:
+        point_cloud (np.ndarray): N x 2 array of points
+        start_idx (int): index of start point
+        end_idx (int): index of end point
+    
+    Returns:
+        ordered_points (np.ndarray): points along the backbone from start to end
+    """
+    N = point_cloud.shape[0]
+    
+    # Build fully connected graph
+    dist_mat = distance_matrix(point_cloud, point_cloud)
+    G = nx.Graph()
+    for i in range(N):
+        for j in range(i+1, N):
+            G.add_edge(i, j, weight=dist_mat[i, j])
+    
+    # Compute MST
+    mst = nx.minimum_spanning_tree(G)
+    
+    # Get the unique path between start and end in the MST
+    path_indices = nx.shortest_path(mst, source=start_idx, target=end_idx, weight='weight')
+    
+    # Extract points
+    ordered_points = point_cloud[path_indices]
+    return ordered_points
