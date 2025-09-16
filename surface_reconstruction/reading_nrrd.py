@@ -9,6 +9,13 @@ from skimage.segmentation import active_contour
 img = data.astronaut()
 img = rgb2gray(img)
 
+# Compute statistics
+mean_intensity = np.mean(img)
+std_intensity = np.std(img)
+
+print(f"Average intensity: {mean_intensity:.4f}")
+print(f"Standard deviation: {std_intensity:.4f}")
+
 # --- Initialize a line (open snake) ---
 n_points = 40
 r = np.linspace(20, 120, n_points)      # vertical coordinate (rows, y-axis)
@@ -25,7 +32,7 @@ snake = active_contour(
     alpha=0.0015,
     beta=1,
     gamma=0.001,
-    w_edge = 1.5,
+    w_edge = 1,
     w_line = 0
     ,boundary_condition="free"  # keeps ends open
 )

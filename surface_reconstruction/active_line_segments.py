@@ -1,12 +1,14 @@
+# SCRIPT TO REFINE THE SEGMENTATION OF THE AORTIC LEAFLETS 
+
+# Importing the necessary packages
+
 import sys
 sys.path.append(r"H:\\DATA\Afstuderen\\2.Code\\Stenosis-Severity\\gui")
-
 import gui_functions as gf
 import functions
 import numpy as np
 import pydicom
 import matplotlib.pyplot as plt
-import vtk
 import nrrd
 
 
@@ -14,11 +16,10 @@ import nrrd
 # READING IN THE DICOM & THE EDGE DETECTED IMAGE
 
 # original image
-# edge_detected_image = r"H:\DATA\Afstuderen\3.Data\Image Processing\aos14\gradient_magnitude.nrrd"
-edge_detected_image = r"H:\DATA\Afstuderen\3.Data\Image Processing\aos14\blurred_sig1.2.nrrd"
+edge_detected_image = r"H:\DATA\Afstuderen\3.Data\Image Processing\aos14\gradient_magnitude.nrrd"
+# edge_detected_image = r"H:\DATA\Afstuderen\3.Data\Image Processing\aos14\blurred_sig1.2.nrrd"
 
 dicom_dir = r"T:\Research_01\CZE-2020.67 - SAVI-AoS\AoS stress\CT\Aosstress14\DICOM\000037EC\AA4EC564\AA3B0DE6\00007EA9"
-
 dicom_reversed = gf.get_sorted_dicom_files(dicom_dir)
 dicom = dicom_reversed[::-1]
 
@@ -41,7 +42,6 @@ pixel_spacing_y = float(dicom_template.PixelSpacing[0])
 pixel_spacing_x = float(dicom_template.PixelSpacing[1])
 pixel_spacing = (slice_thickness, pixel_spacing_y, pixel_spacing_x)
 dicom_origin= np.array(dicom_template.ImagePositionPatient, dtype=float)
-
 
 
 # %% REORIENTATION
@@ -351,6 +351,7 @@ for i in range(total_iterations):
 # %%% CREATE AND APPLY ROI MASK
 
 from skimage.draw import polygon2mask
+import SimpleITK as sitk 
 
 # Step 1: Build ROI mask from snake
 roi_mask = polygon2mask(new_image.shape, snake_current) 
@@ -361,6 +362,14 @@ print("Number of True pixels in mask:", num_true)
 # Step 2: Apply mask to the image
 roi_image = new_image * roi_mask.astype(new_image.dtype)
 
+# # Apply closing (on the image directly)
+sitk_image = sitk.GetImageFromArray(roi_image)
+closed = sitk.BinaryMorphologicalClosing(sitk_image > 180, [2,2,2])  # adjust threshold + radius
+
+# Convert SimpleITK image back to numpy array
+closed_array = sitk.GetArrayFromImage(closed)
+
+
 # Step 3: Show result
 plt.figure(figsize=(6,6))
 plt.imshow(roi_image, cmap='gray')
@@ -369,6 +378,83 @@ plt.axis('off')
 plt.show()
 
 # %%% ACTIVE CONTOURS FOR THE CUSP RECONSTRUCTION
+
+from skimage import exposure
+from skimage.segmentation import active_contour
+import matplotlib.pyplot as plt
+import numpy as np
+
+# --- Active contour parameters ---
+alpha = 0.0002  # elasticity (snake tension)
+beta = 0.01    # rigidity (smoothness)
+gamma = 0.001  # step size
+total_iterations = 5  # total iterations you want to observe
+
+# --- Image initialization ---
+img = image_pre.astype(np.float32)
+img = img / img.max()   # scale values to [0,1]
+
+# --- Clip values below threshold ---
+threshold = 0.3   # set threshold as fraction of max intensity
+img_clipped = roi_image.copy()
+img_clipped[img_clipped < threshold] = 0
+
+# --- Show histogram ---
+# Compute statistics
+mean_intensity = np.mean(img)
+std_intensity = np.std(img)
+
+print(f"Average intensity: {mean_intensity:.4f}")
+print(f"Standard deviation: {std_intensity:.4f}")
+# new_image = exposure.equalize_adapthist(img_clipped, clip_limit=0.01)
+
+# --- Initialize snake ---
+snake_current = backbone_reduced.copy()
+
+# --- Iteratively update the snake ---
+for i in range(total_iterations):
+    snake_current = active_contour(
+        img_clipped,
+        snake_current,
+        alpha=alpha,
+        beta=beta,
+        gamma=gamma,
+        w_edge=0,
+        w_line=2,
+        max_num_iter=1,           # run only 1 iteration per loop
+        boundary_condition="fixed"
+    )
+    
+    # --- Plot current snake ---
+    plt.figure(figsize=(6,6))
+    plt.imshow(img_clipped, cmap='gray')
+    plt.plot(backbone_reduced[:, 1], backbone_reduced[:, 0], 'ro', markersize=1, label='Initial points')
+    plt.plot(snake_current[:, 1], snake_current[:, 0], '-b', lw=2, alpha=0.9, label=f'Snake after {i+1} iterations')
+    plt.legend()
+    plt.axis('off')
+    plt.pause(0.5)
+    plt.show()
+    
+
+# %% REGION GROWING SEGMENTATION
+
+from skimage import segmentation
+
+# Calculate the seed point
+lcc_corners = landmarks_rotated[[0,1,3]]
+lcc_seed = functions.midpoint_xy(lcc_corners)
+
+region_mask = segmentation.flood(roi_image, lcc_seed, tolerance=0.20)
+
+# Visualization
+plt.figure(figsize=(8, 8))
+plt.imshow(roi_image, cmap='gray')
+plt.imshow(region_mask, cmap='Reds', alpha=0.4)  # overlay mask in red
+plt.scatter(lcc_seed[1], lcc_seed[0], color='blue', s=50, label='Seed')  # note: x=col, y=row
+plt.title('Single Cusp Region Growing')
+plt.legend()
+plt.axis('off')
+plt.show()
 
 # %% IMAGE PROCESSING TESTING
 

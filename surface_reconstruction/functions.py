@@ -867,3 +867,24 @@ def circle_through_commissures(points, n_points=30):
                               for theta in angles])
     circle_points=circle_points.astype(int)
     return circle_points
+
+
+def midpoint_xy(points):
+    """
+    Calculate the midpoint in XY plane from three 3D points.
+    
+    Parameters:
+        points (list or array): List of three points [[x1,y1,z1], [x2,y2,z2], [x3,y3,z3]]
+        
+    Returns:
+        tuple: (mid_x, mid_y)
+    """
+    points = np.array(points)
+    
+    if points.shape != (3, 3):
+        raise ValueError("Input must be three 3D points (3x3 array or list).")
+    
+    mid_x = (np.mean(points[:, 1])).astype(int)
+    mid_y = np.mean(points[:, 2]).astype(int)
+
+    return tuple((mid_x, mid_y))
