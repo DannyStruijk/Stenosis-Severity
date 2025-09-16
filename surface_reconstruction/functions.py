@@ -769,58 +769,6 @@ def find_closest_point(points, reference_point):
     return closest_idx, closest_point
 
 
-from scipy.sparse.csgraph import minimum_spanning_tree
-
-def mst_order_with_start(points, start_idx=0):
-    """
-    Orders 3D points along a curve using MST traversal, starting from a specified point.
-
-    Parameters:
-    - points: (N,3) array of 3D points
-    - start_idx: index of the point to start traversal from
-
-    Returns:
-    - ordered_points: (N,3) array of points in MST traversal order
-    """
-    P = np.array(points)
-    N = len(P)
-
-    # 1. Compute full distance matrix
-    D = cdist(P, P)
-    np.fill_diagonal(D, np.inf)  # prevent self-loops
-
-    # 2. Compute MST and adjacency matrix
-    T = minimum_spanning_tree(D).toarray()
-    adjacency = ((T + T.T) > 0).astype(int)
-
-    # 3. Traverse MST starting from the specified point
-    ordered_idx = [start_idx]
-    visited = np.zeros(N, dtype=bool)
-    visited[start_idx] = True
-    prev, cur = -1, start_idx
-
-    for _ in range(N - 1):
-        neighbors = np.where(adjacency[cur] == 1)[0]
-        nxt = None
-        # pick unvisited neighbor first
-        for n in neighbors:
-            if not visited[n]:
-                nxt = n
-                break
-        # fallback: pick neighbor that is not the previous point
-        if nxt is None:
-            for n in neighbors:
-                if n != prev:
-                    nxt = n
-                    break
-        prev, cur = cur, nxt
-        ordered_idx.append(cur)
-        visited[cur] = True
-
-    # 4. Return points in traversal order
-    ordered_idx = np.array(ordered_idx, dtype=int)  # <-- ensure integer indices
-    return P[ordered_idx]
-
 import networkx as nx
 from scipy.spatial import distance_matrix
 
@@ -855,3 +803,67 @@ def mst_backbone_path(point_cloud, start_idx, end_idx):
     # Extract points
     ordered_points = point_cloud[path_indices]
     return ordered_points
+
+
+def circle_through_commissures(points, n_points=30):
+    """
+    Fit a circle through 3 commissure landmarks in 3D and return points on the circle.
+
+    Parameters
+    ----------
+    points : ndarray of shape (3, 3)
+        Commissure coordinates (x, y, z).
+    n_points : int
+        Number of points to sample along the circle.
+
+    Returns
+    -------
+    circle_points : ndarray of shape (n_points, 3)
+        Points lying on the fitted circle in 3D.
+    center : ndarray of shape (3,)
+        Circle center in 3D.
+    radius : float
+        Circle radius.
+    normal : ndarray of shape (3,)
+        Normal vector of the plane containing the circle.
+    """
+    if points.shape != (3, 3):
+        raise ValueError("Input must be a (3,3) array of commissure points in 3D")
+    points = points.astype(float)
+    A, B, C = points
+
+    # Vectors
+    AB = B - A
+    AC = C - A
+
+    # Normal vector of the circle's plane
+    normal = np.cross(AB, AC)
+    normal /= np.linalg.norm(normal)
+
+    # Midpoints
+    mid_AB = (A + B) / 2
+    mid_AC = (A + C) / 2
+
+    # Directions of perpendicular bisectors (in plane)
+    dir_AB = np.cross(normal, AB)
+    dir_AC = np.cross(normal, AC)
+
+    # Solve for intersection of bisectors -> circle center
+    M = np.column_stack((dir_AB, -dir_AC))
+    rhs = mid_AC - mid_AB
+    t, s = np.linalg.lstsq(M, rhs, rcond=None)[0]
+    center = mid_AB + t * dir_AB
+
+    # Circle radius
+    radius = np.linalg.norm(center - A)
+
+    # Build orthonormal basis in the circle plane
+    u = AB / np.linalg.norm(AB)              # first in-plane axis
+    v = np.cross(normal, u)                  # second in-plane axis (orthogonal)
+
+    # Parametric circle in plane
+    angles = np.linspace(0, 2*np.pi, n_points, endpoint=False)
+    circle_points = np.array([center + radius * (np.cos(theta) * u + np.sin(theta) * v)
+                              for theta in angles])
+    circle_points=circle_points.astype(int)
+    return circle_points
