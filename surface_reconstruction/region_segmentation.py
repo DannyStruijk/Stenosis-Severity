@@ -15,6 +15,8 @@ import nrrd
 # %% PREPROCESSING
 # READING IN THE DICOM & THE EDGE DETECTED IMAGE
 
+from scipy.ndimage import zoom, gaussian_filter
+
 # original image
 edge_detected_image = r"H:\DATA\Afstuderen\3.Data\Image Processing\aos14\gradient_magnitude.nrrd"
 
@@ -30,11 +32,21 @@ raw_volume = gf.dicom_to_matrix(dicom)
 # Convert DICOM to matrix
 
 # Decide whether to use the raw DICOM or the edge detected image, exported from 3Dslicer
-initial_volume,header = nrrd.read(edge_detected_image)
+initial_volume, header = nrrd.read(edge_detected_image)
 volume = np.transpose(initial_volume, (2,1,0))
-    
-# Histogram equalization - Increase contrast    
+
+# Extract DICOM attributes, also to reformat the image to HU units
 dicom_template = pydicom.dcmread(dicom[0][0])
+slope = float(getattr(dicom_template, "RescaleSlope", 1))
+intercept = float(getattr(dicom_template, "RescaleIntercept", 0))
+raw_volume_hu = raw_volume.astype(np.float32) * slope + intercept
+
+# Clipping the DICOM to remove calcifications
+low, high = 0, 340
+clipped_dicom = np.clip(raw_volume_hu, low, high)
+
+# Smoothing the image abit
+smoothed_dicom = gaussian_filter(clipped_dicom, sigma = 1)
 
 # Extract voxel spacing
 slice_thickness = float(dicom_template.SliceThickness)
@@ -51,14 +63,13 @@ annular_normal = functions.get_annular_normal(patient_nr)
 
 # Reorient the edge-detected image
 rescaled_volume = functions.zoom(volume, pixel_spacing)
-rescaled_volume = rescaled_volume[:, :, :]
 reoriented_volume, rotation_matrix, rotation_center = functions.reorient_volume(rescaled_volume, 
                                                                                 annular_normal, 
                                                                                 dicom_origin, 
                                                                                 pixel_spacing)
 
 # Now als do the reorientation on the regular DICOM
-rescaled_dicom = functions.zoom(raw_volume, pixel_spacing)
+rescaled_dicom = functions.zoom(smoothed_dicom, pixel_spacing)
 reoriented_dicom, rotation_matrix_dicom, rotation_center_dicom = functions.reorient_volume(rescaled_dicom,
                                                                                            annular_normal,
                                                                                            dicom_origin,
@@ -131,31 +142,6 @@ circle_points = functions.circle_through_commissures(commissures_rotated)
 circle_snake =  circle_points[:, 1:3] 
 
 
-
-
-#%% VOXELIZING & ROTATING THE VTK
-
-# Rading and loading the VTK into python
-vtk_path = r"H:\DATA\Afstuderen\2.Code\Stenosis-Severity\reconstructions\reconstructed_lcc.vtk"
-points_vtk = functions.vtk_to_pointcloud(vtk_path, dicom_origin, pixel_spacing)
-
-# Formatting the landmarks correctly 
-points_vtk_zyx = points_vtk[:, [2,1,0]].astype(float)
-points_vtk_scaled = points_vtk_zyx.astype(float)
-
-# Landmarks need to be scaled to match alignment with the zoomed volume
-points_vtk_scaled[:, 0] *= slice_thickness  # z-axis
-points_vtk_scaled[:, 1] *= pixel_spacing_y  # y-axis
-points_vtk_scaled[:, 2] *= pixel_spacing_x  # x-axis
-points_vtk_scaled_int = np.round(points_vtk_scaled).astype(int)
-
-# Rotating the VTK points using the same rotation center and matrix as priorly
-vtk_points_rotated = functions.rotate_vtk_landmarks(points_vtk_scaled, rotation_matrix, rotation_center)
-vtk_points_rotated = np.round(vtk_points_rotated).astype(int)
-
-
-
-
 # %%% PLOTTING SINGLE SLICE
 
 from skimage import exposure
@@ -166,14 +152,14 @@ slice_idx = 52
 # Extract the transversal slice
 transversal_slice = reoriented_dicom[slice_idx, :, :]
 
-# --- Increasing the contrast of the image ---
-transverse = transversal_slice.astype(np.float32)
-transverse = transverse / transverse.max()   # scale values to [0,1]
-new_transverse = exposure.equalize_adapthist(transverse, clip_limit=0.01)
+# --- Increasing the contrast of the image --- skipped for now
+# transverse = transversal_slice.astype(np.float32)
+# transverse = transverse / transverse.max()   # scale values to [0,1]
+# new_transverse = exposure.equalize_adapthist(transverse, clip_limit=0.01)
 
 # Plot the slice
 plt.figure(figsize=(6,6))
-plt.imshow(new_transverse, cmap="gray")
+plt.imshow(transversal_slice, cmap="gray")
 plt.title(f"Transversal slice at x={slice_idx}")
 plt.axis("off")
 
@@ -193,9 +179,9 @@ plt.show()
 #%% PLOTTING ENTIRE FIGURE
 
 # Loop over slice indices
-for slice_idx in range(43,49):  # or any range you want
+for slice_idx in range(43,57):  # or any range you want
     # Extract the transversal slice
-    transversal_slice = reoriented_volume[slice_idx, :, :]
+    transversal_slice = reoriented_dicom[slice_idx, :, :]
     
     # Clear the current figure
     plt.clf()
@@ -213,108 +199,9 @@ for slice_idx in range(43,49):  # or any range you want
     
     # Draw and pause
     plt.draw()
-    plt.pause(1)  # pause 2 seconds
+    plt.pause(1.5)  # pause 2 seconds
     
 plt.close()
-
-
-
-#%% ACTIVE CONTOURS INITIATION FOR SLICE x=53
-
-from skimage.filters import gaussian
-from skimage.segmentation import active_contour
-import numpy as np
-import matplotlib.pyplot as plt
-from scipy.spatial.distance import cdist
-from skimage import exposure
-
-# --- Preparing the reoriented volume and snake ---
-slice_nr = 53
-image_pre = reoriented_volume[slice_nr, :, :]
-image = exposure.equalize_hist(image_pre)   # output is in [0,1]
-
-# Extract points in this slice
-snake_list = []
-for z, y, x in vtk_points_rotated:
-    if z == slice_nr:   # use slice_nr to match the slice
-        snake_list.append((y, x))
-        
-# Remove duplicates of the snake
-snake = np.array(snake_list)  # shape (N, 2)
-unique, idx = np.unique(snake, axis=0, return_index=True)
-snake_ordered = snake[np.sort(idx)]
-
-# Find the starting point. For now that is the point in the array that is closest to commissure 1
-commissure_1 = landmarks_rotated[1][1:3]
-commissure_2 = landmarks_rotated[0][1:3]
-start_idx, start_point = functions.find_closest_point(snake_ordered, commissure_1)
-
-# Order the poins accordingly 
-backbone = functions.mst_backbone_path(snake_ordered, 9, 19)
-
-# Downsample the amount of points of the backbone, reduces snake complexity
-if len(backbone) > 2:
-    start_point = backbone[0:1]           # first point
-    end_point = backbone[-1:]             # last point
-    middle_points = backbone[1:-1]        # points in between
-    middle_points_downsampled = middle_points[::4]  # take every 2nd point
-    backbone_reduced = np.vstack([start_point, middle_points_downsampled, end_point])
-else:
-    # If backbone has only 2 points, just keep as is
-    backbone_reduced = backbone
-
-
-######## PLOTTING THE FIGURE
-
-fig, ax = plt.subplots(figsize=(6,6))
-ax.set_xlabel("X")
-ax.set_ylabel("Y")
-ax.set_title("Snake Points with Indices")
-# ax.invert_yaxis()  # optional for image coordinates
-
-# Plot all snake points
-ax.scatter(backbone_reduced[:,0], backbone_reduced[:,1], c='blue', s=60, label='Snake Points')
-
-# Label each point with its index
-for i, (x, y) in enumerate(backbone_reduced):
-    ax.text(x + 0.3, y + 0.3, str(i), color='red', fontsize=12)
-
-# Plot commissure 1
-# ax.scatter(commissure_1[0], commissure_1[1], c='green', s=100, marker='X', label='Commissure 1')
-# ax.scatter(commissure_2[0], commissure_2[1], c='blue', s=100, marker='X', label='Commissure 2')
-
-
-ax.legend()
-plt.show()
-
-# %%% PLOTTING SINGLE SLICE
-
-# Slice index (X)
-slice_idx = 53
-
-# Extract the transversal slice
-transversal_slice = image
-
-# Plot the slice
-plt.figure(figsize=(6,6))
-plt.imshow(transversal_slice, cmap="gray")
-plt.title(f"Transversal slice at x={slice_idx}")
-plt.axis("off")
-
-count = 0
-# Overlay landmarks that lie on this slice
-for z, y, x in vtk_points_rotated:
-    if z == slice_idx:  # Only plot landmarks on this slice
-        plt.scatter(x, y, c='r', s=5)  # z → horizontal, y → vertical
-        count+=1
-
-plt.scatter(commissure_1[1], commissure_1[0], c='green', s=50, marker='X', label='Commissure 1')
-ax.scatter(commissure_2[0], commissure_2[1], c='blue', s=100, marker='X', label='Commissure 2')
-
-
-    
-print(count)
-plt.show()
 
 
 # %% Create a snake
@@ -331,6 +218,9 @@ gamma = 0.1  # step size
 total_iterations = 10  # total iterations you want to observe
 
 # --- Image initialization ---
+# --- Preparing the reoriented volume and snake ---
+slice_nr = 53
+image_pre = reoriented_volume[slice_nr, :, :]
 img = image_pre.astype(np.float32)
 img = img / img.max()   # scale values to [0,1]
 new_image = exposure.equalize_adapthist(img, clip_limit=0.03)
@@ -366,6 +256,7 @@ for i in range(total_iterations):
 
 from skimage.draw import polygon2mask
 import SimpleITK as sitk 
+from scipy.ndimage import zoom
 
 # Step 1: Build ROI mask from snake
 roi_mask = polygon2mask(new_image.shape, snake_current) 
@@ -373,79 +264,39 @@ num_true = np.sum(roi_mask)
 print("Number of True pixels in mask:", num_true)
 
 # Step 2: Apply mask to the image
-reoriented_slice_dicom = reoriented_dicom[53, :, :]
-roi_image = new_transverse* roi_mask.astype(reoriented_slice_dicom.dtype)
+reoriented_slice_dicom = reoriented_dicom[55, :, :]
+roi_image = reoriented_slice_dicom* roi_mask.astype(reoriented_slice_dicom.dtype)
+
+# Upsample the slice
+upsampled_slice = zoom(roi_image, zoom = 3, order = 3)
 
 # Step 3: Show result
 plt.figure(figsize=(6,6))
-plt.imshow(roi_image, cmap='gray')
+plt.imshow(upsampled_slice, cmap='gray')
 # plt.plot(snake_current[:, 1], snake_current[:, 0], '-r', lw=1)  # overlay snake
 plt.axis('off')
 plt.show()
 
-# %%% ACTIVE CONTOURS FOR THE CUSP RECONSTRUCTION
+# %% HISTOGRAM PLOTTING
 
-from skimage import exposure
-from skimage.segmentation import active_contour
-import matplotlib.pyplot as plt
-import numpy as np
+# Flatten the ROI image and remove zeros (background)
+roi_pixels = roi_image[roi_mask]  # Only consider pixels within the ROI
 
-# --- Active contour parameters ---
-alpha = 0.0002  # elasticity (snake tension)
-beta = 0.01    # rigidity (smoothness)
-gamma = 0.001  # step size
-total_iterations = 5  # total iterations you want to observe
-
-# --- Image initialization ---
-img = image_pre.astype(np.float32)
-img = img / img.max()   # scale values to [0,1]
-new_image = exposure.equalize_adapthist(img, clip_limit=0.01)
-
-# --- Clip values below threshold ---
-threshold = 0.3   # set threshold as fraction of max intensity
-img_clipped = roi_image.copy()
-img_clipped[img_clipped < threshold] = 0
-
-# --- Show histogram ---
-# Compute statistics
-mean_intensity = np.mean(img)
-std_intensity = np.std(img)
-
-print(f"Average intensity: {mean_intensity:.4f}")
-print(f"Standard deviation: {std_intensity:.4f}")
+# Plot histogram
+plt.figure(figsize=(8, 5))
+plt.hist(roi_pixels.ravel(), bins=50, color='blue', alpha=0.7)
+plt.title("Histogram of ROI")
+plt.xlabel("Pixel Intensity")
+plt.ylabel("Frequency")
+plt.grid(True)
+plt.show()
 
 
-# --- Initialize snake ---
-snake_current = backbone_reduced.copy()
-
-# --- Iteratively update the snake ---
-for i in range(total_iterations):
-    snake_current = active_contour(
-        img_clipped,
-        snake_current,
-        alpha=alpha,
-        beta=beta,
-        gamma=gamma,
-        w_edge=0,
-        w_line=2,
-        max_num_iter=1,           # run only 1 iteration per loop
-        boundary_condition="fixed"
-    )
-    
-    # --- Plot current snake ---
-    plt.figure(figsize=(6,6))
-    plt.imshow(img_clipped, cmap='gray')
-    plt.plot(backbone_reduced[:, 1], backbone_reduced[:, 0], 'ro', markersize=1, label='Initial points')
-    plt.plot(snake_current[:, 1], snake_current[:, 0], '-b', lw=2, alpha=0.9, label=f'Snake after {i+1} iterations')
-    plt.legend()
-    plt.axis('off')
-    plt.pause(0.5)
-    plt.show()
-    
 
 # %% REGION GROWING SEGMENTATION
 
 from skimage import segmentation
+
 
 # Calculate the seed point
 lcc_corners = landmarks_rotated[[0,1,3]]
@@ -465,15 +316,54 @@ plt.show()
 
 # %% IMAGE PROCESSING TESTING
 
+from skimage.morphology import closing, disk, erosion, dilation, skeletonize
 from skimage import exposure
+import matplotlib.pyplot as plt
+import numpy as np
+from skimage.filters import threshold_otsu
 
-grad = transversal_slice 
+# roi_image: original ROI in int/float
+roi_float = roi_image.astype(np.float32)
 
-# Normalize and equalize
-img_eq = exposure.equalize_hist(grad)   # output is in [0,1]
+# Scale to [0,1] for CLAHE
+roi_float /= roi_float.max()
+roi_contrast = exposure.equalize_adapthist(roi_float, clip_limit=0.1, nbins = 32, kernel_size = 10)
+
+# otsu thresholding
+roi_pixels = roi_contrast[roi_mask]
+threshold_val = threshold_otsu(roi_pixels)  # scale to [0,1] if roi_float is normalized
+fixed_mask = (roi_contrast > threshold_val) & roi_mask
+
+# Invert mask so black lines become "foreground"
+inverted_mask = ~fixed_mask
+
+# Apply morphological closing
+closed_inverted = closing(inverted_mask, disk(2))
+eroded_foreground = closed_inverted * roi_mask
+
+# Sekeltonization in order to retrieve thin boundaries for region growing segmentation
+skeleton = skeletonize(eroded_foreground)
+
+# Invert back to original foreground-background convention
+closed_mask = ~skeleton
 
 # Plot comparison
 fig, axes = plt.subplots(1,2, figsize=(10,4))
-axes[0].imshow(image_pre, cmap='gray'); axes[0].set_title("Original gradient")
-axes[1].imshow(img_eq, cmap='gray'); axes[1].set_title("Equalized gradient")
+axes[0].imshow(skeleton, cmap='gray'); axes[0].set_title("Fixed Threshold Mask")
+axes[1].imshow(roi_contrast, cmap='gray'); axes[1].set_title("After Inverted Closing")
 plt.show()
+
+# %% REGION GROWING SEGMENTATION
+
+# Set the skeleton pixels to the minimal values to establish the boundaries
+seg_image = roi_contrast.copy()
+min_val = seg_image.min()
+seg_image[skeleton] = min_val
+
+# Show result
+plt.figure(figsize=(6,6))
+plt.imshow(seg_image, cmap='gray')
+plt.axis('off')
+plt.show()
+
+# OK - Continue if the boundariries look good. now region growing can begin. 

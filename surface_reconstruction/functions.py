@@ -506,8 +506,6 @@ def reorient_volume(volume, annular_normal, dicom_origin, spacing):
     return reoriented_volume, R, center
 
 
-
-
 def vtk_to_volume_space(surface, origin, spacing):
     """
     Transform VTK PolyData points from DICOM patient coordinates to NumPy volume voxel space.
