@@ -260,6 +260,7 @@ from scipy.ndimage import zoom
 
 # Step 1: Build ROI mask from snake
 roi_mask = polygon2mask(new_image.shape, snake_current) 
+# roi_mask =  zoom(roi_mask, zoom=2, order = 1)
 num_true = np.sum(roi_mask)
 print("Number of True pixels in mask:", num_true)
 
@@ -272,7 +273,7 @@ upsampled_slice = zoom(roi_image, zoom = 3, order = 3)
 
 # Step 3: Show result
 plt.figure(figsize=(6,6))
-plt.imshow(upsampled_slice, cmap='gray')
+plt.imshow(roi_image, cmap='gray')
 # plt.plot(snake_current[:, 1], snake_current[:, 0], '-r', lw=1)  # overlay snake
 plt.axis('off')
 plt.show()
@@ -321,6 +322,7 @@ from skimage import exposure
 import matplotlib.pyplot as plt
 import numpy as np
 from skimage.filters import threshold_otsu
+from scipy.ndimage import zoom
 
 # roi_image: original ROI in int/float
 roi_float = roi_image.astype(np.float32)
@@ -344,13 +346,17 @@ eroded_foreground = closed_inverted * roi_mask
 # Sekeltonization in order to retrieve thin boundaries for region growing segmentation
 skeleton = skeletonize(eroded_foreground)
 
+# Upsample skeleton mask
+upsampled_skeleton = zoom(skeleton.astype(float), zoom=3, order=0) > 0.5
+thicker_skeleton = dilation(upsampled_skeleton, disk(1))
+
 # Invert back to original foreground-background convention
-closed_mask = ~skeleton
+closed_mask = ~closed_inverted
 
 # Plot comparison
 fig, axes = plt.subplots(1,2, figsize=(10,4))
 axes[0].imshow(skeleton, cmap='gray'); axes[0].set_title("Fixed Threshold Mask")
-axes[1].imshow(roi_contrast, cmap='gray'); axes[1].set_title("After Inverted Closing")
+axes[1].imshow(closed_mask, cmap='gray'); axes[1].set_title("After Inverted Closing")
 plt.show()
 
 # %% REGION GROWING SEGMENTATION
@@ -367,3 +373,21 @@ plt.axis('off')
 plt.show()
 
 # OK - Continue if the boundariries look good. now region growing can begin. 
+
+from skimage import segmentation
+
+# Calculate the seed point
+lcc_corners = landmarks_rotated[[0,1,3]]
+lcc_seed = functions.midpoint_xy(lcc_corners)
+
+region_mask = segmentation.flood(seg_image, lcc_seed, tolerance=0.4)
+
+# Visualization
+plt.figure(figsize=(8, 8))
+plt.imshow(seg_image, cmap='gray')
+plt.imshow(region_mask, cmap='Reds', alpha=0.4)  # overlay mask in red
+plt.scatter(lcc_seed[1], lcc_seed[0], color='blue', s=50, label='Seed')  # note: x=col, y=row
+plt.title('Single Cusp Region Growing')
+plt.legend()
+plt.axis('off')
+plt.show()
