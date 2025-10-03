@@ -26,22 +26,12 @@ base_recon_path = r"H:\DATA\Afstuderen\3.Data\SSM"
 # Non-coronary cusp reconstruction
 ncc_path = fr"H:\DATA\Afstuderen\3.Data\SSM\patient_database\{patient_id}\landmarks\ncc_template_landmarks_test.txt"
 ncc_ctrlpts = functions.load_leaflet_landmarks(ncc_path)
-
-print("Leaflet Landmarks: ", ncc_ctrlpts)
-
 leaf_1 = functions.calc_ctrlpoints(ncc_ctrlpts, center)
-# functions.plot_control_points(leaf_1)
-
-print("Control points of NCC:", leaf_1)
-
 interpolated_leaf_1 = functions.interpolate_surface(leaf_1)
 ncc_recon_path = os.path.join(base_recon_path, "ncc", "input_patients", patient_id)
 os.makedirs(ncc_recon_path, exist_ok=True)
 functions.save_surface_evalpts(interpolated_leaf_1, os.path.join(ncc_recon_path, "ncc_points.txt"))
 functions.export_vtk(interpolated_leaf_1, os.path.join(ncc_recon_path, "reconstructed_ncc.vtk"))
-
-## TESTING OTHER COORDINATES HARD CODED
-
 
 # Left-coronary cusp reconstruction
 lcc_path = fr"H:\DATA\Afstuderen\3.Data\SSM\patient_database\{patient_id}\landmarks\lcc_template_landmarks_test.txt"
@@ -64,6 +54,4 @@ rcc_recon_path = os.path.join(base_recon_path, "rcc", "input_patients", patient_
 os.makedirs(rcc_recon_path, exist_ok=True)
 functions.save_surface_evalpts(interpolated_leaf_3, os.path.join(rcc_recon_path, "rcc_points.txt"))
 functions.export_vtk(interpolated_leaf_3, os.path.join(rcc_recon_path, "reconstructed_rcc.vtk"))
-
-# functions.plot_control_points(leaf_1)
 

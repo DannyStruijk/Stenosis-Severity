@@ -3,9 +3,6 @@ import numpy as np
 import vtk
 from geomdl import fitting
 import os
-import pyvista as pv
-import matplotlib.pyplot as plt
-import pydicom
 from scipy.ndimage import zoom
 from scipy.ndimage import affine_transform
 
@@ -767,40 +764,42 @@ def find_closest_point(points, reference_point):
     return closest_idx, closest_point
 
 
-import networkx as nx
+# THIS HAS TO BE ENABLES TO MAKE THE SNAKE WORK
+# TEMPORARILY DISABLE FOR THE DISPPLAY OF HOW SLICER WORKS
+# import networkx as nx
 from scipy.spatial import distance_matrix
 
-def mst_backbone_path(point_cloud, start_idx, end_idx):
-    """
-    Extract the backbone from a 2D point cloud as the unique path in MST
-    between start and end nodes.
+# def mst_backbone_path(point_cloud, start_idx, end_idx):
+#     """
+#     Extract the backbone from a 2D point cloud as the unique path in MST
+#     between start and end nodes.
     
-    Parameters:
-        point_cloud (np.ndarray): N x 2 array of points
-        start_idx (int): index of start point
-        end_idx (int): index of end point
+#     Parameters:
+#         point_cloud (np.ndarray): N x 2 array of points
+#         start_idx (int): index of start point
+#         end_idx (int): index of end point
     
-    Returns:
-        ordered_points (np.ndarray): points along the backbone from start to end
-    """
-    N = point_cloud.shape[0]
+#     Returns:
+#         ordered_points (np.ndarray): points along the backbone from start to end
+#     """
+#     N = point_cloud.shape[0]
     
-    # Build fully connected graph
-    dist_mat = distance_matrix(point_cloud, point_cloud)
-    G = nx.Graph()
-    for i in range(N):
-        for j in range(i+1, N):
-            G.add_edge(i, j, weight=dist_mat[i, j])
+#     # Build fully connected graph
+#     dist_mat = distance_matrix(point_cloud, point_cloud)
+#     G = nx.Graph()
+#     for i in range(N):
+#         for j in range(i+1, N):
+#             G.add_edge(i, j, weight=dist_mat[i, j])
     
-    # Compute MST
-    mst = nx.minimum_spanning_tree(G)
+#     # Compute MST
+#     mst = nx.minimum_spanning_tree(G)
     
-    # Get the unique path between start and end in the MST
-    path_indices = nx.shortest_path(mst, source=start_idx, target=end_idx, weight='weight')
+#     # Get the unique path between start and end in the MST
+#     path_indices = nx.shortest_path(mst, source=start_idx, target=end_idx, weight='weight')
     
-    # Extract points
-    ordered_points = point_cloud[path_indices]
-    return ordered_points
+#     # Extract points
+#     ordered_points = point_cloud[path_indices]
+#     return ordered_points
 
 
 def circle_through_commissures(points, n_points=30):

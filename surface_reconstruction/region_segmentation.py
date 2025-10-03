@@ -42,7 +42,7 @@ intercept = float(getattr(dicom_template, "RescaleIntercept", 0))
 raw_volume_hu = raw_volume.astype(np.float32) * slope + intercept
 
 # Clipping the DICOM to remove calcifications
-low, high = 0, 340
+low, high = -1024, 340
 clipped_dicom = np.clip(raw_volume_hu, low, high)
 
 # Smoothing the image abit
@@ -323,18 +323,26 @@ import matplotlib.pyplot as plt
 import numpy as np
 from skimage.filters import threshold_otsu
 from scipy.ndimage import zoom
+from skimage import segmentation
+from skimage.transform import rescale
 
-# roi_image: original ROI in int/float
+factor = 4 
+
+# Upsampling the image
 roi_float = roi_image.astype(np.float32)
+roi_upsampled = rescale(roi_float, factor, order=3, preserve_range=True, anti_aliasing=True).astype(roi_float.dtype)
+
+# Upsampling the mask
+roi_mask_upsampled = rescale(roi_mask, factor, order=3, preserve_range=True, anti_aliasing=False).astype(bool)
 
 # Scale to [0,1] for CLAHE
-roi_float /= roi_float.max()
-roi_contrast = exposure.equalize_adapthist(roi_float, clip_limit=0.1, nbins = 32, kernel_size = 10)
+roi_upsampled /= roi_upsampled.max()
+roi_contrast = exposure.equalize_adapthist(roi_upsampled, clip_limit=0.1, nbins = 32, kernel_size = 10)
 
 # otsu thresholding
-roi_pixels = roi_contrast[roi_mask]
+roi_pixels = roi_contrast[roi_mask_upsampled]
 threshold_val = threshold_otsu(roi_pixels)  # scale to [0,1] if roi_float is normalized
-fixed_mask = (roi_contrast > threshold_val) & roi_mask
+fixed_mask = (roi_contrast > threshold_val) & roi_mask_upsampled
 
 # Invert mask so black lines become "foreground"
 inverted_mask = ~fixed_mask
@@ -372,21 +380,27 @@ plt.imshow(seg_image, cmap='gray')
 plt.axis('off')
 plt.show()
 
-# OK - Continue if the boundariries look good. now region growing can begin. 
-
+# OK - Continue if the boundaries look good. now region growing can begin. 
 from skimage import segmentation
+from skimage.transform import rescale
 
 # Calculate the seed point
 lcc_corners = landmarks_rotated[[0,1,3]]
 lcc_seed = functions.midpoint_xy(lcc_corners)
-
 region_mask = segmentation.flood(seg_image, lcc_seed, tolerance=0.4)
+
+# Upsample both the snake, mask and skeleton by factor of four 
+factor = 4 
+skeleton_up = rescale(skeleton.astype(float), factor, order=0, preserve_range=True).astype(bool)
+seg_image_up = rescale(seg_image, factor, order=3, preserve_range=True, anti_aliasing=True).astype(seg_image.dtype)
+region_mask_up = rescale(region_mask.astype(float), factor, order=0, preserve_range=True).astype(bool)
+
 
 # Visualization
 plt.figure(figsize=(8, 8))
-plt.imshow(seg_image, cmap='gray')
-plt.imshow(region_mask, cmap='Reds', alpha=0.4)  # overlay mask in red
-plt.scatter(lcc_seed[1], lcc_seed[0], color='blue', s=50, label='Seed')  # note: x=col, y=row
+plt.imshow(seg_image_up, cmap='gray')
+# plt.imshow(region_mask_up, cmap='Reds', alpha=0.4)  # overlay mask in red
+# plt.scatter(lcc_seed[1], lcc_seed[0], color='blue', s=50, label='Seed')  # note: x=col, y=row
 plt.title('Single Cusp Region Growing')
 plt.legend()
 plt.axis('off')
