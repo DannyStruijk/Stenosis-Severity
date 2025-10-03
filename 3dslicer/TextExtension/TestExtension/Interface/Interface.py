@@ -79,25 +79,39 @@ class InterfaceWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     def populate_dicoms(self, dicom_folder):
         # Clear existing items in the dropdown
         self.ui.dicom_dropdown.clear()
-        self.ui.dicom_dropdown.addItem("Aosstress14", "T:/Research_01/CZE-2020.67 - SAVI-AoS/AoS stress/CT/Aosstress14/DICOM/000037EC/AA4EC564/AA3B0DE6/00007EA9")
+        
+        # Add all of the AoSstress patients
+        self.ui.dicom_dropdown.addItem("Patient 14", "T:/Research_01/CZE-2020.67 - SAVI-AoS/AoS stress/CT/Aosstress14/DICOM/000037EC/AA4EC564/AA3B0DE6/00007EA9")
+        self.ui.dicom_dropdown.addItem("Patient 2",  "T:/Research_01/CZE-2020.67 - SAVI-AoS/AoS stress/CT/Aosstress02/DICOM/00002C38/AA3D97B3/AA3B5B73/000062B4")
+        self.ui.dicom_dropdown.addItem("Patient 5",  "T:/Research_01/CZE-2020.67 - SAVI-AoS/AoS stress/CT/Aosstress05/DICOM/0000CD6B/AA3BA81C/AAADD92A/0000C27F")
+        self.ui.dicom_dropdown.addItem("Patient 6",  "T:/Research_01/CZE-2020.67 - SAVI-AoS/AoS stress/CT/Aosstress06/DICOM/00008A58/AA245852/AA659577/0000A0F7")
+        self.ui.dicom_dropdown.addItem("Patient 8",  "T:/Research_01/CZE-2020.67 - SAVI-AoS/AoS stress/CT/Aosstress08/DICOM/0000A996/AA934448/AA0D3303/0000F9C1")
+        self.ui.dicom_dropdown.addItem("Patient 9",  "T:/Research_01/CZE-2020.67 - SAVI-AoS/AoS stress/CT/Aosstress09/DICOM/0000B2D9/AA876FC8/AABB814D/0000534F")
+        self.ui.dicom_dropdown.addItem("Patient 11", "T:/Research_01/CZE-2020.67 - SAVI-AoS/AoS stress/CT/Aosstress11/DICOM/00006310/AAD9B219/AA824679/00004F79")
+        self.ui.dicom_dropdown.addItem("Patient 12", "T:/Research_01/CZE-2020.67 - SAVI-AoS/AoS stress/CT/Aosstress12/DICOM/0000B416/AABF5153/AA9CA582/0000799A")
+        self.ui.dicom_dropdown.addItem("Patient 13", "T:/Research_01/CZE-2020.67 - SAVI-AoS/AoS stress/CT/Aosstress13/DICOM/0000208C/AABDE934/AA243C5D/00002411")
+        self.ui.dicom_dropdown.addItem("Patient 14", "T:/Research_01/CZE-2020.67 - SAVI-AoS/AoS stress/CT/Aosstress14/DICOM/000037EC/AA4EC564/AA3B0DE6/00007EA9")
+        self.ui.dicom_dropdown.addItem("Patient 15", "T:/Research_01/CZE-2020.67 - SAVI-AoS/AoS stress/CT/Aosstress15/DICOM/00007464/AA714246/AA1B4F2E/00008A1B")
 
-                
-            
     def load_dicom_button(self):
-        # Get the path which DICOM to open
-        dicomFolderPath = self.ui.dicom_dropdown.currentData  # Get the full path stored as data
+        # Get the patient name and DICOM path from dropdown
+        patientName = self.ui.dicom_dropdown.currentText
+        dicomFolderPath = self.ui.dicom_dropdown.currentData  # <-- need () here, it's a method
+    
+        print(f"Loading DICOM data for {patientName} from {dicomFolderPath}")
+    
         loadedNodeIDs = []
         # Import DICOM folder and load the first series
         with DICOMUtils.TemporaryDICOMDatabase() as db:
             DICOMUtils.importDicom(dicomFolderPath, db)
             patientUIDs = db.patients()
             if patientUIDs:
-                    for patientUID in patientUIDs:
-                        # Load the first series (you can modify this to load a specific series if needed)
-                        loadedNodeIDs.extend(DICOMUtils.loadPatientByUID(patientUID))   
-                        print(f"Successfully loaded DICOM series for patient: {patientUIDs[0]}")                  
+                for patientUID in patientUIDs:
+                    # Load the first series (you can modify this to load a specific series if needed)
+                    loadedNodeIDs.extend(DICOMUtils.loadPatientByUID(patientUID))   
+                print(f"Successfully loaded DICOM series for {patientName}")
             else:
-                print("The DICOM folder did not contain any data")
+                print(f"The DICOM folder for {patientName} did not contain any data. Path:  {dicomFolderPath}")
             
     #%%%%%%%%%% STANDARD 3DSLICER FUNCTIONS
     def cleanup(self):
@@ -256,10 +270,12 @@ class InterfaceWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         return point_lps
 
     def import_reconstruction(self):
+        
+        # CHANGE THIS PIECE OF CODE FOR WHAT TO IMPORT
         vtk_files = [
-            r"H:\DATA\Afstuderen\2.Code\Stenosis-Severity\reconstructions\reconstructed_leaflet_1.vtk",
-            r"H:\DATA\Afstuderen\2.Code\Stenosis-Severity\reconstructions\reconstructed_leaflet_2.vtk",
-            r"H:\DATA\Afstuderen\2.Code\Stenosis-Severity\reconstructions\reconstructed_leaflet_3.vtk"
+            r"H:\DATA\Afstuderen\3.Data\SSM\lcc\input_patients\aos14\reconstructed_lcc.vtk",
+            r"H:\DATA\Afstuderen\3.Data\SSM\ncc\input_patients\aos14\reconstructed_ncc.vtk",
+            r"H:\DATA\Afstuderen\3.Data\SSM\rcc\input_patients\aos14\reconstructed_rcc.vtk"
         ]
     
         # Create one segmentation node
