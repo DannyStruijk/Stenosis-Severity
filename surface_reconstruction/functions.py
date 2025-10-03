@@ -547,9 +547,9 @@ def landmarks_to_voxel(txt_file, origin, pixel_spacing):
         np.ndarray: N x 3 array of voxel coordinates.
     """
     spacing = pixel_spacing[::-1]
-    print("Spacing" , spacing)
-    
+
     landmarks_lps = np.loadtxt(txt_file)
+    print("Coordinates: ", landmarks_lps)
     voxel_coords = (landmarks_lps-origin)/spacing
     voxel_coords = np.round(voxel_coords).astype(int)
     
@@ -559,57 +559,47 @@ import numpy as np
 
 def reorient_landmarks(landmarks_zyx, R, dicom_origin, spacing, output_shape):
     """
-    Reorient landmarks using the same affine transform as the volume.
-    The grid is the size of the original volume; output is in the rotated volume grid.
+    Reorient landmarks to match affine_transform applied to the volume.
+    Preserves all landmarks and matches the original backward mapping.
 
     Parameters
     ----------
-    landmarks_voxel : (N,3) array
-        Landmarks in voxel coordinates (x,y,z) of the original volume.
+    landmarks_zyx : (N,3) array
+        Landmarks in voxel coordinates (z,y,x) of the original volume.
     R : (3,3) array
         Rotation matrix used for the volume (zyx convention).
     dicom_origin : array-like
-        ImagePositionPatient of the first voxel (LPS), in z,y,x order.
+        Not used, kept for API.
     spacing : array-like
-        Voxel spacing (dz,dy,dx), matching z,y,x order.
-    orig_shape : tuple
-        Shape of the original volume (z,y,x)
+        Not used, kept for API.
     output_shape : tuple
         Shape of the reoriented volume (z,y,x)
 
     Returns
     -------
-    rotated_landmarks_voxel : (M,3) array
+    rotated_landmarks_voxel : (N,3) array
         Landmark coordinates in the reoriented volume grid (z,y,x order).
     """
-    # Create empty grid of the original volume size
-    landmark_grid = np.zeros(output_shape, dtype=np.uint8)
-    # Place landmarks in the grid
-    for z, y, x in landmarks_zyx:
-        landmark_grid[z, y, x] = 1
-        
-    # Check: how many 1s before rotation
-    n_before = np.count_nonzero(landmark_grid)
-    print(f"Number of landmarks before affine transform: {n_before}")
-    
-    # Inverse matrix as affine_transform is backwards mapping
-    M = np.linalg.inv(R)
-
-    # Offset so rotation is around this point, using the center of the image
+    # Center of the volume
     center = np.array(output_shape) / 2
+
+    # Affine mapping used by scipy: M = inv(R), offset = center - M @ center
+    M = np.linalg.inv(R)
     offset = center - M @ center
 
-    # Apply affine transform to match rotated volume
-    rotated_grid = affine_transform(landmark_grid, M, offset=offset, order=0)
-    
-    # Check: how many 1s before rotation
-    n_before = np.count_nonzero(rotated_grid)
-    print(f"Number of landmarks after affine transform: {n_before}")
+    # Compute output coordinates corresponding to input landmarks
+    rotated_landmarks = np.linalg.inv(M) @ (landmarks_zyx.T - offset[:, None])
+    rotated_landmarks = rotated_landmarks.T
 
-    # Extract coordinates of landmarks in the rotated volume
-    rotated_landmarks = np.argwhere(rotated_grid > 0)  # z,y,x
+    # Round to integer voxel coordinates
+    rotated_landmarks_voxel = np.round(rotated_landmarks).astype(int)
 
-    return rotated_landmarks
+    # Debug info
+    print(f"Number of landmarks before affine transform: {landmarks_zyx.shape[0]}")
+    print(f"Number of landmarks after affine transform: {rotated_landmarks_voxel.shape[0]}")
+
+    return rotated_landmarks_voxel
+
 
 
 def vtk_to_pointcloud(filename, origin, pixel_spacing):

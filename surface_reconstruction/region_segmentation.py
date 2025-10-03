@@ -42,7 +42,7 @@ intercept = float(getattr(dicom_template, "RescaleIntercept", 0))
 raw_volume_hu = raw_volume.astype(np.float32) * slope + intercept
 
 # Clipping the DICOM to remove calcifications
-low, high = -1024, 340
+low, high = 100, 340
 clipped_dicom = np.clip(raw_volume_hu, low, high)
 
 # Smoothing the image abit
@@ -76,69 +76,64 @@ reoriented_dicom, rotation_matrix_dicom, rotation_center_dicom = functions.reori
                                                                                            pixel_spacing)
 
 
-# %% PLOTTING THE ANNOTATED LANDMARKS
+# %% PLOTTING THE ANNOTATED LANDMARKS FOR ALL CUSPS
 
-# In this code the landmarks will be laid over the dicom to assure proper overlay
-# This is the original which is used
-# lps_coords = r"H:\DATA\Afstuderen\2.Code\Stenosis-Severity\annotations\ras_coordinates.txt"
+# Landmark files
+landmark_files = {
+    "LCC": r"H:\DATA\Afstuderen\3.Data\SSM\patient_database\aos14\landmarks\lcc_template_landmarks.txt",
+    "RCC": r"H:\DATA\Afstuderen\3.Data\SSM\patient_database\aos14\landmarks\rcc_template_landmarks.txt",
+    "NCC": r"H:\DATA\Afstuderen\3.Data\SSM\patient_database\aos14\landmarks\ncc_template_landmarks.txt"
+}
 
-# now i am going to try to use the lcc landmarks
-lps_coords = r"H:\DATA\Afstuderen\3.Data\SSM\patient_database\aos14\landmarks\lcc_template_landmarks.txt"
-rcc_coords = r"H:\DATA\Afstuderen\3.Data\SSM\patient_database\aos14\landmarks\rcc_template_landmarks.txt"
-ncc_coords = r"H:\DATA\Afstuderen\3.Data\SSM\patient_database\aos14\landmarks\ncc_template_landmarks.txt" 
+# Dictionary to store processed landmarks
+landmarks_rotated_dict = {}
 
-# Calculate the voxel positions of the landmarks 
-# Uses the DICOM origin and spacing in order to convert
-landmark_voxels = functions.landmarks_to_voxel(lps_coords, dicom_origin, pixel_spacing)
+# Loop over all cusps
+for cusp_name, file_path in landmark_files.items():
+    print(cusp_name, file_path)
+    # 1. Convert from LPS to voxel coordinates
+    landmark_voxels = functions.landmarks_to_voxel(file_path, dicom_origin, pixel_spacing)
+    print("Landmark_voxels: ", landmark_voxels)
+    # 2. Reorder axes for numpy indexing (z, y, x)
+    landmarks_zyx = landmark_voxels[:, [2, 1, 0]].astype(float)
+    
+    # 3. Scale according to voxel spacing
+    landmarks_scaled = landmarks_zyx.copy()
+    landmarks_scaled[:, 0] *= slice_thickness   # z-axis
+    landmarks_scaled[:, 1] *= pixel_spacing_y  # y-axis
+    landmarks_scaled[:, 2] *= pixel_spacing_x  # x-axis
+    
+    # 4. Round to integer voxel indices
+    landmarks_scaled_int = np.round(landmarks_scaled).astype(int)
+    
+    # 5. Rotate landmarks to match reoriented volume
+    landmarks_rotated = functions.reorient_landmarks(
+        landmarks_scaled_int, rotation_matrix, dicom_origin, pixel_spacing, reoriented_volume.shape
+    )
+    print("landmarks rotated are: ", landmarks_rotated)
+    
+    # Store in dictionary
+    landmarks_rotated_dict[cusp_name] = landmarks_rotated
 
-# Rescale the landmarks 
-# landmarks_voxel: N x 3 array in (z, y, x)
-landmarks_zyx = landmark_voxels[:, [2,1,0]].astype(float)
-landmarks_scaled = landmarks_zyx.astype(float)
-# print("Old: ", landmarks_scaled)
 
-# # zoom factors used for the volume
-# Landmarks need to be zoomed accordingly as the original volume is also zooemd
-landmarks_scaled[:, 0] *= slice_thickness  # z-axis
-landmarks_scaled[:, 1] *= pixel_spacing_y  # y-axis
-landmarks_scaled[:, 2] *= pixel_spacing_x  # x-axis
-landmarks_scaled_int = np.round(landmarks_scaled).astype(int)
-# print("New: ", landmarks_scaled)
-
-# # Rotate the landmarks
-output_shape = reoriented_volume.shape
-landmarks_rotated = functions.reorient_landmarks(landmarks_scaled_int, rotation_matrix, dicom_origin, pixel_spacing, output_shape)
+# Access rotated landmarks:
+lcc_rotated = landmarks_rotated_dict["LCC"]
+rcc_rotated = landmarks_rotated_dict["RCC"]
+ncc_rotated = landmarks_rotated_dict["NCC"]
 
 # %% RETRIEVE ALL OF THE DIFFERENT COORDINATES IN ORDER TO 
 
+
 # --- Load only the first landmark from each file ---
-lcc_com = functions.landmarks_to_voxel(lps_coords, dicom_origin, pixel_spacing)[0:1, :]
-rcc_com = functions.landmarks_to_voxel(rcc_coords, dicom_origin, pixel_spacing)[0:1, :]
-ncc_com = functions.landmarks_to_voxel(ncc_coords, dicom_origin, pixel_spacing)[0:1, :]
+lcc_com = lcc_rotated[0, :]
+rcc_com = rcc_rotated[0, :]
+ncc_com = ncc_rotated[0, :]
 
 # --- Combine into a single array ---
-first_landmarks_voxels = np.vstack([lcc_com, rcc_com, ncc_com])  # shape: 3 x 3
-
-# --- Rescale to (z, y, x) ---
-landmarks_zyx = first_landmarks_voxels[:, [2,1,0]].astype(float)
-landmarks_scaled = landmarks_zyx.copy()
-landmarks_scaled[:, 0] *= slice_thickness  # z-axis
-landmarks_scaled[:, 1] *= pixel_spacing_y  # y-axis
-landmarks_scaled[:, 2] *= pixel_spacing_x  # x-axis
-landmarks_scaled_int = np.round(landmarks_scaled).astype(int)
-
-# --- Rotate landmarks to match reoriented volume ---
-output_shape = reoriented_volume.shape
-commissures_rotated = functions.reorient_landmarks(
-    landmarks_scaled_int,
-    rotation_matrix,
-    dicom_origin,
-    pixel_spacing,
-    output_shape
-)
+commissures = np.vstack([lcc_com, rcc_com, ncc_com])  # shape: 3 x 3
 
 # Fit a circle through the commissures to be used in active contours
-circle_points = functions.circle_through_commissures(commissures_rotated)
+circle_points = functions.circle_through_commissures(commissures)
 circle_snake =  circle_points[:, 1:3] 
 
 
@@ -192,7 +187,7 @@ for slice_idx in range(43,57):  # or any range you want
     # plt.axis("off")
     
     # Overlay landmarks that lie on this slice
-    for z, y, x in commissures_rotated:
+    for z, y, x in commissures:
         if z == slice_idx:  # Only plot landmarks on this slice
             plt.scatter(x, y, c='r', s=1)  
             # print("Gevonden")
@@ -210,33 +205,39 @@ from skimage import exposure
 from skimage.segmentation import active_contour
 import matplotlib.pyplot as plt
 import numpy as np
+from skimage.transform import rescale
 
 # --- Active contour parameters ---
-alpha = 0.05  # elasticity (snake tension)
-beta = 5    # rigidity (smoothness)
-gamma = 0.1  # step size
-total_iterations = 10  # total iterations you want to observe
+alpha = 0.01  # elasticity (snake tension)
+beta = 0.1    # rigidity (smoothness)
+gamma = 0.01  # step size
+total_iterations = 50  # total iterations you want to observe
 
 # --- Image initialization ---
 # --- Preparing the reoriented volume and snake ---
-slice_nr = 53
+slice_nr =55
 image_pre = reoriented_volume[slice_nr, :, :]
-img = image_pre.astype(np.float32)
+
+# Upsample and normalization of both image and snake
+scale_factor = 4
+gradient_upsampled = rescale(image_pre, scale_factor, order=3, preserve_range=True, anti_aliasing=True).astype(image_pre.dtype)
+circle_snake_rescaled = circle_snake.copy() * scale_factor
+snake_current = circle_snake_rescaled
+
+# Normalization & increasing local contrast
+img = gradient_upsampled.astype(np.float32)
 img = img / img.max()   # scale values to [0,1]
 new_image = exposure.equalize_adapthist(img, clip_limit=0.03)
-
-# --- Initialize snake ---
-snake_current = circle_snake.copy()
 
 # --- Iteratively update the snake ---
 for i in range(total_iterations):
     snake_current = active_contour(
         new_image,
-        circle_snake,
+        snake_current,
         alpha=alpha,
         beta=beta,
         gamma=gamma,
-        w_edge=0,
+        w_edge=1,
         w_line=10,
         max_num_iter=1,           # run only 1 iteration per loop
         boundary_condition="periodic"
@@ -249,39 +250,50 @@ for i in range(total_iterations):
     plt.plot(snake_current[:, 1], snake_current[:, 0], '-b', lw=2, alpha=0.7, label=f'Snake after {i+1} iterations')
     plt.legend()
     plt.axis('off')
-    plt.pause(0.2)
+    plt.pause(0.01)
     plt.show()
     
 # %%% CREATE AND APPLY ROI MASK
 
 from skimage.draw import polygon2mask
-import SimpleITK as sitk 
-from scipy.ndimage import zoom
 
 # Step 1: Build ROI mask from snake
 roi_mask = polygon2mask(new_image.shape, snake_current) 
-# roi_mask =  zoom(roi_mask, zoom=2, order = 1)
 num_true = np.sum(roi_mask)
+
 print("Number of True pixels in mask:", num_true)
 
 # Step 2: Apply mask to the image
 reoriented_slice_dicom = reoriented_dicom[55, :, :]
-roi_image = reoriented_slice_dicom* roi_mask.astype(reoriented_slice_dicom.dtype)
-
-# Upsample the slice
-upsampled_slice = zoom(roi_image, zoom = 3, order = 3)
+upscaled_slice = rescale(reoriented_slice_dicom, 4, order=3, preserve_range=True, anti_aliasing=True).astype(reoriented_slice_dicom.dtype)
+roi_image = upscaled_slice* roi_mask.astype(reoriented_slice_dicom.dtype)
 
 # Step 3: Show result
 plt.figure(figsize=(6,6))
 plt.imshow(roi_image, cmap='gray')
-# plt.plot(snake_current[:, 1], snake_current[:, 0], '-r', lw=1)  # overlay snake
 plt.axis('off')
 plt.show()
 
-# %% HISTOGRAM PLOTTING
+
+
+# %% HISTOGRAM PLOTTING & WINDOWING
 
 # Flatten the ROI image and remove zeros (background)
 roi_pixels = roi_image[roi_mask]  # Only consider pixels within the ROI
+
+# Compute percentiles only within ROI
+p_low, p_high = np.percentile(roi_pixels, (30, 100))
+
+# Clip and rescale only inside ROI
+roi_windowed = np.zeros_like(roi_image, dtype=np.float32)
+roi_windowed[roi_mask] = np.clip(roi_image[roi_mask], p_low, p_high)
+roi_windowed[roi_mask] = (roi_windowed[roi_mask] - p_low) / (p_high - p_low)
+
+# Plot the new region of interest when windowing was applied
+plt.figure(figsize=(6,6))
+plt.imshow(roi_windowed, cmap='gray')
+plt.axis('off')
+plt.show()
 
 # Plot histogram
 plt.figure(figsize=(8, 5))
@@ -297,7 +309,6 @@ plt.show()
 # %% REGION GROWING SEGMENTATION
 
 from skimage import segmentation
-
 
 # Calculate the seed point
 lcc_corners = landmarks_rotated[[0,1,3]]
@@ -328,49 +339,42 @@ from skimage.transform import rescale
 
 factor = 4 
 
-# Upsampling the image
-roi_float = roi_image.astype(np.float32)
-roi_upsampled = rescale(roi_float, factor, order=3, preserve_range=True, anti_aliasing=True).astype(roi_float.dtype)
-
-# Upsampling the mask
-roi_mask_upsampled = rescale(roi_mask, factor, order=3, preserve_range=True, anti_aliasing=False).astype(bool)
-
-# Scale to [0,1] for CLAHE
-roi_upsampled /= roi_upsampled.max()
-roi_contrast = exposure.equalize_adapthist(roi_upsampled, clip_limit=0.1, nbins = 32, kernel_size = 10)
+# Rescaling to [0,1] the image
+roi_windowed = roi_windowed.astype(np.float32)
+roi_windowed/= roi_windowed.max()
 
 # otsu thresholding
-roi_pixels = roi_contrast[roi_mask_upsampled]
+roi_pixels = roi_windowed[roi_mask]
 threshold_val = threshold_otsu(roi_pixels)  # scale to [0,1] if roi_float is normalized
-fixed_mask = (roi_contrast > threshold_val) & roi_mask_upsampled
+fixed_mask = (roi_windowed > threshold_val) & roi_mask
 
 # Invert mask so black lines become "foreground"
 inverted_mask = ~fixed_mask
 
 # Apply morphological closing
-closed_inverted = closing(inverted_mask, disk(2))
+closed_inverted = dilation(inverted_mask, disk(3))
 eroded_foreground = closed_inverted * roi_mask
 
 # Sekeltonization in order to retrieve thin boundaries for region growing segmentation
 skeleton = skeletonize(eroded_foreground)
 
 # Upsample skeleton mask
-upsampled_skeleton = zoom(skeleton.astype(float), zoom=3, order=0) > 0.5
-thicker_skeleton = dilation(upsampled_skeleton, disk(1))
+thicker_skeleton = dilation(skeleton, disk(3))
 
 # Invert back to original foreground-background convention
 closed_mask = ~closed_inverted
 
-# Plot comparison
-fig, axes = plt.subplots(1,2, figsize=(10,4))
-axes[0].imshow(skeleton, cmap='gray'); axes[0].set_title("Fixed Threshold Mask")
-axes[1].imshow(closed_mask, cmap='gray'); axes[1].set_title("After Inverted Closing")
+plt.figure(figsize=(6,6))
+plt.imshow(roi_windowed, cmap='gray')           # DICOM in grayscale
+plt.imshow(thicker_skeleton, cmap='Reds', alpha=0.6)  # skeleton in red
+plt.axis('off')
+plt.title("Skeleton overlay on DICOM")
 plt.show()
 
 # %% REGION GROWING SEGMENTATION
 
 # Set the skeleton pixels to the minimal values to establish the boundaries
-seg_image = roi_contrast.copy()
+seg_image = roi_windowed.copy()
 min_val = seg_image.min()
 seg_image[skeleton] = min_val
 
