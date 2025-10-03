@@ -414,7 +414,6 @@ std_intensity = np.std(img)
 print(f"Average intensity: {mean_intensity:.4f}")
 print(f"Standard deviation: {std_intensity:.4f}")
 
-
 # --- Initialize snake ---
 snake_current = backbone_reduced.copy()
 
