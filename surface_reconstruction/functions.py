@@ -792,7 +792,7 @@ from scipy.spatial import distance_matrix
 #     return ordered_points
 
 
-def circle_through_commissures(points, n_points=30):
+def circle_through_commissures(points, n_points=50):
     """
     Fit a circle through 3 commissure landmarks in 3D and return points on the circle.
 

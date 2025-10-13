@@ -526,94 +526,109 @@ plt.show()
 
 
 
-# %% USING PYVISTA
-
-import pyvista as pv
+# %% FULL PIPELINE: Active Contour + ROI Mask + Skeletonization
+from skimage import exposure
+from skimage.segmentation import active_contour
+from skimage.transform import rescale
+from skimage.draw import polygon2mask
+from skimage.morphology import dilation, disk, skeletonize
+from skimage.filters import threshold_otsu
 import numpy as np
+import matplotlib.pyplot as plt
 
-# --- Combine all contours into one point cloud ---
-all_points = []
-for z, contour in aortic_wall_contours.items():
-    # Assign each contour its z-coordinate (slice index)
-    z_coords = np.full((contour.shape[0], 1), z * slice_thickness)  # use mm for realism
-    contour_3d = np.hstack([contour, z_coords])  # (y, x, z)
-    all_points.append(contour_3d)
+# --- Parameters ---
+alpha = 0.01
+beta = 0.1
+gamma = 0.01
+total_iterations = 20
+scale_factor = 4
 
-# Stack all into single (N, 3) array
-all_points = np.vstack(all_points)
-print(f"Total contour points: {all_points.shape[0]}")
+# --- Define z-bounds ---
+z_min_int = int(np.floor(z_min))
+z_max_int = int(np.ceil(z_max))
+print(f"Processing slices from {z_min_int} to {z_max_int}")
 
-# --- Convert to PyVista structure ---
-# PyVista expects XYZ ordering, so reorder from (y, x, z)
-points_xyz = np.column_stack([all_points[:, 1], all_points[:, 0], all_points[:, 2]])
+# --- Storage ---
+aortic_wall_contours = {}
+upsampled_snakes = {}
+skeleton_masks = {}
 
-# Create PyVista point cloud
-cloud = pv.PolyData(points_xyz)
+# --- Loop through slices ---
+for slice_nr in range(z_min_int, z_max_int + 1):
+    print(f"\nProcessing slice {slice_nr}")
+    image_pre = reoriented_volume[slice_nr, :, :]
 
-# --- Optional: connect points per slice (makes it look like rings) ---
-# Create lines for each contour slice
-lines = []
-for z, contour in aortic_wall_contours.items():
-    n = contour.shape[0]
-    pts = np.column_stack([
-        contour[:, 1],
-        contour[:, 0],
-        np.full(n, z * slice_thickness)
-    ])
-    # Connect points in a loop (close contour)
-    line = np.arange(n + 1)  # +1 to close
-    line[-1] = 0
-    lines.append(pv.Spline(pts[line], n_points=n * 2))
+    # Step 1: Upsample + enhance contrast
+    gradient_upsampled = rescale(image_pre, scale_factor, order=3, preserve_range=True, anti_aliasing=True).astype(image_pre.dtype)
+    img = gradient_upsampled.astype(np.float32)
+    img = img / img.max()
+    new_image = exposure.equalize_adapthist(img, clip_limit=0.03)
 
-# --- Plot ---
-plotter = pv.Plotter()
-plotter.set_background("black")
-
-# Add all contours as tubes or thin lines
-for spline in lines:
-    plotter.add_mesh(spline, color="cyan", line_width=2)
-
-# Optionally also show the point cloud
-plotter.add_mesh(cloud, color="yellow", point_size=3, render_points_as_spheres=True, opacity=0.3)
-
-plotter.add_axes()
-plotter.show_bounds(grid='front', location='outer')
-plotter.show(title="3D Aortic Wall Contours")
-
-# --- Plot ---
-plotter = pv.Plotter()
-plotter.set_background("black")
-
-# Determine min and max slice numbers
-z_slices = sorted(aortic_wall_contours.keys())
-z_min_slice = z_slices[0]
-z_max_slice = z_slices[-1]
-
-# Add all contours as tubes or thin lines
-for z, contour in aortic_wall_contours.items():
-    n = contour.shape[0]
-    pts = np.column_stack([
-        contour[:, 1],
-        contour[:, 0],
-        np.full(n, z * slice_thickness)
-    ])
-    line = np.arange(n + 1)
-    line[-1] = 0
-    spline = pv.Spline(pts[line], n_points=n * 2)
-
-    # Color coding
-    if z == z_min_slice:
-        color = "red"        # lowest contour
-    elif z == z_max_slice:
-        color = "green"      # highest contour
+    # Step 2: Initialize snake
+    if slice_nr == z_min_int:
+        snake_current = circle_snake.copy() * scale_factor
     else:
-        color = "cyan"       # middle ones
+        snake_current = prev_snake.copy()
 
-    plotter.add_mesh(spline, color=color, line_width=2)
+    # Step 3: Run active contour
+    for i in range(total_iterations):
+        snake_current = active_contour(
+            new_image,
+            snake_current,
+            alpha=alpha,
+            beta=beta,
+            gamma=gamma,
+            w_edge=1,
+            w_line=10,
+            max_num_iter=1,
+            boundary_condition="periodic"
+        )
 
-# Optionally also show the point cloud
-plotter.add_mesh(cloud, color="yellow", point_size=3, render_points_as_spheres=True, opacity=0.3)
+    # Step 4: Store contour
+    final_snake = snake_current / scale_factor
+    aortic_wall_contours[slice_nr] = final_snake
+    upsampled_snakes[slice_nr] = snake_current.copy()
+    prev_snake = snake_current
 
-plotter.add_axes()
-plotter.show_bounds(grid='front', location='outer')
-plotter.show(title="3D Aortic Wall Contours")
+    # ---------------------------------------------------------------------
+    # Step 5: ROI mask and skeletonization for this slice
+    # ---------------------------------------------------------------------
+    roi_mask = polygon2mask(new_image.shape, snake_current)
+    roi_image = new_image * roi_mask
+
+    # Compute percentiles inside ROI for adaptive windowing
+    roi_pixels = roi_image[roi_mask]
+    if len(roi_pixels) == 0:
+        print(f"⚠️ Empty ROI at slice {slice_nr}, skipping skeletonization.")
+        continue
+
+    p_low, p_high = np.percentile(roi_pixels, (20, 100))
+    roi_windowed = np.zeros_like(roi_image, dtype=np.float32)
+    roi_windowed[roi_mask] = np.clip(roi_image[roi_mask], p_low, p_high)
+    roi_windowed[roi_mask] = (roi_windowed[roi_mask] - p_low) / (p_high - p_low)
+
+    # Otsu thresholding only inside ROI
+    roi_pixels = roi_windowed[roi_mask]
+    threshold_val = threshold_otsu(roi_pixels)
+    fixed_mask = (roi_windowed > threshold_val) & roi_mask
+
+    # Invert to highlight dark lines and skeletonize
+    inverted_mask = ~fixed_mask
+    closed_inverted = dilation(inverted_mask, disk(1))
+    eroded_foreground = closed_inverted * roi_mask
+    skeleton = skeletonize(eroded_foreground)
+    thicker_skeleton = dilation(skeleton, disk(3))
+
+    skeleton_masks[slice_nr] = thicker_skeleton  # store result
+
+    # ---------------------------------------------------------------------
+    # Step 6: Visualization (optional)
+    # ---------------------------------------------------------------------
+    plt.figure(figsize=(6,6))
+    plt.imshow(roi_windowed, cmap='gray')
+    plt.imshow(thicker_skeleton, cmap='Reds', alpha=0.6)
+    plt.title(f"Skeleton overlay — Slice {slice_nr}")
+    plt.axis('off')
+    plt.show()
+
+print("\n✅ Completed all slices.")
