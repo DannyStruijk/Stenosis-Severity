@@ -456,6 +456,12 @@ for slice_nr in range(z_min_int, z_max_int + 1):
         plt.axis('off')
         plt.title(f"Cropped around commissures - Slice {slice_nr}")
         plt.show()
+        
+    # Temporay: storing the details of skeleton of a specific slice to pratice allocating objects
+    if slice_nr == 48:
+        temp_skeleton = skeleton.copy()
+        temp_roi_mask = roi_mask.copy()
+        temp_snake = snake_current.copy()
 
     # Store contour (downscale back to original pixel spacing)
     final_snake = snake_current / scale_factor
@@ -464,95 +470,113 @@ for slice_nr in range(z_min_int, z_max_int + 1):
     prev_snake = snake_current  # store for next slice
 
 
+
 # %% VOXELIZATION AORTIC WALL
+from skimage.morphology import binary_erosion, binary_dilation, disk, dilation
+from scipy.ndimage import gaussian_filter
+import matplotlib.pyplot as plt
+import numpy as np
+from skimage.draw import polygon2mask
 
-# --- Combine all contours into a single array ---
-aortic_wall_points = []
+# --- Step 0: Compute contour (edge) of ROI ---
+temp_skeleton_int = temp_skeleton.astype(float)
+blurred_skeleton = gaussian_filter(temp_skeleton_int, sigma =7 )
 
-for slice_nr, contour in aortic_wall_contours.items():
-    # contour is shape (num_points, 2) = (y, x)
-    z_coords = np.full((contour.shape[0], 1), slice_nr)  # slice index as z
-    contour_3d = np.hstack([z_coords, contour])          # (z, y, x)
-    aortic_wall_points.append(contour_3d)
+# --- Step 2: Check min, max and count number of 1s ---
+print(f"Min value: {blurred_skeleton.min()}")
+print(f"Max value: {blurred_skeleton.max()}")
+num_ones = np.sum(temp_skeleton_int)
+print(f"Number of 1s in skeleton: {num_ones}")
 
-# Stack all points into a single array
-aortic_wall_points = np.vstack(aortic_wall_points)
-print(f"Total points in aortic wall array: {aortic_wall_points.shape[0]}")
+# Step 3: Normalize to 0-1 for plotting
+blurred_skeleton_norm = blurred_skeleton / (blurred_skeleton.max() + 1e-8)
 
-# Initialize empty volume
-seg_aortic_wall = np.zeros_like(reoriented_volume, dtype=np.uint8)
-
-# Fill in the points from the point cloud
-for z, y, x in aortic_wall_points:
-    # Ensure indices are integers and within bounds
-    z = int(z)
-    y = int(y)
-    x = int(x)
-    if 0 <= z < seg_aortic_wall.shape[0] and 0 <= y < seg_aortic_wall.shape[1] and 0 <= x < seg_aortic_wall.shape[2]:
-        seg_aortic_wall[z, y, x] = 1
-
-print(f"Segmentation shape: {seg_aortic_wall.shape}, voxels: {np.sum(seg_aortic_wall)}")
-
-
-# Choose a slice to visualize (e.g., middle slice)
-slice_idx = 60
-
-# Check how many pixels are labeled as aortic wall on this slice
-num_aortic_voxels = np.sum(seg_aortic_wall[slice_idx])
-print(f"Slice {slice_idx} has {num_aortic_voxels} voxels labeled as aortic wall")
-
-# Extract the transversal slice
-transversal_slice = new_image
-
-# Plot the volume slice
-plt.figure(figsize=(6, 6))
-plt.imshow(transversal_slice, cmap="gray")
-plt.title(f"Transversal slice {slice_idx} with aortic wall overlay")
-
-# Overlay the segmentation in red with some transparency
-# plt.imshow(seg_aortic_wall[slice_idx], cmap="Reds", alpha=0.4)  # alpha controls transparency
-
-plt.axis("off")
+# --- Step 5: Visualization ---
+plt.figure(figsize=(6,6))
+plt.imshow(blurred_skeleton_norm, cmap='gray', alpha=1)           # show ROI for context
+plt.axis('off')
+plt.title("Contour of ROI (slice 48)")
 plt.show()
 
 
+# ----------------------------------- ACTIVE CONTOURS -----------------------------------------
+# Aortic wall should grow towards the skeleton in order to extract inner skeleton
 
-# Start inverse rotation
-inverse_rotation_matrix = np.linalg.inv(rotation_matrix)
-reoriented_aortic_wall = functions.reorient_landmarks(aortic_wall_points, inverse_rotation_matrix,
-                                            dicom_origin, pixel_spacing, reoriented_volume.shape)
+# --- Active contour parameters ---
+alpha = 0.1   # elasticity (snake tension)
+beta = 0.1     # rigidity (smoothness)
+gamma = 0.01   # step size
+total_iterations = 20  # total iterations per slice
+
+# --- Define z-bounds from landmarks (ensure int range) ---
+z_min_int = int(np.floor(z_min))
+z_max_int = int(np.ceil(z_max))
+print(f"Processing slices from {z_min_int} to {z_max_int}")
+
+# Visualization options
+show_intermediate = False #True if you want to see the intermediate iterations of the active contours
+crop_bool = True #True if you want to see the cropped version of the skeletonization
 
 
-#%% PLOTTING ENTIRE FIGURE — TWO VOLUMES
+# --------------------------------------PREPARING THE USED IMAGE ---------------------------
 
-# Loop over slice indices
-for slice_idx in range(z_min_int, z_max_int):  # using your z bounds
-    # Extract the transversal slices
-    slice_volume = reoriented_volume[slice_idx, :, :]
-    slice_dicom = reoriented_dicom[slice_idx, :, :]
+# use the saved snake from the previous calculations
+snake_current = temp_snake.copy()
+
+
+# --------------------------------------- FINDING THE AORTIC WALL --------------------------
     
-    # Mask for points on this slice
-    mask = aortic_wall_points[:, 0] == slice_idx
-    pts_on_slice = aortic_wall_points[mask]
-    
-    # --- Figure 1: Reoriented volume ---
-    plt.figure(figsize=(6,6))
-    plt.imshow(slice_volume, cmap="gray")
-    plt.title(f"Slice {slice_idx} — Reoriented volume")
-    plt.scatter(pts_on_slice[:, 2], pts_on_slice[:, 1], c='r', s=0.7)
-    plt.axis("off")
-    plt.draw()
-    plt.pause(1.5)
-    plt.close()
-    
-    # --- Figure 2: Reoriented DICOM ---
-    plt.figure(figsize=(6,6))
-    plt.imshow(slice_dicom, cmap="gray")
-    plt.title(f"Slice {slice_idx} — Reoriented DICOM")
-    plt.scatter(pts_on_slice[:, 2], pts_on_slice[:, 1], c='r', s=0.7)
-    plt.axis("off")
-    plt.draw()
-    plt.pause(1.5)
-    plt.close()
+# Iteratively update the snake
+for i in range(total_iterations):
+    snake_current = active_contour(
+        blurred_skeleton_norm,
+        snake_current,
+        alpha=alpha,
+        beta=beta,
+        gamma=gamma,
+        w_edge=1,
+        w_line=10,
+        max_num_iter=1,
+        boundary_condition="periodic"
+    )
+
+    # --- Show evolution every 5 iterations, if wanted ---
+    if show_intermediate == True: 
+        if (i + 1) % 5 == 0 or i == total_iterations - 1:
+            plt.figure(figsize=(6, 6))
+            plt.imshow(blurred_skeleton_norm, cmap="gray")
+            plt.plot(snake_current[:, 1], snake_current[:, 0], '-b', lw=2, alpha=0.8, label=f'Iteration {i+1}')
+            plt.title(f"Snake evolution of aortic wall towards skeleton")
+            plt.legend()
+            plt.axis("off")
+            plt.pause(0.05)
+            plt.show()
+            
+# --- Final visualization per slice ---
+plt.figure(figsize=(6, 6))
+plt.imshow(temp_skeleton, cmap="gray")
+plt.plot(snake_current[:, 1], snake_current[:, 0], '-r', lw=2, alpha=0.9, label='Final contour')
+plt.title(f"Final aortic wall contour — Slice {slice_nr}")
+plt.legend()
+plt.axis("off")
+plt.pause(0.1)
+plt.show()
+
+# ---------------------------------- ISOLATE THE INNER SKELETON -----------------------------------------
+
+skeleton_mask = polygon2mask(temp_skeleton.shape, snake_current) 
+num_true = np.sum(skeleton_mask)
+print("Number of True pixels in mask:", num_true)
+
+# --- Erode ROI once to make it slightly smaller ---
+roi_mask_eroded = binary_erosion(skeleton_mask)
+
+inner_skeleton = temp_skeleton* roi_mask_eroded.astype(temp_skeleton.dtype)
+
+# Step 3: Show result
+plt.figure(figsize=(6,6))
+plt.imshow(inner_skeleton, cmap='gray')
+plt.axis('off')
+plt.show()
 
 
