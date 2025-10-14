@@ -271,6 +271,15 @@ from skimage.segmentation import active_contour
 from skimage.transform import rescale
 import numpy as np
 import matplotlib.pyplot as plt
+from skimage.morphology import closing, disk, erosion, dilation, skeletonize
+from skimage import exposure
+import matplotlib.pyplot as plt
+import numpy as np
+from skimage.filters import threshold_otsu
+from skimage.transform import rescale
+from skimage.draw import polygon2mask
+
+# ------------------------------------- INITIALIZING VARIABLES FOR ACTIVE CONTOURS ------------------
 
 # --- Active contour parameters ---
 alpha = 0.01   # elasticity (snake tension)
@@ -288,14 +297,27 @@ print(f"Processing slices from {z_min_int} to {z_max_int}")
 aortic_wall_contours = {}
 upsampled_snakes = {}
 
+# Initialize empty snake, needed for iteration
+prev_snake = 0
+
+# Visualization options
+show_intermediate = False #True if you want to see the intermediate iterations of the active contours
+crop_bool = True #True if you want to see the cropped version of the skeletonization
+
+
+# --------------------------------------PREPARING THE USED IMAGE ---------------------------
+
 # --- Loop through relevant slices ---
 for slice_nr in range(z_min_int, z_max_int + 1):
+    
     image_pre = reoriented_volume[slice_nr, :, :]
 
     # Upsample image
     gradient_upsampled = rescale(image_pre, scale_factor, order=3, preserve_range=True, anti_aliasing=True).astype(image_pre.dtype)
     img = gradient_upsampled.astype(np.float32)
     img = img / img.max()  # normalize to [0,1]
+    
+    # Increase local contrast
     new_image = exposure.equalize_adapthist(img, clip_limit=0.03)
 
     # Initialize snake — reuse previous one or start from circle
@@ -305,7 +327,10 @@ for slice_nr in range(z_min_int, z_max_int + 1):
         # Use the previous contour as initialization (propagation)
         snake_current = prev_snake.copy()
 
-    # --- Iteratively update the snake ---
+
+    # --------------------------------------- FINDING THE AORTIC WALL --------------------------
+    
+    # Iteratively update the snake
     for i in range(total_iterations):
         snake_current = active_contour(
             new_image,
@@ -319,16 +344,118 @@ for slice_nr in range(z_min_int, z_max_int + 1):
             boundary_condition="periodic"
         )
 
-        # # --- Show evolution every 5 iterations ---
-        # if (i + 1) % 5 == 0 or i == total_iterations - 1:
-        #     plt.figure(figsize=(6, 6))
-        #     plt.imshow(new_image, cmap="gray")
-        #     plt.plot(snake_current[:, 1], snake_current[:, 0], '-b', lw=2, alpha=0.8, label=f'Iteration {i+1}')
-        #     plt.title(f"Snake evolution — Slice {slice_nr}, Iteration {i+1}")
-        #     plt.legend()
-        #     plt.axis("off")
-        #     plt.pause(0.05)
-        #     plt.show()
+        # --- Show evolution every 5 iterations, if wanted ---
+        if show_intermediate == True: 
+            if (i + 1) % 5 == 0 or i == total_iterations - 1:
+                plt.figure(figsize=(6, 6))
+                plt.imshow(new_image, cmap="gray")
+                plt.plot(snake_current[:, 1], snake_current[:, 0], '-b', lw=2, alpha=0.8, label=f'Iteration {i+1}')
+                plt.title(f"Snake evolution — Slice {slice_nr}, Iteration {i+1}")
+                plt.legend()
+                plt.axis("off")
+                plt.pause(0.05)
+                plt.show()
+                
+    # --- Final visualization per slice ---
+    plt.figure(figsize=(6, 6))
+    plt.imshow(new_image, cmap="gray")
+    plt.plot(snake_current[:, 1], snake_current[:, 0], '-r', lw=2, alpha=0.9, label='Final contour')
+    plt.title(f"Final aortic wall contour — Slice {slice_nr}")
+    plt.legend()
+    plt.axis("off")
+    plt.pause(0.1)
+    plt.show()
+
+    
+    # -----------------------------------------BUILD ROI ----------------------------------------
+    
+    # Step 1: Build ROI mask from snake
+    roi_mask = polygon2mask(new_image.shape, snake_current) 
+    num_true = np.sum(roi_mask)
+    print("Number of True pixels in mask:", num_true)
+
+    # Step 2: Apply mask to the image
+    reoriented_slice_dicom = reoriented_dicom[slice_nr, :, :]
+    upscaled_slice = rescale(reoriented_slice_dicom, 4, order=3, preserve_range=True, anti_aliasing=True).astype(reoriented_slice_dicom.dtype)
+    roi_image = upscaled_slice* roi_mask.astype(reoriented_slice_dicom.dtype)
+    
+    # Step 3: Show result
+    plt.figure(figsize=(6,6))
+    plt.imshow(upscaled_slice, cmap='gray')
+    plt.axis('off')
+    plt.show()
+
+    # Flatten the ROI image and remove zeros (background)
+    roi_pixels = roi_image[roi_mask]  # Only consider pixels within the ROI
+
+    # Compute percentiles only within ROI
+    p_low, p_high = np.percentile(roi_pixels, (10, 100))
+
+    # Clip and rescale only inside ROI
+    roi_windowed = np.zeros_like(roi_image, dtype=np.float32)
+    roi_windowed[roi_mask] = np.clip(roi_image[roi_mask], p_low, p_high)
+    roi_windowed[roi_mask] = (roi_windowed[roi_mask] - p_low) / (p_high - p_low)
+
+
+
+    # ---------------------------------------- SKELETONIZATION -----------------------------------
+    # Rescaling to [0,1] the image
+    roi_windowed = roi_windowed.astype(np.float32)
+    roi_windowed/= roi_windowed.max()
+
+    # otsu thresholding
+    roi_pixels = roi_windowed[roi_mask]
+    threshold_val = threshold_otsu(roi_pixels)  # scale to [0,1] if roi_float is normalized
+    fixed_mask = (roi_windowed > threshold_val) & roi_mask
+
+    # Invert mask so black lines become "foreground"
+    inverted_mask = ~fixed_mask
+
+    # Apply morphological closing
+    closed_inverted = dilation(inverted_mask, disk(3))
+    eroded_foreground = closed_inverted * roi_mask
+
+    # Sekeltonization in order to retrieve thin boundaries for region growing segmentation
+    skeleton = skeletonize(eroded_foreground)
+
+    # Upsample skeleton mask
+    thicker_skeleton = dilation(skeleton, disk(3))
+
+    # Invert back to original foreground-background convention
+    closed_mask = ~closed_inverted
+
+    # optional: if False, the full picture will be visualized
+    if crop_bool == False:
+        plt.figure(figsize=(6,6))
+        plt.imshow(roi_windowed, cmap='gray')           # DICOM in grayscale
+        plt.imshow(thicker_skeleton, cmap='Reds', alpha=0.6)  # skeleton in red
+        plt.axis('off')
+        plt.title(f"Skeleton overlay on DICOM - Slice {slice_nr}")
+        plt.show()
+     
+    # optional: Zoom in on the aortic valve based on the commissures
+    else:
+        # commissures: each (x, y)
+        points = np.array([lcc_com, rcc_com, ncc_com])*4
+        x_min, x_max = points[:, 2].min(), points[:, 2].max()  # x = index 2
+        y_min, y_max = points[:, 1].min(), points[:, 1].max()  # y = index 1
+        
+        # add optional padding (e.g. 10 pixels)
+        pad = 100
+        x_min, x_max = int(x_min - pad), int(x_max + pad)
+        y_min, y_max = int(y_min - pad), int(y_max + pad)
+        
+        # crop the ROI
+        cropped_roi = new_image[y_min:y_max, x_min:x_max]
+        cropped_skeleton = thicker_skeleton[y_min:y_max, x_min:x_max]
+        
+        # visualize cropped region
+        plt.figure(figsize=(6,6))
+        plt.imshow(cropped_roi, cmap='gray')
+        plt.imshow(cropped_skeleton, cmap='Reds', alpha=0.4)
+        plt.axis('off')
+        plt.title(f"Cropped around commissures - Slice {slice_nr}")
+        plt.show()
 
     # Store contour (downscale back to original pixel spacing)
     final_snake = snake_current / scale_factor
@@ -336,15 +463,6 @@ for slice_nr in range(z_min_int, z_max_int + 1):
     upsampled_snakes[slice_nr] = snake_current.copy()  
     prev_snake = snake_current  # store for next slice
 
-    # --- Final visualization per slice ---
-    plt.figure(figsize=(6, 6))
-    plt.imshow(new_image, cmap="gray")
-    # plt.plot(snake_current[:, 1], snake_current[:, 0], '-r', lw=2, alpha=0.9, label='Final contour')
-    plt.title(f"Final aortic wall contour — Slice {slice_nr}")
-    plt.legend()
-    plt.axis("off")
-    plt.pause(0.1)
-    plt.show()
 
 # %% VOXELIZATION AORTIC WALL
 
@@ -438,182 +556,3 @@ for slice_idx in range(z_min_int, z_max_int):  # using your z bounds
     plt.close()
 
 
-
-# %%% CREATE AND APPLY ROI MASK
-
-from skimage.draw import polygon2mask
-
-# Step 1: Build ROI mask from snake
-roi_mask = polygon2mask(new_image.shape, snake_current) 
-num_true = np.sum(roi_mask)
-
-print("Number of True pixels in mask:", num_true)
-
-
-
-# Step 2: Apply mask to the image
-reoriented_slice_dicom = reoriented_dicom[51, :, :]
-upscaled_slice = rescale(reoriented_slice_dicom, 4, order=3, preserve_range=True, anti_aliasing=True).astype(reoriented_slice_dicom.dtype)
-roi_image = upscaled_slice* roi_mask.astype(reoriented_slice_dicom.dtype)
-
-# Step 3: Show result
-plt.figure(figsize=(6,6))
-plt.imshow(upscaled_slice, cmap='gray')
-plt.axis('off')
-plt.show()
-
-# Flatten the ROI image and remove zeros (background)
-roi_pixels = roi_image[roi_mask]  # Only consider pixels within the ROI
-
-# Compute percentiles only within ROI
-p_low, p_high = np.percentile(roi_pixels, (20, 100))
-
-# Clip and rescale only inside ROI
-roi_windowed = np.zeros_like(roi_image, dtype=np.float32)
-roi_windowed[roi_mask] = np.clip(roi_image[roi_mask], p_low, p_high)
-roi_windowed[roi_mask] = (roi_windowed[roi_mask] - p_low) / (p_high - p_low)
-
-# Plot the new region of interest when windowing was applied
-plt.figure(figsize=(6,6))
-plt.imshow(roi_windowed, cmap='gray')
-plt.axis('off')
-plt.show()
-
-# %% SKELETONIZATION
-
-from skimage.morphology import closing, disk, erosion, dilation, skeletonize
-from skimage import exposure
-import matplotlib.pyplot as plt
-import numpy as np
-from skimage.filters import threshold_otsu
-from scipy.ndimage import zoom
-from skimage import segmentation
-from skimage.transform import rescale
-
-factor = 4 
-
-# Rescaling to [0,1] the image
-roi_windowed = roi_windowed.astype(np.float32)
-roi_windowed/= roi_windowed.max()
-
-# otsu thresholding
-roi_pixels = roi_windowed[roi_mask]
-threshold_val = threshold_otsu(roi_pixels)  # scale to [0,1] if roi_float is normalized
-fixed_mask = (roi_windowed > threshold_val) & roi_mask
-
-# Invert mask so black lines become "foreground"
-inverted_mask = ~fixed_mask
-
-# Apply morphological closing
-closed_inverted = dilation(inverted_mask, disk(1))
-eroded_foreground = closed_inverted * roi_mask
-
-# Sekeltonization in order to retrieve thin boundaries for region growing segmentation
-skeleton = skeletonize(eroded_foreground)
-
-# Upsample skeleton mask
-thicker_skeleton = dilation(skeleton, disk(3))
-
-# Invert back to original foreground-background convention
-closed_mask = ~closed_inverted
-
-plt.figure(figsize=(6,6))
-plt.imshow(roi_windowed, cmap='gray')           # DICOM in grayscale
-plt.imshow(thicker_skeleton, cmap='Reds', alpha=0.6)  # skeleton in red
-plt.axis('off')
-plt.title("Skeleton overlay on DICOM - Slice")
-plt.show()
-
-
-
-# %% USING PYVISTA
-
-import pyvista as pv
-import numpy as np
-
-# --- Combine all contours into one point cloud ---
-all_points = []
-for z, contour in aortic_wall_contours.items():
-    # Assign each contour its z-coordinate (slice index)
-    z_coords = np.full((contour.shape[0], 1), z * slice_thickness)  # use mm for realism
-    contour_3d = np.hstack([contour, z_coords])  # (y, x, z)
-    all_points.append(contour_3d)
-
-# Stack all into single (N, 3) array
-all_points = np.vstack(all_points)
-print(f"Total contour points: {all_points.shape[0]}")
-
-# --- Convert to PyVista structure ---
-# PyVista expects XYZ ordering, so reorder from (y, x, z)
-points_xyz = np.column_stack([all_points[:, 1], all_points[:, 0], all_points[:, 2]])
-
-# Create PyVista point cloud
-cloud = pv.PolyData(points_xyz)
-
-# --- Optional: connect points per slice (makes it look like rings) ---
-# Create lines for each contour slice
-lines = []
-for z, contour in aortic_wall_contours.items():
-    n = contour.shape[0]
-    pts = np.column_stack([
-        contour[:, 1],
-        contour[:, 0],
-        np.full(n, z * slice_thickness)
-    ])
-    # Connect points in a loop (close contour)
-    line = np.arange(n + 1)  # +1 to close
-    line[-1] = 0
-    lines.append(pv.Spline(pts[line], n_points=n * 2))
-
-# --- Plot ---
-plotter = pv.Plotter()
-plotter.set_background("black")
-
-# Add all contours as tubes or thin lines
-for spline in lines:
-    plotter.add_mesh(spline, color="cyan", line_width=2)
-
-# Optionally also show the point cloud
-plotter.add_mesh(cloud, color="yellow", point_size=3, render_points_as_spheres=True, opacity=0.3)
-
-plotter.add_axes()
-plotter.show_bounds(grid='front', location='outer')
-plotter.show(title="3D Aortic Wall Contours")
-
-# --- Plot ---
-plotter = pv.Plotter()
-plotter.set_background("black")
-
-# Determine min and max slice numbers
-z_slices = sorted(aortic_wall_contours.keys())
-z_min_slice = z_slices[0]
-z_max_slice = z_slices[-1]
-
-# Add all contours as tubes or thin lines
-for z, contour in aortic_wall_contours.items():
-    n = contour.shape[0]
-    pts = np.column_stack([
-        contour[:, 1],
-        contour[:, 0],
-        np.full(n, z * slice_thickness)
-    ])
-    line = np.arange(n + 1)
-    line[-1] = 0
-    spline = pv.Spline(pts[line], n_points=n * 2)
-
-    # Color coding
-    if z == z_min_slice:
-        color = "red"        # lowest contour
-    elif z == z_max_slice:
-        color = "green"      # highest contour
-    else:
-        color = "cyan"       # middle ones
-
-    plotter.add_mesh(spline, color=color, line_width=2)
-
-# Optionally also show the point cloud
-plotter.add_mesh(cloud, color="yellow", point_size=3, render_points_as_spheres=True, opacity=0.3)
-
-plotter.add_axes()
-plotter.show_bounds(grid='front', location='outer')
-plotter.show(title="3D Aortic Wall Contours")
