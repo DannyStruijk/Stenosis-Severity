@@ -5,6 +5,8 @@ from geomdl import fitting
 import os
 from scipy.ndimage import zoom
 from scipy.ndimage import affine_transform
+from skimage.draw import polygon2mask
+from skimage.morphology import dilation, disk
 
 def export_vtk(surface, filename="surface.vtk"):
     """
@@ -875,3 +877,103 @@ def midpoint_xy(points):
     mid_y = np.mean(points[:, 2]).astype(int)
 
     return tuple((mid_x, mid_y))
+
+def closest_contour_point(point_yx, contour):
+    """Return index of contour point closest to given (y,x) point."""
+    dists = np.linalg.norm(contour - point_yx, axis=1)
+    return int(np.argmin(dists))
+
+
+# def contour_segment(contour, i_start, i_end):
+#     """
+#     Extracts the *shortest* segment between two indices on a closed contour.
+
+#     contour : (N, 2) array of [y, x] coordinates
+#     i_start, i_end : integer indices on the contour
+#     """
+#     contour = np.asarray(contour)
+
+#     # Forward path (i_start -> i_end)
+#     if i_start <= i_end:
+#         seg1 = contour[i_start:i_end + 1]
+#     else:
+#         seg1 = np.vstack((contour[i_start:], contour[:i_end + 1]))
+
+#     # Reverse path (i_end -> i_start)
+#     if i_end <= i_start:
+#         seg2 = contour[i_end:i_start + 1]
+#     else:
+#         seg2 = np.vstack((contour[i_end:], contour[:i_start + 1]))
+
+#     # Return whichever is shorter
+#     if len(seg1) <= len(seg2):
+#         return seg1
+#     else:
+#         return seg2
+    
+def contour_segment(contour, i_start, i_end):
+    """
+    Extract the shortest segment along a closed contour using geometric distance.
+    """
+    N = len(contour)
+    
+    # Forward path
+    if i_start <= i_end:
+        seg_fwd = contour[i_start:i_end+1]
+    else:
+        seg_fwd = np.vstack([contour[i_start:], contour[:i_end+1]])
+    dist_fwd = np.sum(np.linalg.norm(np.diff(seg_fwd, axis=0), axis=1))
+    
+    # Reverse path
+    if i_end <= i_start:
+        seg_rev = contour[i_end:i_start+1][::-1]
+    else:
+        seg_rev = np.vstack([contour[i_end:], contour[:i_start+1]])[::-1]
+    dist_rev = np.sum(np.linalg.norm(np.diff(seg_rev, axis=0), axis=1))
+    
+    # Return the shorter one
+    return seg_fwd if dist_fwd <= dist_rev else seg_rev
+
+    
+def create_boundary_mask(center, contour, hinge_idx_1, hinge_idx_2, segment, upscaled, inner_skeleton):
+    """
+    Create a leaflet boundary mask and masked skeleton region between two hinges.
+
+    Parameters
+    ----------
+    center : np.ndarray
+        (y, x) coordinates of the leaflet center.
+    contour : np.ndarray
+        Full aortic wall contour (Nx2).
+    hinge_idx_1, hinge_idx_2 : int
+        Indices of the two hinges on the contour.
+    segment : np.ndarray
+        Contour segment between hinge_idx_1 and hinge_idx_2.
+    upscaled : np.ndarray
+        The upscaled DICOM image for visualization/mask sizing.
+    inner_skeleton : np.ndarray
+        The skeleton image to extract leaflet boundaries from.
+
+    Returns
+    -------
+    mask : np.ndarray
+        Binary mask for this leaflet region.
+    boundary : np.ndarray
+        Masked portion of the skeleton corresponding to this boundary.
+    polygon : np.ndarray
+        Closed polygon coordinates defining the region.
+    """
+
+    polygon = np.vstack([
+        center,
+        contour[hinge_idx_1],
+        segment,
+        contour[hinge_idx_2],
+        center
+    ])
+
+    mask = polygon2mask(upscaled.shape, polygon)
+    # mask = dilation(mask, disk(3)) optional dilation if you want it to be robuster
+    boundary = inner_skeleton * mask
+
+    return mask, boundary
