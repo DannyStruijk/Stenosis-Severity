@@ -7,6 +7,7 @@ from scipy.ndimage import zoom
 from scipy.ndimage import affine_transform
 from skimage.draw import polygon2mask
 from skimage.morphology import dilation, disk
+from scipy.interpolate import splprep, splev
 
 def export_vtk(surface, filename="surface.vtk"):
     """
@@ -914,21 +915,22 @@ def closest_contour_point(point_yx, contour):
 def contour_segment(contour, i_start, i_end):
     """
     Extract the shortest segment along a closed contour using geometric distance.
+    Note: previously it counted 1 point more but that is now removed due to the overlap it caused.
     """
     N = len(contour)
     
     # Forward path
     if i_start <= i_end:
-        seg_fwd = contour[i_start:i_end+1]
+        seg_fwd = contour[i_start:i_end]
     else:
-        seg_fwd = np.vstack([contour[i_start:], contour[:i_end+1]])
+        seg_fwd = np.vstack([contour[i_start:], contour[:i_end]])
     dist_fwd = np.sum(np.linalg.norm(np.diff(seg_fwd, axis=0), axis=1))
     
     # Reverse path
     if i_end <= i_start:
-        seg_rev = contour[i_end:i_start+1][::-1]
+        seg_rev = contour[i_end:i_start][::-1]
     else:
-        seg_rev = np.vstack([contour[i_end:], contour[:i_start+1]])[::-1]
+        seg_rev = np.vstack([contour[i_end:], contour[:i_start]])[::-1]
     dist_rev = np.sum(np.linalg.norm(np.diff(seg_rev, axis=0), axis=1))
     
     # Return the shorter one
@@ -977,3 +979,141 @@ def create_boundary_mask(center, contour, hinge_idx_1, hinge_idx_2, segment, ups
     boundary = inner_skeleton * mask
 
     return mask, boundary
+
+
+def resample_closed_contour(contour, n_points=100):
+    """
+    Resample a closed 2D contour to have n_points (arc-length parameterization).
+    """
+    x, y = contour[:, 1], contour[:, 0]
+    # Ensure the contour is closed
+    if not np.allclose(contour[0], contour[-1]):
+        x = np.append(x, x[0])
+        y = np.append(y, y[0])
+
+    # Fit a periodic spline
+    tck, _ = splprep([x, y], s=0, per=True)
+    u_new = np.linspace(0, 1, n_points)
+    x_new, y_new = splev(u_new, tck)
+    return np.vstack([y_new, x_new]).T  # return in (row, col) order
+
+
+from skimage.transform import rescale
+import matplotlib.pyplot as plt
+
+def find_all_boundary_intersections(
+    upscaled,
+    seg_lcc_ncc,
+    seg_rcc_lcc,
+    seg_ncc_rcc,
+    lcc_ncc_boundary,
+    rcc_lcc_boundary,
+    ncc_rcc_boundary,
+    slice_idx,
+    plot=True,
+):
+    """
+    Compute intersection points between each Mercedes star boundary
+    (LCC–NCC, RCC–LCC, NCC–RCC) and its corresponding leaflet wall segment.
+
+    Parameters
+    ----------
+    upscaled : ndarray
+        Upscaled 2D DICOM slice.
+    seg_lcc_ncc, seg_rcc_lcc, seg_ncc_rcc : ndarray
+        Arrays of shape (N, 2) with (y, x) coordinates of leaflet-specific wall segments.
+    LCC_data, RCC_data, NCC_data : dict
+        Dictionaries containing Mercedes star boundaries per slice.
+    slice_idx : int
+        Current slice index.
+    plot : bool, optional
+        If True, visualize all boundaries, wall segments, and intersection points.
+
+    Returns
+    -------
+    intersections : dict
+        Dictionary containing intersection coordinates per boundary:
+        {
+            "lcc_ncc": (y, x) or None,
+            "rcc_lcc": (y, x) or None,
+            "ncc_rcc": (y, x) or None
+        }
+    """
+
+    # Define boundaries with corresponding wall segments
+    boundaries = {
+        "lcc_ncc": (lcc_ncc_boundary, seg_lcc_ncc, "cyan"),
+        "rcc_lcc": (rcc_lcc_boundary, seg_rcc_lcc, "magenta"),
+        "ncc_rcc": (ncc_rcc_boundary, seg_ncc_rcc, "green"),
+    }
+
+    intersections = {}
+
+    # Process each boundary and its corresponding wall segment
+    for name, (boundary, wall_segment, color) in boundaries.items():
+        y_true, x_true = np.where(boundary)
+        if len(x_true) < 2:
+            intersections[name] = None
+            continue
+
+        # Fit line y = m*x + b
+        m, b = np.polyfit(x_true, y_true, 1)
+        x_line = np.linspace(0, upscaled.shape[1] - 1, 500)
+        y_line = m * x_line + b
+        line_points = np.vstack((y_line, x_line)).T
+
+        # Find closest intersection with leaflet-specific wall
+        seg_y, seg_x = wall_segment[:, 0], wall_segment[:, 1]
+        seg_points = np.vstack((seg_y, seg_x)).T
+
+        distances = np.linalg.norm(seg_points[:, None, :] - line_points[None, :, :], axis=2)
+        idx_seg, idx_line = np.unravel_index(np.argmin(distances), distances.shape)
+        intersection = seg_points[idx_seg]
+        intersections[name] = tuple(intersection)
+
+    # Visualization
+    if plot:
+        plt.figure(figsize=(6, 6))
+        plt.imshow(upscaled, cmap="gray")
+
+        for name, (boundary, wall_segment, color) in boundaries.items():
+            plt.contour(boundary, levels=[0.5], colors=color, linewidths=2)
+            plt.plot(wall_segment[:, 1], wall_segment[:, 0], '-', color=color, lw=1.5, alpha=0.8)
+            if intersections[name] is not None:
+                plt.plot(intersections[name][1], intersections[name][0], 'or', markersize=6)
+
+        plt.title(f"Mercedes Star Intersections — Slice {slice_idx}")
+        plt.axis("off")
+        plt.tight_layout()
+        plt.show()
+
+    return intersections
+
+
+
+
+
+from skimage.measure import label, regionprops
+import numpy as np
+
+def clean_boundary_from_mask(mask):
+    """
+    Extract the largest connected component from a binary mask 
+    and return its coordinates in (y, x) order.
+    """
+    labeled = label(mask)  # label connected components
+    if labeled.max() == 0:
+        return np.zeros((0, 2), dtype=int)  # empty mask
+
+    # Find the largest connected component
+    regions = regionprops(labeled)
+    largest_region = max(regions, key=lambda r: r.area)
+    
+    # Get coordinates of all pixels in that component
+    coords = largest_region.coords  # Nx2 array of (y, x)
+
+    # Optional: sort points along the contour if needed
+    # If you just want them as is (any order), you can skip this
+
+    return coords
+

@@ -77,11 +77,13 @@ reoriented_dicom, rotation_matrix_dicom, rotation_center_dicom = functions.reori
 
 # %% PLOTTING THE ANNOTATED LANDMARKS FOR ALL CUSPS
 
+
+# Use the _test files if you want to have the recently newly annotated landmarks of 3Dslicer
 # Landmark files
 landmark_files = {
-    "LCC": r"H:\DATA\Afstuderen\3.Data\SSM\patient_database\aos14\landmarks\lcc_template_landmarks.txt",
-    "RCC": r"H:\DATA\Afstuderen\3.Data\SSM\patient_database\aos14\landmarks\rcc_template_landmarks.txt",
-    "NCC": r"H:\DATA\Afstuderen\3.Data\SSM\patient_database\aos14\landmarks\ncc_template_landmarks.txt"
+    "LCC": r"H:\DATA\Afstuderen\3.Data\SSM\patient_database\aos14\landmarks\lcc_template_landmarks_test.txt",
+    "RCC": r"H:\DATA\Afstuderen\3.Data\SSM\patient_database\aos14\landmarks\rcc_template_landmarks_test.txt",
+    "NCC": r"H:\DATA\Afstuderen\3.Data\SSM\patient_database\aos14\landmarks\ncc_template_landmarks_test.txt"
 }
 
 # Dictionary to store processed landmarks
@@ -439,10 +441,14 @@ for slice_nr, slice_info in slice_data.items():  # or use range(len(slice_data))
 
     # --- Active contour refinement ---
     temp_skeleton = slice_info["skeleton"]
-    snake_current = slice_info["snake"].copy()
+    downsampled_snake = slice_info["snake"].copy()  # downsampled version
+    snake_current = functions.resample_closed_contour(downsampled_snake)
+
+    # Preparing the image for the active contours    
     blurred_skeleton_norm = gaussian_filter(temp_skeleton.astype(float), sigma=7)
     blurred_skeleton_norm /= blurred_skeleton_norm.max() + 1e-8
 
+    # Active contours
     for i in range(total_iterations):
         snake_current = active_contour(
             blurred_skeleton_norm,
@@ -462,10 +468,9 @@ for slice_nr, slice_info in slice_data.items():  # or use range(len(slice_data))
     inner_skeleton = temp_skeleton * roi_mask_eroded.astype(temp_skeleton.dtype)
 
     # First slice: find and store the closest points
-    if slice_nr == z_min:
-        prev_lcc_ncc_idx = functions.closest_contour_point(lcc_ncc_com, snake_current)
-        prev_rcc_lcc_idx = functions.closest_contour_point(rcc_lcc_com, snake_current)
-        prev_ncc_rcc_idx = functions.closest_contour_point(ncc_rcc_com, snake_current)
+    prev_lcc_ncc_idx = functions.closest_contour_point(lcc_ncc_com, snake_current)
+    prev_rcc_lcc_idx = functions.closest_contour_point(rcc_lcc_com, snake_current)
+    prev_ncc_rcc_idx = functions.closest_contour_point(ncc_rcc_com, snake_current)
     
     # Use stored indices for this slice
     lcc_ncc_idx = prev_lcc_ncc_idx
@@ -478,10 +483,11 @@ for slice_nr, slice_info in slice_data.items():  # or use range(len(slice_data))
     i_rcc = functions.closest_contour_point(rcc_rotated[2][1:3]*scale_factor, aortic_wall_contour)
     i_ncc = functions.closest_contour_point(ncc_rotated[2][1:3]*scale_factor, aortic_wall_contour)
 
-    # --- Create contour segments ---
+    # --- Create contour segments - i.e. the part of the aortic wall that belongs to the aortic leaflet ---
     seg_lcc_ncc = functions.contour_segment(aortic_wall_contour, i_lcc, i_ncc)
     seg_ncc_rcc = functions.contour_segment(aortic_wall_contour, i_ncc, i_rcc)
     seg_rcc_lcc = functions.contour_segment(aortic_wall_contour, i_rcc, i_lcc)
+
 
     # --- Create leaflet-specific masks and boundaries ---
     center = lcc_rotated[3][1:3]*scale_factor
@@ -489,16 +495,47 @@ for slice_nr, slice_info in slice_data.items():  # or use range(len(slice_data))
     lcc_ncc_mask, lcc_ncc_boundary = functions.create_boundary_mask(center, aortic_wall_contour, i_lcc, i_ncc, seg_lcc_ncc, upscaled, inner_skeleton)
     rcc_lcc_mask, rcc_lcc_boundary = functions.create_boundary_mask(center, aortic_wall_contour, i_rcc, i_lcc, seg_rcc_lcc, upscaled, inner_skeleton)
     ncc_rcc_mask, ncc_rcc_boundary = functions.create_boundary_mask(center, aortic_wall_contour, i_ncc, i_rcc, seg_ncc_rcc, upscaled, inner_skeleton)
-
-    # Find the point on the contour that is closest to the commissure. Do this once
-    if slice_nr == z_min_int:
-        prev_lcc_ncc_com_idx = functions.closest_contour_point(lcc_ncc_com, snake_current)
-        prev_rcc_lcc_com_idx = functions.closest_contour_point(rcc_lcc_com, snake_current)
-        prev_ncc_rcc_com_idx = functions.closest_contour_point(ncc_rcc_com, snake_current)
     
-    lcc_ncc_com_idx = prev_lcc_ncc_com_idx
-    rcc_lcc_com_idx = prev_rcc_lcc_com_idx
-    ncc_rcc_com_idx = prev_ncc_rcc_com_idx
+    # Boundaries need to be cleaned, removing outliers which are not part of the bigger structure
+    cleaned_lcc_ncc_boundary = functions.clean_boundary_from_mask(lcc_ncc_boundary)
+    cleaned_rcc_lcc_boundary = functions.clean_boundary_from_mask(rcc_lcc_boundary)
+    cleaned_ncc_rcc_boundary = functions.clean_boundary_from_mask(ncc_rcc_boundary)
+    
+    
+    #--- Define commissures depending on slice ---
+    if slice_nr == z_min:
+        # Base slice: use regular commissures
+        lcc_ncc_com_idx = functions.closest_contour_point(lcc_ncc_com, snake_current)
+        rcc_lcc_com_idx = functions.closest_contour_point(rcc_lcc_com, snake_current)
+        ncc_rcc_com_idx = functions.closest_contour_point(ncc_rcc_com, snake_current)
+    
+    else:
+        # Try to find the new commissures via intersection
+        intersections = functions.find_all_boundary_intersections(
+            upscaled,
+            seg_lcc_ncc,
+            seg_rcc_lcc,
+            seg_ncc_rcc,
+            cleaned_lcc_ncc_boundary,
+            cleaned_rcc_lcc_boundary,
+            cleaned_ncc_rcc_boundary,
+            slice_idx=slice_nr,
+            plot=True,
+        )
+    
+        # Initialize fallback commissure indices (use regular ones first)
+        lcc_ncc_com_idx = functions.closest_contour_point(lcc_ncc_com, snake_current)
+        rcc_lcc_com_idx = functions.closest_contour_point(rcc_lcc_com, snake_current)
+        ncc_rcc_com_idx = functions.closest_contour_point(ncc_rcc_com, snake_current)
+    
+        # Replace only if a valid intersection is found
+        if intersections.get("lcc_ncc") is not None:
+            lcc_ncc_com_idx = functions.closest_contour_point(intersections["lcc_ncc"], snake_current)
+        if intersections.get("rcc_lcc") is not None:
+            rcc_lcc_com_idx = functions.closest_contour_point(intersections["rcc_lcc"], snake_current)
+        if intersections.get("ncc_rcc") is not None:
+            ncc_rcc_com_idx = functions.closest_contour_point(intersections["ncc_rcc"], snake_current)
+
     
     # --- COM-to-COM segments for actual leaflet boundaries ---
     seg_c2c = {
@@ -510,22 +547,22 @@ for slice_nr, slice_info in slice_data.items():  # or use range(len(slice_data))
     # Store in leaflet-specific dictionaries
     LCC_data[slice_nr] = {
         "mask": lcc_ncc_mask,
-        "lcc_ncc_boundary": lcc_ncc_boundary,
-        "rcc_lcc_boundary": rcc_lcc_boundary,
+        "lcc_ncc_boundary": cleaned_lcc_ncc_boundary,
+        "rcc_lcc_boundary": cleaned_rcc_lcc_boundary,
         "com_to_com": seg_c2c["LCC"]
     }
     
     RCC_data[slice_nr] = {
         "mask": rcc_lcc_mask,
-        "rcc_lcc_boundary": rcc_lcc_boundary,
-        "ncc_rcc_boundary": ncc_rcc_boundary,
+        "rcc_lcc_boundary": cleaned_rcc_lcc_boundary,
+        "ncc_rcc_boundary": cleaned_ncc_rcc_boundary,
         "com_to_com": seg_c2c["RCC"]
     }
     
     NCC_data[slice_nr] = {
         "mask": ncc_rcc_mask,
-        "ncc_rcc_boundary": ncc_rcc_boundary,
-        "lcc_ncc_boundary": lcc_ncc_boundary,
+        "ncc_rcc_boundary": cleaned_ncc_rcc_boundary,
+        "lcc_ncc_boundary": cleaned_lcc_ncc_boundary,
         "com_to_com": seg_c2c["NCC"]
     }
 
@@ -535,7 +572,7 @@ for slice_nr, slice_info in slice_data.items():  # or use range(len(slice_data))
     
     # COM-to-COM segments (actual leaflet wall boundaries)
     plt.plot(seg_c2c["LCC"][:, 1], seg_c2c["LCC"][:, 0], color='cyan', lw=3, label='LCC')
-    plt.plot(seg_c2c["RCC"][:, 1], seg_c2c["RCC"][:, 0], color='magenta', lw=3, label='RCC')
+    plt.plot(seg_c2c["RCC"][:, 1], seg_c2c["RCC"][:, 0], color='green', lw=3, label='RCC')
     plt.plot(seg_c2c["NCC"][:, 1], seg_c2c["NCC"][:, 0], color='magenta', lw=3, label='NCC')
     plt.contour(lcc_ncc_boundary, levels=[0.5], colors='cyan', linewidths=2)
     plt.contour(rcc_lcc_boundary, levels=[0.5], colors='cyan', linewidths=2)
@@ -580,3 +617,107 @@ for slice_idx in range(z_min_slice, z_max_slice + 1):
     plt.axis('off')
     plt.show()
 
+
+# %% TESTING MERCEDES STAR DICTATES THE AORTIC WALL FOR THE LEAFLET
+
+import functions
+
+# Retrieve and plot
+slice_mercedes = 49
+
+# Get the upsampled DICOM slice
+reoriented_slice = reoriented_dicom[slice_mercedes, :, :]
+upscaled = rescale(reoriented_slice, scale_factor, order=3, preserve_range=True, anti_aliasing=True).astype(reoriented_slice.dtype)
+
+# Upsample the circle snake
+downsampled_snake = slice_data[slice_mercedes]["snake"]
+upsampled_snake = functions.resample_closed_contour(downsampled_snake)
+
+# Grab the boundaries to determine the seperation marks of the aortic wall
+mercedes_lcc_ncc = LCC_data[slice_mercedes]["lcc_ncc_boundary"]
+mercedes_rcc_lcc = LCC_data[slice_mercedes]["rcc_lcc_boundary"]
+mercedes_ncc_rcc = NCC_data[slice_mercedes]["ncc_rcc_boundary"]
+
+cleaned_mercedes_rcc_lcc = functions.clean_boundary_from_mask(mercedes_rcc_lcc)
+
+# Visualization
+plt.figure(figsize=(6, 6))
+plt.imshow(upscaled, cmap="gray")
+# plt.plot(downsampled_snake[:, 1], downsampled_snake[:, 0], '-b', lw=2, alpha=0.8, label='Upsampled Snake')
+
+# Overlay Mercedes star boundaries
+plt.contour(mercedes_lcc_ncc, levels=[0.5], colors='cyan', linewidths=2)
+# cleaned_mercedes_rcc_lcc is now Nx2 array
+plt.plot(cleaned_mercedes_rcc_lcc[:, 1], cleaned_mercedes_rcc_lcc[:, 0], color='magenta', lw=2)
+
+plt.contour(mercedes_ncc_rcc, levels=[0.5], colors='green', linewidths=2)
+
+# Formatting
+plt.title(f"Mercedes Star & Aortic Wall — Slice {slice_mercedes}")
+plt.axis("off")
+plt.legend(loc="lower right", frameon=False)
+plt.tight_layout()
+plt.show()
+
+
+# --- Extract the LCC–NCC boundary points ---
+y_true, x_true = cleaned_mercedes_rcc_lcc[:, 0], cleaned_mercedes_rcc_lcc[:, 1]
+
+if len(x_true) > 1:
+    # Fit a line y = m*x + b through the True pixels (least squares)
+    m, b = np.polyfit(x_true, y_true, 1)
+
+    # Compute line coordinates spanning the image
+    x_line = np.linspace(0, upscaled.shape[1]-1, 500)
+    y_line = m * x_line + b
+
+    # --- Find aortic wall (snake) coordinates ---
+    snake_y, snake_x = upsampled_snake[:, 0], upsampled_snake[:, 1]
+
+    # --- Compute intersection point with the snake ---
+    # Find closest point on the snake to the line (min distance)
+    line_points = np.vstack((y_line, x_line)).T
+    snake_points = np.vstack((snake_y, snake_x)).T
+    distances = np.linalg.norm(
+        snake_points[:, None, :] - line_points[None, :, :],
+        axis=2
+    )
+    idx_snake, idx_line = np.unravel_index(np.argmin(distances), distances.shape)
+    intersection = snake_points[idx_snake]
+
+    # --- Visualization ---
+    plt.figure(figsize=(6, 6))
+    plt.imshow(upscaled, cmap="gray")
+    plt.contour(cleaned_mercedes_rcc_lcc, levels=[0.5], colors='cyan', linewidths=5, label='LCC–NCC boundary')
+    plt.plot(x_line, y_line, '--r', lw=2, label='Fitted line through boundary')
+    plt.plot(snake_x, snake_y, '-b', lw=1.5, alpha=0.8, label='Aortic wall (snake)')
+    plt.plot(intersection[1], intersection[0], 'or', markersize=6, label='Intersection')
+
+    plt.title(f"LCC–NCC Boundary & Intersection — Slice {slice_mercedes}")
+    plt.axis("off")
+    plt.legend(loc="lower right", frameon=False)
+    plt.tight_layout()
+    plt.show()
+
+    print(f"Intersection point (y, x): {intersection}")
+else:
+    print("LCC–NCC boundary has no True pixels or insufficient points for line fitting.")
+
+
+# %% TESTING IT LOOPED
+
+import functions
+
+all_intersections = {}
+
+for slice_idx in range(z_min, z_max):
+    all_intersections[49] = functions.find_all_boundary_intersections(
+        slice_idx,
+        reoriented_dicom,
+        scale_factor,
+        slice_data,
+        LCC_data,
+        RCC_data,
+        NCC_data,
+        plot=True  # disable plotting for speed
+    )
