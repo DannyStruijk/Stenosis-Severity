@@ -998,7 +998,6 @@ def resample_closed_contour(contour, n_points=100):
     return np.vstack([y_new, x_new]).T  # return in (row, col) order
 
 
-from skimage.transform import rescale
 import matplotlib.pyplot as plt
 
 def find_all_boundary_intersections(
@@ -1012,35 +1011,11 @@ def find_all_boundary_intersections(
     slice_idx,
     plot=True,
 ):
-    """
-    Compute intersection points between each Mercedes star boundary
-    (LCC–NCC, RCC–LCC, NCC–RCC) and its corresponding leaflet wall segment.
 
-    Parameters
-    ----------
-    upscaled : ndarray
-        Upscaled 2D DICOM slice.
-    seg_lcc_ncc, seg_rcc_lcc, seg_ncc_rcc : ndarray
-        Arrays of shape (N, 2) with (y, x) coordinates of leaflet-specific wall segments.
-    LCC_data, RCC_data, NCC_data : dict
-        Dictionaries containing Mercedes star boundaries per slice.
-    slice_idx : int
-        Current slice index.
-    plot : bool, optional
-        If True, visualize all boundaries, wall segments, and intersection points.
+    # print(f"LCC-NCC boundary shape: {None if seg_lcc_ncc is None else seg_lcc_ncc.shape}")
+    # print(f"RCC-LCC boundary shape: {None if seg_rcc_lcc is None else seg_rcc_lcc.shape}")
+    # print(f"NCC-RCC boundary shape: {None if seg_ncc_rcc is None else seg_ncc_rcc.shape}")
 
-    Returns
-    -------
-    intersections : dict
-        Dictionary containing intersection coordinates per boundary:
-        {
-            "lcc_ncc": (y, x) or None,
-            "rcc_lcc": (y, x) or None,
-            "ncc_rcc": (y, x) or None
-        }
-    """
-
-    # Define boundaries with corresponding wall segments
     boundaries = {
         "lcc_ncc": (lcc_ncc_boundary, seg_lcc_ncc, "cyan"),
         "rcc_lcc": (rcc_lcc_boundary, seg_rcc_lcc, "magenta"),
@@ -1048,28 +1023,39 @@ def find_all_boundary_intersections(
     }
 
     intersections = {}
+    line_data = {}  # store line points for plotting
 
-    # Process each boundary and its corresponding wall segment
     for name, (boundary, wall_segment, color) in boundaries.items():
-        y_true, x_true = np.where(boundary)
+        if boundary is None or wall_segment is None or len(wall_segment) < 2:
+            intersections[name] = None
+            continue
+
+        y_true, x_true = boundary[:, 0], boundary[:, 1]
         if len(x_true) < 2:
             intersections[name] = None
             continue
 
-        # Fit line y = m*x + b
-        m, b = np.polyfit(x_true, y_true, 1)
-        x_line = np.linspace(0, upscaled.shape[1] - 1, 500)
-        y_line = m * x_line + b
-        line_points = np.vstack((y_line, x_line)).T
+        try:
+            # Fit line y = m*x + b
+            m, b = np.polyfit(x_true, y_true, 1)
+            x_line = np.linspace(0, upscaled.shape[1] - 1, 500)
+            y_line = m * x_line + b
+            line_points = np.vstack((y_line, x_line)).T
+            line_data[name] = (x_line, y_line)
 
-        # Find closest intersection with leaflet-specific wall
-        seg_y, seg_x = wall_segment[:, 0], wall_segment[:, 1]
-        seg_points = np.vstack((seg_y, seg_x)).T
+            # Find closest intersection with wall
+            seg_y, seg_x = wall_segment[:, 0], wall_segment[:, 1]
+            seg_points = np.vstack((seg_y, seg_x)).T
 
-        distances = np.linalg.norm(seg_points[:, None, :] - line_points[None, :, :], axis=2)
-        idx_seg, idx_line = np.unravel_index(np.argmin(distances), distances.shape)
-        intersection = seg_points[idx_seg]
-        intersections[name] = tuple(intersection)
+            distances = np.linalg.norm(seg_points[:, None, :] - line_points[None, :, :], axis=2)
+            idx_seg, idx_line = np.unravel_index(np.argmin(distances), distances.shape)
+            intersection = seg_points[idx_seg]
+            intersections[name] = tuple(intersection)
+
+        except Exception as e:
+            print(f"[Warning] Could not compute intersection for {name}: {e}")
+            intersections[name] = None
+            line_data[name] = None
 
     # Visualization
     if plot:
@@ -1077,10 +1063,15 @@ def find_all_boundary_intersections(
         plt.imshow(upscaled, cmap="gray")
 
         for name, (boundary, wall_segment, color) in boundaries.items():
-            plt.contour(boundary, levels=[0.5], colors=color, linewidths=2)
-            plt.plot(wall_segment[:, 1], wall_segment[:, 0], '-', color=color, lw=1.5, alpha=0.8)
-            if intersections[name] is not None:
-                plt.plot(intersections[name][1], intersections[name][0], 'or', markersize=6)
+            if boundary is not None:
+                # plt.contour(boundary, levels=[0.5], colors=color, linewidths=2)
+                if wall_segment is not None and len(wall_segment) > 1:
+                    plt.plot(wall_segment[:, 1], wall_segment[:, 0], '-', color=color, lw=1.5, alpha=0.8)
+                if name in line_data and line_data[name] is not None:
+                    x_line, y_line = line_data[name]
+                    plt.plot(x_line, y_line, '--', color=color, lw=1.2, alpha=0.8)  # show polyfit line
+                if intersections[name] is not None:
+                    plt.plot(intersections[name][1], intersections[name][0], 'or', markersize=6)
 
         plt.title(f"Mercedes Star Intersections — Slice {slice_idx}")
         plt.axis("off")

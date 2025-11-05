@@ -488,7 +488,6 @@ for slice_nr, slice_info in slice_data.items():  # or use range(len(slice_data))
     seg_ncc_rcc = functions.contour_segment(aortic_wall_contour, i_ncc, i_rcc)
     seg_rcc_lcc = functions.contour_segment(aortic_wall_contour, i_rcc, i_lcc)
 
-
     # --- Create leaflet-specific masks and boundaries ---
     center = lcc_rotated[3][1:3]*scale_factor
 
@@ -496,21 +495,29 @@ for slice_nr, slice_info in slice_data.items():  # or use range(len(slice_data))
     rcc_lcc_mask, rcc_lcc_boundary = functions.create_boundary_mask(center, aortic_wall_contour, i_rcc, i_lcc, seg_rcc_lcc, upscaled, inner_skeleton)
     ncc_rcc_mask, ncc_rcc_boundary = functions.create_boundary_mask(center, aortic_wall_contour, i_ncc, i_rcc, seg_ncc_rcc, upscaled, inner_skeleton)
     
-    # Boundaries need to be cleaned, removing outliers which are not part of the bigger structure
+    # --- Clean boundaries ---
     cleaned_lcc_ncc_boundary = functions.clean_boundary_from_mask(lcc_ncc_boundary)
     cleaned_rcc_lcc_boundary = functions.clean_boundary_from_mask(rcc_lcc_boundary)
     cleaned_ncc_rcc_boundary = functions.clean_boundary_from_mask(ncc_rcc_boundary)
     
+    print(cleaned_lcc_ncc_boundary.shape)
+    print(cleaned_rcc_lcc_boundary.shape)
+    print(cleaned_ncc_rcc_boundary.shape)
     
-    #--- Define commissures depending on slice ---
-    if slice_nr == z_min:
-        # Base slice: use regular commissures
-        lcc_ncc_com_idx = functions.closest_contour_point(lcc_ncc_com, snake_current)
-        rcc_lcc_com_idx = functions.closest_contour_point(rcc_lcc_com, snake_current)
-        ncc_rcc_com_idx = functions.closest_contour_point(ncc_rcc_com, snake_current)
     
-    else:
-        # Try to find the new commissures via intersection
+    # --- Define commissures (default: regular commissures) ---
+    lcc_ncc_com_idx = functions.closest_contour_point(lcc_ncc_com, snake_current)
+    rcc_lcc_com_idx = functions.closest_contour_point(rcc_lcc_com, snake_current)
+    ncc_rcc_com_idx = functions.closest_contour_point(ncc_rcc_com, snake_current)
+    
+    intersections = {
+    "lcc_ncc": None,
+    "rcc_lcc": None,
+    "ncc_rcc": None
+    }
+    
+    # --- If not the base slice, try to refine commissures via intersection ---
+    if slice_nr != z_min:
         intersections = functions.find_all_boundary_intersections(
             upscaled,
             seg_lcc_ncc,
@@ -523,19 +530,13 @@ for slice_nr, slice_info in slice_data.items():  # or use range(len(slice_data))
             plot=True,
         )
     
-        # Initialize fallback commissure indices (use regular ones first)
-        lcc_ncc_com_idx = functions.closest_contour_point(lcc_ncc_com, snake_current)
-        rcc_lcc_com_idx = functions.closest_contour_point(rcc_lcc_com, snake_current)
-        ncc_rcc_com_idx = functions.closest_contour_point(ncc_rcc_com, snake_current)
-    
-        # Replace only if a valid intersection is found
+        # Replace only if valid intersections are found
         if intersections.get("lcc_ncc") is not None:
             lcc_ncc_com_idx = functions.closest_contour_point(intersections["lcc_ncc"], snake_current)
         if intersections.get("rcc_lcc") is not None:
             rcc_lcc_com_idx = functions.closest_contour_point(intersections["rcc_lcc"], snake_current)
         if intersections.get("ncc_rcc") is not None:
             ncc_rcc_com_idx = functions.closest_contour_point(intersections["ncc_rcc"], snake_current)
-
     
     # --- COM-to-COM segments for actual leaflet boundaries ---
     seg_c2c = {
@@ -620,10 +621,13 @@ for slice_idx in range(z_min_slice, z_max_slice + 1):
 
 # %% TESTING MERCEDES STAR DICTATES THE AORTIC WALL FOR THE LEAFLET
 
+import numpy as np
+import matplotlib.pyplot as plt
+from skimage.transform import rescale
 import functions
 
-# Retrieve and plot
-slice_mercedes = 49
+# --- Parameters ---
+slice_mercedes = 47
 
 # Get the upsampled DICOM slice
 reoriented_slice = reoriented_dicom[slice_mercedes, :, :]
@@ -633,75 +637,70 @@ upscaled = rescale(reoriented_slice, scale_factor, order=3, preserve_range=True,
 downsampled_snake = slice_data[slice_mercedes]["snake"]
 upsampled_snake = functions.resample_closed_contour(downsampled_snake)
 
-# Grab the boundaries to determine the seperation marks of the aortic wall
+# Grab the Mercedes star boundaries
 mercedes_lcc_ncc = LCC_data[slice_mercedes]["lcc_ncc_boundary"]
 mercedes_rcc_lcc = LCC_data[slice_mercedes]["rcc_lcc_boundary"]
 mercedes_ncc_rcc = NCC_data[slice_mercedes]["ncc_rcc_boundary"]
 
-cleaned_mercedes_rcc_lcc = functions.clean_boundary_from_mask(mercedes_rcc_lcc)
+# Collect all in a dict for looping
+boundaries = {
+    "LCC–NCC": mercedes_lcc_ncc,
+    "RCC–LCC": mercedes_rcc_lcc,
+    "NCC–RCC": mercedes_ncc_rcc,
+}
+colors = {
+    "LCC–NCC": "cyan",
+    "RCC–LCC": "magenta",
+    "NCC–RCC": "green",
+}
 
-# Visualization
-plt.figure(figsize=(6, 6))
-plt.imshow(upscaled, cmap="gray")
-# plt.plot(downsampled_snake[:, 1], downsampled_snake[:, 0], '-b', lw=2, alpha=0.8, label='Upsampled Snake')
+# --- Loop over each boundary for independent visualization ---
+for name, boundary in boundaries.items():
+    plt.figure(figsize=(6, 6))
+    plt.imshow(upscaled, cmap="gray")
 
-# Overlay Mercedes star boundaries
-plt.contour(mercedes_lcc_ncc, levels=[0.5], colors='cyan', linewidths=2)
-# cleaned_mercedes_rcc_lcc is now Nx2 array
-plt.plot(cleaned_mercedes_rcc_lcc[:, 1], cleaned_mercedes_rcc_lcc[:, 0], color='magenta', lw=2)
+    # Some boundaries are binary masks, others arrays of (y,x)
+    if boundary.ndim == 2 and boundary.dtype == bool:
+        y_true, x_true = np.where(boundary)
+        plt.contour(boundary, levels=[0.5], colors=colors[name], linewidths=2)
+    else:
+        y_true, x_true = boundary[:, 0], boundary[:, 1]
+        plt.plot(x_true, y_true, '-', color=colors[name], lw=2, label=f"{name} boundary")
 
-plt.contour(mercedes_ncc_rcc, levels=[0.5], colors='green', linewidths=2)
+    # Skip empty ones
+    if len(x_true) < 4:
+        plt.title(f"{name}: insufficient points")
+        plt.axis("off")
+        plt.show()
+        continue
 
-# Formatting
-plt.title(f"Mercedes Star & Aortic Wall — Slice {slice_mercedes}")
-plt.axis("off")
-plt.legend(loc="lower right", frameon=False)
-plt.tight_layout()
-plt.show()
-
-
-# --- Extract the LCC–NCC boundary points ---
-y_true, x_true = cleaned_mercedes_rcc_lcc[:, 0], cleaned_mercedes_rcc_lcc[:, 1]
-
-if len(x_true) > 1:
-    # Fit a line y = m*x + b through the True pixels (least squares)
+    # --- Fit line ---
     m, b = np.polyfit(x_true, y_true, 1)
-
-    # Compute line coordinates spanning the image
     x_line = np.linspace(0, upscaled.shape[1]-1, 500)
     y_line = m * x_line + b
+    plt.plot(x_line, y_line, '--r', lw=2, label=f"Fitted line ({name})")
 
-    # --- Find aortic wall (snake) coordinates ---
+    # --- Intersection with wall (snake) ---
     snake_y, snake_x = upsampled_snake[:, 0], upsampled_snake[:, 1]
-
-    # --- Compute intersection point with the snake ---
-    # Find closest point on the snake to the line (min distance)
-    line_points = np.vstack((y_line, x_line)).T
     snake_points = np.vstack((snake_y, snake_x)).T
-    distances = np.linalg.norm(
-        snake_points[:, None, :] - line_points[None, :, :],
-        axis=2
-    )
+    line_points = np.vstack((y_line, x_line)).T
+    distances = np.linalg.norm(snake_points[:, None, :] - line_points[None, :, :], axis=2)
     idx_snake, idx_line = np.unravel_index(np.argmin(distances), distances.shape)
     intersection = snake_points[idx_snake]
 
-    # --- Visualization ---
-    plt.figure(figsize=(6, 6))
-    plt.imshow(upscaled, cmap="gray")
-    plt.contour(cleaned_mercedes_rcc_lcc, levels=[0.5], colors='cyan', linewidths=5, label='LCC–NCC boundary')
-    plt.plot(x_line, y_line, '--r', lw=2, label='Fitted line through boundary')
+    # --- Plot snake & intersection ---
     plt.plot(snake_x, snake_y, '-b', lw=1.5, alpha=0.8, label='Aortic wall (snake)')
     plt.plot(intersection[1], intersection[0], 'or', markersize=6, label='Intersection')
 
-    plt.title(f"LCC–NCC Boundary & Intersection — Slice {slice_mercedes}")
+    # --- Formatting ---
+    plt.title(f"{name} Boundary & Intersection — Slice {slice_mercedes}")
     plt.axis("off")
     plt.legend(loc="lower right", frameon=False)
     plt.tight_layout()
     plt.show()
 
-    print(f"Intersection point (y, x): {intersection}")
-else:
-    print("LCC–NCC boundary has no True pixels or insufficient points for line fitting.")
+    print(f"{name}: slope={m:.3f}, intercept={b:.3f}, intersection (y,x)={intersection}")
+
 
 
 # %% TESTING IT LOOPED
@@ -709,15 +708,23 @@ else:
 import functions
 
 all_intersections = {}
+slice_idx=46
+
+
+# Get the upsampled DICOM slice
+reoriented_slice = reoriented_dicom[slice_idx, :, :]
+upscaled = rescale(reoriented_slice, scale_factor, order=3, preserve_range=True, anti_aliasing=True).astype(reoriented_slice.dtype)
+
 
 for slice_idx in range(z_min, z_max):
-    all_intersections[49] = functions.find_all_boundary_intersections(
-        slice_idx,
+    all_intersections[slice_idx] = functions.find_all_boundary_intersections(
+        upscaled,
         reoriented_dicom,
         scale_factor,
         slice_data,
         LCC_data,
         RCC_data,
         NCC_data,
+        46,
         plot=True  # disable plotting for speed
     )
