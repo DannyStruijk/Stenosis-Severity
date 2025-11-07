@@ -430,7 +430,6 @@ ncc_rcc_com = rcc_com[1:3] * 4
 
 center = lcc_rotated[3][1:3] * 4
 
-
 # Loop over slices
 for slice_nr, slice_info in slice_data.items():  # or use range(len(slice_data))
     print(f"Processing slice {slice_nr}...")
@@ -467,18 +466,16 @@ for slice_nr, slice_info in slice_data.items():  # or use range(len(slice_data))
     roi_mask_eroded = binary_erosion(skeleton_mask)
     inner_skeleton = temp_skeleton * roi_mask_eroded.astype(temp_skeleton.dtype)
 
-    # First slice: find and store the closest points
-    prev_lcc_ncc_idx = functions.closest_contour_point(lcc_ncc_com, snake_current)
-    prev_rcc_lcc_idx = functions.closest_contour_point(rcc_lcc_com, snake_current)
-    prev_ncc_rcc_idx = functions.closest_contour_point(ncc_rcc_com, snake_current)
+    # Upsample the contour in order to more accurately find the indices of commissures and hinge points
+    aortic_wall_contour = functions.resample_closed_contour(snake_current)
+    # aortic_wall_contour = snake_current
     
-    # Use stored indices for this slice
-    lcc_ncc_idx = prev_lcc_ncc_idx
-    rcc_lcc_idx = prev_rcc_lcc_idx
-    ncc_rcc_idx = prev_ncc_rcc_idx
-
-    # --- Find hinge indices on contour ---
-    aortic_wall_contour = snake_current
+    # find and store the closest points to the commissures
+    lcc_ncc_idx = functions.closest_contour_point(lcc_ncc_com, aortic_wall_contour)
+    rcc_lcc_idx = functions.closest_contour_point(rcc_lcc_com, aortic_wall_contour)
+    ncc_rcc_idx = functions.closest_contour_point(ncc_rcc_com, aortic_wall_contour)
+    
+    # find and store the closest points to the hinge points
     i_lcc = functions.closest_contour_point(lcc_rotated[2][1:3]*scale_factor, aortic_wall_contour)
     i_rcc = functions.closest_contour_point(rcc_rotated[2][1:3]*scale_factor, aortic_wall_contour)
     i_ncc = functions.closest_contour_point(ncc_rotated[2][1:3]*scale_factor, aortic_wall_contour)
@@ -489,26 +486,20 @@ for slice_nr, slice_info in slice_data.items():  # or use range(len(slice_data))
     seg_rcc_lcc = functions.contour_segment(aortic_wall_contour, i_rcc, i_lcc)
 
     # --- Create leaflet-specific masks and boundaries ---
-    center = lcc_rotated[3][1:3]*scale_factor
-
     lcc_ncc_mask, lcc_ncc_boundary = functions.create_boundary_mask(center, aortic_wall_contour, i_lcc, i_ncc, seg_lcc_ncc, upscaled, inner_skeleton)
     rcc_lcc_mask, rcc_lcc_boundary = functions.create_boundary_mask(center, aortic_wall_contour, i_rcc, i_lcc, seg_rcc_lcc, upscaled, inner_skeleton)
     ncc_rcc_mask, ncc_rcc_boundary = functions.create_boundary_mask(center, aortic_wall_contour, i_ncc, i_rcc, seg_ncc_rcc, upscaled, inner_skeleton)
     
     # --- Clean boundaries ---
-    cleaned_lcc_ncc_boundary = functions.clean_boundary_from_mask(lcc_ncc_boundary)
-    cleaned_rcc_lcc_boundary = functions.clean_boundary_from_mask(rcc_lcc_boundary)
-    cleaned_ncc_rcc_boundary = functions.clean_boundary_from_mask(ncc_rcc_boundary)
-    
-    print(cleaned_lcc_ncc_boundary.shape)
-    print(cleaned_rcc_lcc_boundary.shape)
-    print(cleaned_ncc_rcc_boundary.shape)
-    
+    cleaned_lcc_ncc_boundary = functions.clean_boundary_from_mask(lcc_ncc_boundary,aortic_wall_contour )
+    cleaned_rcc_lcc_boundary = functions.clean_boundary_from_mask(rcc_lcc_boundary, aortic_wall_contour)
+    cleaned_ncc_rcc_boundary = functions.clean_boundary_from_mask(ncc_rcc_boundary, aortic_wall_contour)
+
     
     # --- Define commissures (default: regular commissures) ---
-    lcc_ncc_com_idx = functions.closest_contour_point(lcc_ncc_com, snake_current)
-    rcc_lcc_com_idx = functions.closest_contour_point(rcc_lcc_com, snake_current)
-    ncc_rcc_com_idx = functions.closest_contour_point(ncc_rcc_com, snake_current)
+    lcc_ncc_com_idx = functions.closest_contour_point(lcc_ncc_com, aortic_wall_contour)
+    rcc_lcc_com_idx = functions.closest_contour_point(rcc_lcc_com, aortic_wall_contour)
+    ncc_rcc_com_idx = functions.closest_contour_point(ncc_rcc_com, aortic_wall_contour)
     
     intersections = {
     "lcc_ncc": None,
@@ -532,39 +523,40 @@ for slice_nr, slice_info in slice_data.items():  # or use range(len(slice_data))
     
         # Replace only if valid intersections are found
         if intersections.get("lcc_ncc") is not None:
-            lcc_ncc_com_idx = functions.closest_contour_point(intersections["lcc_ncc"], snake_current)
+            lcc_ncc_com_idx = functions.closest_contour_point(intersections["lcc_ncc"], aortic_wall_contour)
         if intersections.get("rcc_lcc") is not None:
-            rcc_lcc_com_idx = functions.closest_contour_point(intersections["rcc_lcc"], snake_current)
+            rcc_lcc_com_idx = functions.closest_contour_point(intersections["rcc_lcc"], aortic_wall_contour)
         if intersections.get("ncc_rcc") is not None:
-            ncc_rcc_com_idx = functions.closest_contour_point(intersections["ncc_rcc"], snake_current)
+            ncc_rcc_com_idx = functions.closest_contour_point(intersections["ncc_rcc"], aortic_wall_contour)
     
     # --- COM-to-COM segments for actual leaflet boundaries ---
     seg_c2c = {
-        "LCC": functions.contour_segment(snake_current, lcc_ncc_com_idx, rcc_lcc_com_idx),
-        "RCC": functions.contour_segment(snake_current, ncc_rcc_com_idx, rcc_lcc_com_idx),
-        "NCC": functions.contour_segment(snake_current, lcc_ncc_com_idx, ncc_rcc_com_idx)
+        "LCC": functions.contour_segment(aortic_wall_contour, lcc_ncc_com_idx, rcc_lcc_com_idx, upscaled),
+        "RCC": functions.contour_segment(aortic_wall_contour, ncc_rcc_com_idx, rcc_lcc_com_idx, upscaled),
+        "NCC": functions.contour_segment(aortic_wall_contour, lcc_ncc_com_idx, ncc_rcc_com_idx, upscaled)
     }
-
-    # Store in leaflet-specific dictionaries
+    
+    # --- Store copies to avoid reference reuse ---
     LCC_data[slice_nr] = {
-        "mask": lcc_ncc_mask,
-        "lcc_ncc_boundary": cleaned_lcc_ncc_boundary,
-        "rcc_lcc_boundary": cleaned_rcc_lcc_boundary,
-        "com_to_com": seg_c2c["LCC"]
+        "mask": lcc_ncc_mask.copy(),
+        "lcc_ncc_boundary": cleaned_lcc_ncc_boundary.copy(),
+        "rcc_lcc_boundary": cleaned_rcc_lcc_boundary.copy(),
+        "com_to_com": seg_c2c["LCC"].copy(),
+        "aortic_wall_contour": aortic_wall_contour.copy()
     }
     
     RCC_data[slice_nr] = {
-        "mask": rcc_lcc_mask,
-        "rcc_lcc_boundary": cleaned_rcc_lcc_boundary,
-        "ncc_rcc_boundary": cleaned_ncc_rcc_boundary,
-        "com_to_com": seg_c2c["RCC"]
+        "mask": rcc_lcc_mask.copy(),
+        "rcc_lcc_boundary": cleaned_rcc_lcc_boundary.copy(),
+        "ncc_rcc_boundary": cleaned_ncc_rcc_boundary.copy(),
+        "com_to_com": seg_c2c["RCC"].copy()
     }
     
     NCC_data[slice_nr] = {
-        "mask": ncc_rcc_mask,
-        "ncc_rcc_boundary": cleaned_ncc_rcc_boundary,
-        "lcc_ncc_boundary": cleaned_lcc_ncc_boundary,
-        "com_to_com": seg_c2c["NCC"]
+        "mask": ncc_rcc_mask.copy(),
+        "ncc_rcc_boundary": cleaned_ncc_rcc_boundary.copy(),
+        "lcc_ncc_boundary": cleaned_lcc_ncc_boundary.copy(),
+        "com_to_com": seg_c2c["NCC"].copy()
     }
 
     # --- Optional visualization ---
@@ -575,8 +567,8 @@ for slice_nr, slice_info in slice_data.items():  # or use range(len(slice_data))
     plt.plot(seg_c2c["LCC"][:, 1], seg_c2c["LCC"][:, 0], color='cyan', lw=3, label='LCC')
     plt.plot(seg_c2c["RCC"][:, 1], seg_c2c["RCC"][:, 0], color='green', lw=3, label='RCC')
     plt.plot(seg_c2c["NCC"][:, 1], seg_c2c["NCC"][:, 0], color='magenta', lw=3, label='NCC')
-    plt.contour(lcc_ncc_boundary, levels=[0.5], colors='cyan', linewidths=2)
-    plt.contour(rcc_lcc_boundary, levels=[0.5], colors='cyan', linewidths=2)
+    plt.plot(cleaned_lcc_ncc_boundary[:, 1], cleaned_lcc_ncc_boundary[:, 0], color='cyan', lw=2, label='LCC boundary')
+    plt.plot(cleaned_rcc_lcc_boundary[:, 1], cleaned_rcc_lcc_boundary[:, 0], color='magenta', lw=2, label='RCC boundary')
     plt.contour(ncc_rcc_boundary, levels=[0.5], colors='magenta', linewidths=2)
     plt.title(f"Leaflet Borders — Slice {slice_nr}")
     plt.axis('off')
@@ -627,7 +619,7 @@ from skimage.transform import rescale
 import functions
 
 # --- Parameters ---
-slice_mercedes = 47
+slice_mercedes = 48
 
 # Get the upsampled DICOM slice
 reoriented_slice = reoriented_dicom[slice_mercedes, :, :]
@@ -648,6 +640,7 @@ boundaries = {
     "RCC–LCC": mercedes_rcc_lcc,
     "NCC–RCC": mercedes_ncc_rcc,
 }
+
 colors = {
     "LCC–NCC": "cyan",
     "RCC–LCC": "magenta",
@@ -692,12 +685,16 @@ for name, boundary in boundaries.items():
     plt.plot(snake_x, snake_y, '-b', lw=1.5, alpha=0.8, label='Aortic wall (snake)')
     plt.plot(intersection[1], intersection[0], 'or', markersize=6, label='Intersection')
 
+    # --- NEW: Show boundary points used for line fitting ---
+    plt.scatter(x_true, y_true, s=15, c=colors[name], edgecolor='k', alpha=0.8, label='Boundary points')
+
     # --- Formatting ---
-    plt.title(f"{name} Boundary & Intersection — Slice {slice_mercedes}")
+    plt.title(f"{name} Boundary, Line & Intersection — Slice {slice_mercedes}")
     plt.axis("off")
     plt.legend(loc="lower right", frameon=False)
     plt.tight_layout()
     plt.show()
+
 
     print(f"{name}: slope={m:.3f}, intercept={b:.3f}, intersection (y,x)={intersection}")
 
@@ -705,26 +702,107 @@ for name, boundary in boundaries.items():
 
 # %% TESTING IT LOOPED
 
-import functions
-
-all_intersections = {}
-slice_idx=46
-
+# --- Parameters ---
+slice_mercedes = 46
 
 # Get the upsampled DICOM slice
-reoriented_slice = reoriented_dicom[slice_idx, :, :]
+reoriented_slice = reoriented_dicom[slice_mercedes, :, :]
 upscaled = rescale(reoriented_slice, scale_factor, order=3, preserve_range=True, anti_aliasing=True).astype(reoriented_slice.dtype)
+snake_current = slice_data[slice_mercedes]["snake"]
 
 
-for slice_idx in range(z_min, z_max):
-    all_intersections[slice_idx] = functions.find_all_boundary_intersections(
-        upscaled,
-        reoriented_dicom,
-        scale_factor,
-        slice_data,
-        LCC_data,
-        RCC_data,
-        NCC_data,
-        46,
-        plot=True  # disable plotting for speed
-    )
+# First slice: find and store the closest points
+prev_lcc_ncc_idx = functions.closest_contour_point(lcc_ncc_com, snake_current)
+prev_rcc_lcc_idx = functions.closest_contour_point(rcc_lcc_com, snake_current)
+prev_ncc_rcc_idx = functions.closest_contour_point(ncc_rcc_com, snake_current)
+
+# Access COM-to-COM segments from your dictionaries
+seg_LCC = LCC_data[slice_mercedes]["com_to_com"]
+seg_RCC = RCC_data[slice_mercedes]["com_to_com"]
+seg_NCC = NCC_data[slice_mercedes]["com_to_com"]
+
+
+# Extract coordinates from the contour (assuming snake_current is an (N,2) array of [y,x])
+lcc_y, lcc_x = snake_current[prev_lcc_ncc_idx]
+rcc_y, rcc_x = snake_current[prev_rcc_lcc_idx]
+ncc_y, ncc_x = snake_current[prev_ncc_rcc_idx]
+
+plt.figure(figsize=(6, 6))
+plt.imshow(upscaled, cmap='gray', origin='upper')
+
+# Plot points
+plt.plot(lcc_x, lcc_y, 'or', markersize=8, label='LCC–NCC')
+plt.plot(rcc_x, rcc_y, 'ob', markersize=8, label='RCC–LCC')
+plt.plot(ncc_x, ncc_y, 'og', markersize=8, label='NCC–RCC')
+
+plt.plot(seg_LCC[:, 1], seg_LCC[:, 0], color='cyan', lw=3, label='LCC COM-to-COM')
+plt.plot(seg_RCC[:, 1], seg_RCC[:, 0], color='green', lw=3, label='RCC COM-to-COM')
+plt.plot(seg_NCC[:, 1], seg_NCC[:, 0], color='magenta', lw=3, label='NCC COM-to-COM')
+
+plt.title(f"Slice {slice_mercedes} — Closest Points on Snake")
+plt.axis('off')
+plt.legend(loc='lower right')
+plt.tight_layout()
+plt.show()
+
+
+# %% TESTING DETAILS
+
+slice_nr = 46
+upscaled = rescale(reoriented_dicom[slice_nr, :, :], scale_factor, order=3, preserve_range=True, anti_aliasing=True)
+
+# Retrieve stored data
+aortic_wall_contour = LCC_data[slice_nr]["aortic_wall_contour"]
+rcc_boundary = RCC_data[slice_nr]["rcc_lcc_boundary"]
+lcc_boundary = LCC_data[slice_nr]["lcc_ncc_boundary"]
+
+c2c_lcc = LCC_data[slice_nr]["com_to_com"]
+c2c_rcc = RCC_data[slice_nr]["com_to_com"]
+c2c_ncc = NCC_data[slice_nr]["com_to_com"]
+
+# Commissure indices on contour
+lcc_ncc_com_idx = functions.closest_contour_point(lcc_ncc_com, aortic_wall_contour)
+rcc_lcc_com_idx = functions.closest_contour_point(rcc_lcc_com, aortic_wall_contour)
+ncc_rcc_com_idx = functions.closest_contour_point(ncc_rcc_com, aortic_wall_contour)
+
+# Recreate the COM-to-COM contour segments (for comparison)
+seg_lcc = functions.contour_segment(aortic_wall_contour, lcc_ncc_com_idx, rcc_lcc_com_idx)
+seg_rcc = functions.contour_segment(aortic_wall_contour, ncc_rcc_com_idx, rcc_lcc_com_idx)
+seg_ncc = functions.contour_segment(aortic_wall_contour, lcc_ncc_com_idx, ncc_rcc_com_idx)
+
+# --- Visualization ---
+plt.figure(figsize=(7, 7))
+plt.imshow(upscaled, cmap='gray', origin='upper')
+
+# Commissure markers
+# plt.plot(lcc_ncc_com[1], lcc_ncc_com[0], 'or', markersize=8, label='LCC–NCC commissure')
+# plt.plot(rcc_lcc_com[1], rcc_lcc_com[0], 'ob', markersize=8, label='RCC–LCC commissure')
+# plt.plot(ncc_rcc_com[1], ncc_rcc_com[0], 'og', markersize=8, label='NCC–RCC commissure')
+
+# Stored COM-to-COM boundaries
+# plt.plot(c2c_lcc[:, 1], c2c_lcc[:, 0], color='cyan', lw=3, label='Stored LCC C2C')
+# plt.plot(c2c_rcc[:, 1], c2c_rcc[:, 0], color='magenta', lw=3, label='Stored RCC C2C')
+# plt.plot(c2c_ncc[:, 1], c2c_ncc[:, 0], color='yellow', lw=3, label='Stored NCC C2C')
+
+# Directly recomputed segments
+# plt.plot(seg_lcc[:, 1], seg_lcc[:, 0], '--', color='cyan', lw=2, label='Recomputed LCC seg')
+# plt.plot(seg_rcc[:, 1], seg_rcc[:, 0], '--', color='magenta', lw=2, label='Recomputed RCC seg')
+# plt.plot(seg_ncc[:, 1], seg_ncc[:, 0], '--', color='yellow', lw=2, label='Recomputed NCC seg')
+
+# Boundaries
+print(lcc_boundary.shape)
+print(rcc_boundary.shape)
+
+plt.plot(lcc_boundary[:, 1], lcc_boundary[:, 0], color='cyan', lw=2, label='LCC boundary')
+plt.plot(rcc_boundary[:, 1], rcc_boundary[:, 0], color='magenta', lw=2, label='RCC boundary')
+
+
+plt.title(f"Slice {slice_nr} — COM-to-COM & Boundaries")
+plt.axis('off')
+plt.legend(loc='lower right', fontsize=8)
+plt.tight_layout()
+plt.show()
+
+
+# %%
+

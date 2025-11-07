@@ -885,56 +885,42 @@ def closest_contour_point(point_yx, contour):
     return int(np.argmin(dists))
 
 
-# def contour_segment(contour, i_start, i_end):
-#     """
-#     Extracts the *shortest* segment between two indices on a closed contour.
-
-#     contour : (N, 2) array of [y, x] coordinates
-#     i_start, i_end : integer indices on the contour
-#     """
-#     contour = np.asarray(contour)
-
-#     # Forward path (i_start -> i_end)
-#     if i_start <= i_end:
-#         seg1 = contour[i_start:i_end + 1]
-#     else:
-#         seg1 = np.vstack((contour[i_start:], contour[:i_end + 1]))
-
-#     # Reverse path (i_end -> i_start)
-#     if i_end <= i_start:
-#         seg2 = contour[i_end:i_start + 1]
-#     else:
-#         seg2 = np.vstack((contour[i_end:], contour[:i_start + 1]))
-
-#     # Return whichever is shorter
-#     if len(seg1) <= len(seg2):
-#         return seg1
-#     else:
-#         return seg2
-    
-def contour_segment(contour, i_start, i_end):
+def contour_segment(contour, i_start, i_end, debug_image=None):
     """
     Extract the shortest segment along a closed contour using geometric distance.
-    Note: previously it counted 1 point more but that is now removed due to the overlap it caused.
+    Optionally visualizes the start/end points on the given image.
     """
-    N = len(contour)
-    
-    # Forward path
+
+    # --- Compute both forward and reverse segments ---
     if i_start <= i_end:
         seg_fwd = contour[i_start:i_end]
     else:
         seg_fwd = np.vstack([contour[i_start:], contour[:i_end]])
     dist_fwd = np.sum(np.linalg.norm(np.diff(seg_fwd, axis=0), axis=1))
-    
-    # Reverse path
+
     if i_end <= i_start:
         seg_rev = contour[i_end:i_start][::-1]
     else:
         seg_rev = np.vstack([contour[i_end:], contour[:i_start]])[::-1]
     dist_rev = np.sum(np.linalg.norm(np.diff(seg_rev, axis=0), axis=1))
-    
-    # Return the shorter one
-    return seg_fwd if dist_fwd <= dist_rev else seg_rev
+
+    # --- Choose shorter segment ---
+    seg = seg_fwd if dist_fwd <= dist_rev else seg_rev
+
+    # --- Optional visualization ---
+    if debug_image is not None:
+        plt.figure(figsize=(6, 6))
+        plt.imshow(debug_image, cmap='gray', origin='upper')
+        plt.plot(contour[:, 1], contour[:, 0], 'y--', lw=1, alpha=0.5, label="Full Contour")
+        plt.plot(seg[:, 1], seg[:, 0], 'r-', lw=2, label="Selected Segment")
+        plt.scatter(contour[i_start, 1], contour[i_start, 0], c='lime', s=60, label="Start", edgecolors='k')
+        plt.scatter(contour[i_end, 1], contour[i_end, 0], c='cyan', s=60, label="End", edgecolors='k')
+        plt.title("Contour Segment Debug")
+        plt.legend()
+        plt.show()
+
+    return seg
+
 
     
 def create_boundary_mask(center, contour, hinge_idx_1, hinge_idx_2, segment, upscaled, inner_skeleton):
@@ -1012,9 +998,9 @@ def find_all_boundary_intersections(
     plot=True,
 ):
 
-    # print(f"LCC-NCC boundary shape: {None if seg_lcc_ncc is None else seg_lcc_ncc.shape}")
-    # print(f"RCC-LCC boundary shape: {None if seg_rcc_lcc is None else seg_rcc_lcc.shape}")
-    # print(f"NCC-RCC boundary shape: {None if seg_ncc_rcc is None else seg_ncc_rcc.shape}")
+    print(f"LCC-NCC boundary shape: {None if seg_lcc_ncc is None else lcc_ncc_boundary.shape}")
+    print(f"RCC-LCC boundary shape: {None if seg_rcc_lcc is None else rcc_lcc_boundary.shape}")
+    print(f"NCC-RCC boundary shape: {None if seg_ncc_rcc is None else ncc_rcc_boundary.shape}")
 
     boundaries = {
         "lcc_ncc": (lcc_ncc_boundary, seg_lcc_ncc, "cyan"),
@@ -1026,12 +1012,23 @@ def find_all_boundary_intersections(
     line_data = {}  # store line points for plotting
 
     for name, (boundary, wall_segment, color) in boundaries.items():
-        if boundary is None or wall_segment is None or len(wall_segment) < 2:
+        if boundary is None or wall_segment is None or len(wall_segment) < 3:
             intersections[name] = None
             continue
 
         y_true, x_true = boundary[:, 0], boundary[:, 1]
-        if len(x_true) < 2:
+        # --- Compute total Euclidean length along the boundary ---
+        boundary_points = boundary
+        if len(boundary_points) < 2:
+            total_length = 0
+        else:
+            dists = np.linalg.norm(np.diff(boundary_points, axis=0), axis=1)
+            total_length = np.max(dists)  # total length along boundary
+        # print(f"{name} total length: {total_length}")
+
+        # Skip if boundary is too short
+        if total_length < 1:  # adjust threshold in pixels
+            print(total_length)
             intersections[name] = None
             continue
 
@@ -1064,6 +1061,7 @@ def find_all_boundary_intersections(
 
         for name, (boundary, wall_segment, color) in boundaries.items():
             if boundary is not None:
+                print(f"For {slice_idx} the {name} is non empty.")
                 # plt.contour(boundary, levels=[0.5], colors=color, linewidths=2)
                 if wall_segment is not None and len(wall_segment) > 1:
                     plt.plot(wall_segment[:, 1], wall_segment[:, 0], '-', color=color, lw=1.5, alpha=0.8)
@@ -1081,30 +1079,55 @@ def find_all_boundary_intersections(
     return intersections
 
 
-
-
-
-from skimage.measure import label, regionprops
+from scipy.spatial import cKDTree
 import numpy as np
+from skimage.measure import label, regionprops
 
-def clean_boundary_from_mask(mask):
+def clean_boundary_from_mask(mask, aortic_wall_points=None, min_dist=3):
     """
     Extract the largest connected component from a binary mask 
     and return its coordinates in (y, x) order.
+    
+    Optionally, remove points that are too close to the aortic wall
+    based on Euclidean distance.
+    
+    Parameters
+    ----------
+    mask : 2D array
+        Binary mask of the region (leaflet).
+    aortic_wall_points : Nx2 array of (y, x), optional
+        Coordinates of aortic wall points.
+    min_dist : float
+        Minimum Euclidean distance (in pixels) from the aortic wall.
+    
+    Returns
+    -------
+    coords : Nx2 array of (y, x)
+        Filtered boundary points.
     """
-    labeled = label(mask)  # label connected components
+    labeled = label(mask)
     if labeled.max() == 0:
-        return np.zeros((0, 2), dtype=int)  # empty mask
+        print("[Info] Mask is empty, returning empty array.")
+        return np.zeros((0, 2), dtype=int)
 
-    # Find the largest connected component
+    # Largest connected component
     regions = regionprops(labeled)
     largest_region = max(regions, key=lambda r: r.area)
-    
-    # Get coordinates of all pixels in that component
-    coords = largest_region.coords  # Nx2 array of (y, x)
+    coords = largest_region.coords
+    print(f"[Info] Largest component has {len(coords)} points before filtering.")
 
-    # Optional: sort points along the contour if needed
-    # If you just want them as is (any order), you can skip this
+    # Filter based on distance to aortic wall points
+    if aortic_wall_points is not None and len(aortic_wall_points) > 0:
+        tree = cKDTree(aortic_wall_points)
+        dists, _ = tree.query(coords)
+        mask_indices = dists < min_dist
+        removed_count = np.sum(mask_indices)
+        coords = coords[~mask_indices]
+        print(f"[Info] Removed {removed_count} points too close to aortic wall.")
+        print(f"[Info] Remaining points after filtering: {len(coords)}")
 
     return coords
+
+
+
 
