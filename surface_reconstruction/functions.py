@@ -995,7 +995,7 @@ def find_all_boundary_intersections(
     rcc_lcc_boundary,
     ncc_rcc_boundary,
     slice_idx,
-    plot=True,
+    plot=False,
 ):
 
     print(f"LCC-NCC boundary shape: {None if seg_lcc_ncc is None else lcc_ncc_boundary.shape}")
@@ -1019,16 +1019,16 @@ def find_all_boundary_intersections(
         y_true, x_true = boundary[:, 0], boundary[:, 1]
         # --- Compute total Euclidean length along the boundary ---
         boundary_points = boundary
-        if len(boundary_points) < 2:
+        if len(boundary_points) < 4:
             total_length = 0
         else:
             dists = np.linalg.norm(np.diff(boundary_points, axis=0), axis=1)
-            total_length = np.max(dists)  # total length along boundary
-        # print(f"{name} total length: {total_length}")
+            total_length = np.sum(dists)  # total length along boundary
+            # print(total_length)
+            print(f"{name} total length: {total_length}")
 
         # Skip if boundary is too short
-        if total_length < 1:  # adjust threshold in pixels
-            print(total_length)
+        if total_length < 5:  # adjust threshold in pixels
             intersections[name] = None
             continue
 
@@ -1128,6 +1128,62 @@ def clean_boundary_from_mask(mask, aortic_wall_points=None, min_dist=3):
 
     return coords
 
+from skimage.filters import sobel
+from scipy.ndimage import gaussian_filter
+from skimage import exposure
 
+
+
+def compute_edge_volume(raw_volume_hu, hu_window=(0, 400), sigma=0.8, post_sigma=0.5, clahe_clip=0.03, normalize=True):
+    """
+    Compute the 2D per-slice gradient magnitude (edge-detected image) from a DICOM volume,
+    with optional post-processing smoothing and local contrast enhancement (CLAHE).
+
+    Parameters
+    ----------
+    raw_volume_hu : np.ndarray
+        3D DICOM volume in Hounsfield Units (z, y, x).
+    hu_window : tuple, optional
+        HU range to clip the volume to (min, max), default (0, 400).
+    sigma : float, optional
+        Standard deviation for Gaussian smoothing applied to each slice before edge detection.
+    post_sigma : float, optional
+        Standard deviation for small Gaussian smoothing applied after edge detection, default 0.5.
+    clahe_clip : float, optional
+        Clip limit for adaptive histogram equalization (CLAHE), default 0.03.
+    normalize : bool, optional
+        Whether to rescale output to 0-255 for visualization, default True.
+
+    Returns
+    -------
+    gradient_volume : np.ndarray
+        3D gradient magnitude volume (same shape as raw_volume_hu).
+    """
+    # Clip to HU window
+    leaflet_window = np.clip(raw_volume_hu, hu_window[0], hu_window[1])
+
+    # Initialize gradient volume
+    gradient_volume = np.zeros_like(leaflet_window, dtype=np.float32)
+
+    # Process each slice independently
+    for i in range(raw_volume_hu.shape[0]):
+        # 1. Pre-smoothing
+        slice_smoothed = gaussian_filter(leaflet_window[i, :, :], sigma=sigma)
+        
+        # 2. CLAHE-style local contrast enhancement
+        slice_contrast = exposure.equalize_adapthist(slice_smoothed, clip_limit=clahe_clip)
+        
+        # 3. Edge detection
+        gradient_volume[i, :, :] = sobel(slice_contrast)
+
+    # 4. Small smoothing after edge detection to reduce noise
+    if post_sigma > 0:
+        gradient_volume = gaussian_filter(gradient_volume, sigma=post_sigma)
+
+    # Optional: normalize for visualization
+    if normalize:
+        gradient_volume = exposure.rescale_intensity(gradient_volume, out_range=(0, 255))
+
+    return gradient_volume
 
 
