@@ -30,7 +30,7 @@ intercept = float(getattr(dicom_template, "RescaleIntercept", 0))
 raw_volume_hu = raw_volume.astype(np.float32) * slope + intercept
 
 # Create an edge detected image based on the import DICOM
-gradient_volume = functions.compute_edge_volume(raw_volume_hu, hu_window=(0, 400), sigma=0.8, normalize=False)
+gradient_volume = functions.compute_edge_volume(raw_volume_hu, hu_window=(0, 400), sigma=1.2, normalize=False, visualize=True)
 volume = gradient_volume
 
 # Clipping the DICOM to remove calcifications
@@ -185,7 +185,7 @@ for slice_nr in range(z_min_int, z_max_int + 1):
     img = gradient_upsampled.astype(np.float32)
     img = img / img.max()
     
-    # No equalization since contrast is already enhacned
+    # yesequalization
     # new_image = exposure.equalize_adapthist(img, clip_limit=0.03)
     new_image= img
 
@@ -408,20 +408,46 @@ for slice_nr, slice_info in slice_data.items():
             slice_idx=slice_nr,
             plot=True
         )
-
-    # --- Assign commissure indices robustly ---
+    
     commissure_names = ["lcc_ncc", "rcc_lcc", "ncc_rcc"]
     commissure_indices = {}
-
-    for name in commissure_names:
-        # Prefer newly found intersection
-        if intersections.get(name) is not None:
+    
+    # --------------------------------------------
+    # 1. Check if we have EVER found all 3 before
+    # --------------------------------------------
+    have_full_prev = all(prev_intersections[name] is not None for name in commissure_names)
+    
+    # --------------------------------------------
+    # 2. Decide fallback strategy for THIS slice
+    # --------------------------------------------
+    found_this_slice = {name: intersections.get(name) is not None for name in commissure_names}
+    
+    # Case A — All 3 found this slice → use them & update prev_intersections
+    if all(found_this_slice.values()):
+        for name in commissure_names:
             prev_intersections[name] = intersections[name]
-            commissure_indices[name] = functions.closest_contour_point(intersections[name], aortic_wall_contour)
-        else:
-            # Fallback: previous intersection if exists, else base landmark
-            fallback = prev_intersections[name] if prev_intersections[name] is not None else base_commissure[name]
-            commissure_indices[name] = functions.closest_contour_point(fallback, aortic_wall_contour)
+            commissure_indices[name] = functions.closest_contour_point(
+                intersections[name],
+                aortic_wall_contour
+            )
+    
+    # Case B — Missing intersections, but we have a full previous set → use ALL prev_intersections
+    elif have_full_prev:
+        for name in commissure_names:
+            commissure_indices[name] = functions.closest_contour_point(
+                prev_intersections[name],
+                aortic_wall_contour
+            )
+    
+    # Case C — Early slices where we do NOT have all 3 prev intersections yet
+    # → fall back per-intersection to base commissures
+    else:
+        for name in commissure_names:
+            fallback = intersections.get(name) or prev_intersections[name] or base_commissure[name]
+            commissure_indices[name] = functions.closest_contour_point(
+                fallback,
+                aortic_wall_contour
+            )
 
     # Create COM-to-COM segments
     seg_c2c = {
