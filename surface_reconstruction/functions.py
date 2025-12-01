@@ -8,6 +8,7 @@ from scipy.ndimage import affine_transform
 from skimage.draw import polygon2mask
 from skimage.morphology import dilation, disk
 from scipy.interpolate import splprep, splev
+import pydicom
 
 def export_vtk(surface, filename="surface.vtk"):
     """
@@ -203,8 +204,8 @@ def interpolate_surface(interp_points):
     Constructs a NURBS surface from interp_points and prints debug info.
     """
 
-    print(f"Input interp_points type: {type(interp_points)}")
-    print(f"Input interp_points shape: {getattr(interp_points, 'shape', 'no shape attribute')}")
+    # print(f"Input interp_points type: {type(interp_points)}")
+    # print(f"Input interp_points shape: {getattr(interp_points, 'shape', 'no shape attribute')}")
 
     size_u = interp_points.shape[0]
     size_v = interp_points.shape[1]
@@ -213,13 +214,13 @@ def interpolate_surface(interp_points):
     # Convert points to a flat tuple of 3D tuples matching the working example format
     interp_points_2d = tuple(tuple(pt) for pt in interp_points.reshape(-1, 3))
 
-    print(f"Reshaped interp_points_2d type: {type(interp_points_2d)}")
-    print(f"Number of points: {len(interp_points_2d)}")
-    print(interp_points_2d)
+    # print(f"Reshaped interp_points_2d type: {type(interp_points_2d)}")
+    # print(f"Number of points: {len(interp_points_2d)}")
+    # print(interp_points_2d)
 
     degree_u = 2
     degree_v = 2
-    print(f"Degree_u: {degree_u}, Degree_v: {degree_v}")
+    # print(f"Degree_u: {degree_u}, Degree_v: {degree_v}")
 
     surf = fitting.approximate_surface(interp_points_2d, size_u, size_v, degree_u, degree_v)
 
@@ -255,67 +256,69 @@ def save_ordered_landmarks(cusp_landmarks, center, base_folder):
     Saves landmarks of each leaflet (NCC, LCC, RCC) separately, 
     each containing its 3 landmarks (2 commissures and 1 hinge) plus the center point,
     into separate text files under the specified base folder.
-
-    Commissures are saved in a fixed clockwise order, with rules defined per cusp:
     
-    - RCC (most anterior cusp): save commissure with lower L (rightmost) first
-    - LCC (most left cusp): save commissure with lower P (most anterior) first
-    - NCC (remaining cusp): save commissure with higher P (most posterior) first
-
+    The leaflets are assigned based on:
+    - RCC: Least posterior (smallest P)
+    - LCC: Most left (largest L)
+    - NCC: The remaining one
+    
     Args:
-        cusp_landmarks (list or np.ndarray): List of 3 cusp landmarks, each with 3 points (each point is length 3).
-                                             Each cusp: [commissure_1, commissure_2, hinge]
-        center (list or np.ndarray): Center landmark (length 3).
-        base_folder (str): Folder path where landmark files are saved.
+        cusp_landmarks (list): List of 3 cusp landmarks, each with 3 points (commissure_1, commissure_2, hinge)
+        center (list): The center point (3D)
+        base_folder (str): Folder path where the landmarks are saved
     """
+    
+    # Extract hinge positions for each cusp (x, y, z)
     hinges = [cusp[2] for cusp in cusp_landmarks]
-    L_values = [h[0] for h in hinges]
-    P_values = [h[1] for h in hinges]
+    
+    # Get the Left (L) and Posterior (P) values for each hinge
+    L_values = [h[0] for h in hinges]  # Left-right position
+    P_values = [h[1] for h in hinges]  # Anterior-posterior position
 
-    rcc_idx = np.argmin(P_values)  # most anterior (smallest P)
-    lcc_idx = np.argmax(L_values)  # most left (largest L)
-    ncc_idx = list({0, 1, 2} - {rcc_idx, lcc_idx})[0]  # remaining index
+    # Initialize a list to store which cusp is already assigned
+    used_points = []
 
+    # 1. Assign RCC (most anterior, i.e., least posterior)
+    rcc_idx = P_values.index(min(P_values))  # Index of the smallest P (most anterior)
+    used_points.append(rcc_idx)  # Mark RCC as used
+
+    # 2. Assign LCC (most left, i.e., largest L)
+    remaining_points = [i for i in range(3) if i not in used_points]  # Get remaining points
+    lcc_idx = max(remaining_points, key=lambda i: L_values[i])  # Index of the largest L
+    used_points.append(lcc_idx)  # Mark LCC as used
+
+    # 3. The remaining point is NCC
+    ncc_idx = [i for i in range(3) if i not in used_points][0]  # The remaining index for NCC
+
+    # Map indices to leaflet names
     leaflet_indices = {
         "rcc": rcc_idx,
         "lcc": lcc_idx,
         "ncc": ncc_idx
     }
 
+    # Ensure the output folder exists
     os.makedirs(base_folder, exist_ok=True)
 
+    # Process and save landmarks for each leaflet
     for leaflet_name, idx in leaflet_indices.items():
         commissure_1, commissure_2, hinge = cusp_landmarks[idx]
 
+        # Order commissures based on the leaflet type
         if leaflet_name == "rcc":
-            # Rightmost commissure (lowest L) first
-            if commissure_1[0] < commissure_2[0]:
-                ordered_commissures = [commissure_1, commissure_2]
-            else:
-                ordered_commissures = [commissure_2, commissure_1]
-
+            ordered_commissures = sorted([commissure_1, commissure_2], key=lambda x: x[0])  # Lowest L first
         elif leaflet_name == "lcc":
-            # Most anterior commissure (lowest P) first
-            if commissure_1[1] < commissure_2[1]:
-                ordered_commissures = [commissure_1, commissure_2]
-            else:
-                ordered_commissures = [commissure_2, commissure_1]
-
+            ordered_commissures = sorted([commissure_1, commissure_2], key=lambda x: x[1])  # Lowest P first
         elif leaflet_name == "ncc":
-            # Most posterior commissure (highest P) first
-            if commissure_1[1] > commissure_2[1]:
-                ordered_commissures = [commissure_1, commissure_2]
-            else:
-                ordered_commissures = [commissure_2, commissure_1]
+            ordered_commissures = sorted([commissure_1, commissure_2], key=lambda x: x[1], reverse=True)  # Highest P first
 
+        # Save the ordered landmarks
         leaflet_landmarks = ordered_commissures + [hinge, center]
-
-        arr_to_save = np.array(leaflet_landmarks)
-        output_path = os.path.join(base_folder, f"{leaflet_name}_template_landmarks_test.txt")
-        np.savetxt(output_path, arr_to_save, fmt="%.6f")
+        output_path = os.path.join(base_folder, f"{leaflet_name}_template_landmarks.txt")
+        np.savetxt(output_path, np.array(leaflet_landmarks), fmt="%.6f")
 
         print(f"Saved {leaflet_name} landmarks to: {output_path}")
-        
+
         
 
 
@@ -408,10 +411,17 @@ def get_annular_normal(patient_number, base_path="H:/DATA/Afstuderen/3.Data/SSM/
     # Compute perpendicular vector via cross product
     normal_vector = np.cross(v1, v2)
     
+    print("lcc_hinge is: ", lcc_hinge)
+    print("ncc_hinge is: ", ncc_hinge)
+    print("rcc_hinge is: ", rcc_hinge)
+    
+    print("normal_vector is: ", normal_vector)
+    
     # Normalize
     normal_vector /= np.linalg.norm(normal_vector)
     
     return normal_vector
+
 
 def space_volume(volume: np.ndarray, spacing: tuple):
     """
@@ -828,6 +838,7 @@ def circle_through_commissures(points, n_points=50):
 
     # Normal vector of the circle's plane
     normal = np.cross(AB, AC)
+    print('normal is ----', normal)
     normal /= np.linalg.norm(normal)
 
     # Midpoints
@@ -1134,7 +1145,7 @@ from skimage import exposure
 
 def compute_edge_volume(raw_volume_hu,
                         hu_window=(0, 400),
-                        sigma=0.8,
+                        sigma=2,
                         post_sigma=0.5,
                         clahe_clip=0.03,
                         normalize=True,
@@ -1201,6 +1212,36 @@ def compute_edge_volume(raw_volume_hu,
         plt.show()
 
     return gradient_vol
+
+
+def compute_slice_spacing(dicom_list):
+    """
+    dicom_list: list of tuples (filepath, z_position)
+    """
+
+    positions = []
+
+    for item in dicom_list:
+        # item = (filepath, z_pos)
+        filepath = item[0]
+        ds = pydicom.dcmread(filepath)
+
+        if hasattr(ds, "ImagePositionPatient"):
+            positions.append(float(ds.ImagePositionPatient[2]))
+        elif hasattr(ds, "SliceLocation"):
+            positions.append(float(ds.SliceLocation))
+        else:
+            raise ValueError("DICOM slice missing both ImagePositionPatient and SliceLocation.")
+
+    # Sort by position
+    positions = np.array(sorted(positions))
+    diffs = np.diff(positions)
+
+    if len(diffs) == 0:
+        raise ValueError("Cannot compute slice spacing from a single slice.")
+
+    return round(float(abs(np.median(diffs))), 3)
+
 
 
 

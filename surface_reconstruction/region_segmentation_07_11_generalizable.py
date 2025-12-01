@@ -16,41 +16,70 @@ from skimage import exposure
 # READING IN THE DICOM & THE EDGE DETECTED IMAGE
 
 from scipy.ndimage import zoom, gaussian_filter
+import pydicom
+import numpy as np
 
 # Load the dicom
-dicom_dir = r"T:\Research_01\CZE-2020.67 - SAVI-AoS\AoS stress\CT\Aosstress14\DICOM\000037EC\AA4EC564\AA3B0DE6\00007EA9"
+dicom_dir = r"T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE001/DICOM/00003852/AA44D04F/AA7BB8C5/000050B5"
 dicom_reversed = gf.get_sorted_dicom_files(dicom_dir)
 dicom = dicom_reversed[::-1]
+# dicom=dicom_reversed
 raw_volume = gf.dicom_to_matrix(dicom)
+
+# Print to confirm dicom loading
+print(f"Number of DICOM slices loaded: {len(dicom)}")
+print(f"Shape of raw volume: {raw_volume.shape}")
 
 # Extract DICOM attributes, also to reformat the image to HU units
 dicom_template = pydicom.dcmread(dicom[0][0])
 slope = float(getattr(dicom_template, "RescaleSlope", 1))
 intercept = float(getattr(dicom_template, "RescaleIntercept", 0))
+
+# Print slope and intercept to confirm
+print(f"RescaleSlope: {slope}, RescaleIntercept: {intercept}")
+
 raw_volume_hu = raw_volume.astype(np.float32) * slope + intercept
 
-# Create an edge detected image based on the import DICOM
-gradient_volume = functions.compute_edge_volume(raw_volume_hu, hu_window=(0, 400), sigma=1.2, normalize=False, visualize=True)
+# Print to confirm HU transformation
+print(f"Shape of HU volume: {raw_volume_hu.shape}")
+
+# Create an edge detected image based on the imported DICOM
+gradient_volume = functions.compute_edge_volume(raw_volume_hu, hu_window=(0, 450), sigma=2, normalize=False, visualize=True)
 volume = gradient_volume
 
+# Print to confirm gradient image generation
+print(f"Shape of edge-detected volume: {gradient_volume.shape}")
+
 # Clipping the DICOM to remove calcifications
-low, high = 100, 340
+low, high = 100, 450  # CHANGED THIS FROM 340 to 500
 clipped_dicom = np.clip(raw_volume_hu, low, high)
 
-# Smoothing the image abit
-smoothed_dicom = gaussian_filter(clipped_dicom, sigma = 1)
+# Print to confirm clipping
+print(f"Min and Max values of clipped DICOM: {clipped_dicom.min()}, {clipped_dicom.max()}")
+
+# Smoothing the image a bit
+smoothed_dicom = gaussian_filter(clipped_dicom, sigma=2)  # Note, sigma was changed for patient 11
+
+# Print to confirm smoothing
+print(f"Min and Max values of smoothed DICOM: {smoothed_dicom.min()}, {smoothed_dicom.max()}")
 
 # Extract voxel spacing
-slice_thickness = float(dicom_template.SliceThickness)
+slice_thickness = functions.compute_slice_spacing(dicom)
 pixel_spacing_y = float(dicom_template.PixelSpacing[0])
 pixel_spacing_x = float(dicom_template.PixelSpacing[1])
 pixel_spacing = (slice_thickness, pixel_spacing_y, pixel_spacing_x)
-dicom_origin= np.array(dicom_template.ImagePositionPatient, dtype=float)
 
+# Print voxel spacing information
+print(f"Voxel spacing: {pixel_spacing}")
+
+dicom_origin = np.array(dicom_template.ImagePositionPatient, dtype=float)
+
+# Print origin
+print(f"DICOM origin: {dicom_origin}")
 
 # %% REORIENTATION
 # Calculating the vector perpendicualr to the annulus
-patient_nr= "aos14"  # insert here which patient you would like to analyze
+patient_nr= "savi_01"  # insert here which patient you would like to analyze
 annular_normal = functions.get_annular_normal(patient_nr)
 
 # Reorient the edge-detected image
@@ -71,12 +100,14 @@ reoriented_dicom, rotation_matrix_dicom, rotation_center_dicom = functions.reori
 # %% PLOTTING THE ANNOTATED LANDMARKS FOR ALL CUSPS
 
 # Use the _test files if you want to have the recently newly annotated landmarks of 3Dslicer
-# Landmark files
+# Dynamically load the landmark files based on the patient number
 landmark_files = {
-    "LCC": r"H:\DATA\Afstuderen\3.Data\SSM\patient_database\aos14\landmarks\lcc_template_landmarks_test.txt",
-    "RCC": r"H:\DATA\Afstuderen\3.Data\SSM\patient_database\aos14\landmarks\rcc_template_landmarks_test.txt",
-    "NCC": r"H:\DATA\Afstuderen\3.Data\SSM\patient_database\aos14\landmarks\ncc_template_landmarks_test.txt"
-}
+    "LCC": f"H:/DATA/Afstuderen/3.Data/SSM/patient_database/{patient_nr}/landmarks/lcc_template_landmarks.txt",
+    "RCC": f"H:/DATA/Afstuderen/3.Data/SSM/patient_database/{patient_nr}/landmarks/rcc_template_landmarks.txt",
+    "NCC": f"H:/DATA/Afstuderen/3.Data/SSM/patient_database/{patient_nr}/landmarks/ncc_template_landmarks.txt"
+}   
+
+# I removed test from this!
 
 # Dictionary to store processed landmarks
 landmarks_rotated_dict = {}
@@ -86,6 +117,7 @@ for cusp_name, file_path in landmark_files.items():
     print(cusp_name, file_path)
     # 1. Convert from LPS to voxel coordinates
     landmark_voxels = functions.landmarks_to_voxel(file_path, dicom_origin, pixel_spacing)
+    print("DICOM Origin", dicom_origin, "Pixel_spacing ", pixel_spacing)
     print("Landmark_voxels: ", landmark_voxels)
     # 2. Reorder axes for numpy indexing (z, y, x)
     landmarks_zyx = landmark_voxels[:, [2, 1, 0]].astype(float)
@@ -140,6 +172,94 @@ z_max = np.max(all_rotated[:, 0])
 print(f"Minimum z-coordinate across all cusps: {z_min}")
 print(f"Maximum z-coordinate across all cusps: {z_max}")
 
+#%%%%%%% OPTIONAL VISUALIZATION OF THE CIRCLE
+
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.patches as patches
+
+slice_idx=37
+
+# Assuming 'circle_snake' and 'reoriented_dicom' are available
+# Convert 3D circle points to 2D pixel coordinates
+circle_x = np.round(circle_snake[:, 0]).astype(int)
+circle_y = np.round(circle_snake[:, 1]).astype(int)
+
+# Extract the specific DICOM slice
+dicom_slice = reoriented_dicom[slice_idx, :, :]
+
+# Plot the DICOM slice and overlay the circle
+plt.figure(figsize=(8, 8))
+plt.imshow(dicom_slice, cmap='gray')
+
+# Plot the circle points
+plt.scatter(circle_x, circle_y, color='r', s=5)
+
+# Optionally, draw the circle
+cx, cy = np.mean(circle_x), np.mean(circle_y)
+r = np.mean(np.sqrt((circle_x - cx)**2 + (circle_y - cy)**2))
+circle_patch = patches.Circle((cx, cy), r, linewidth=2, edgecolor='r', facecolor='none')
+plt.gca().add_patch(circle_patch)
+
+# Show the plot
+plt.axis('off')
+plt.show()
+
+# %%% PLOTTING SINGLE SLICE
+
+from skimage import exposure
+
+# Slice index (X)
+slice_idx = 50
+
+# Extract the transversal slice
+transversal_slice = reoriented_dicom[slice_idx, :, :]
+
+# Plot the slice
+plt.figure(figsize=(6,6))
+plt.imshow(transversal_slice, cmap="gray")
+plt.title(f"Transversal slice at x={slice_idx}")
+plt.axis("off")
+
+count = 0
+# Overlay landmarks that lie on this slice
+for z, y, x in circle_points:
+    if z == slice_idx:  # Only plot landmarks on this slice
+        plt.scatter(x, y, c='r', alpha=0.7,s=2)  # z → horizontal, y → vertical
+        count+=1
+
+    
+print(count)
+plt.show()
+
+
+
+#%% PLOTTING ENTIRE FIGURE
+
+# Loop over slice indices
+for slice_idx in range(27,45):  # or any range you want
+    # Extract the transversal slice
+    transversal_slice = reoriented_dicom[slice_idx, :, :]
+    
+    # Clear the current figure
+    plt.clf()
+    
+    # Show the slice
+    plt.imshow(transversal_slice, cmap="gray")
+    plt.title(f"Transversal slice at x={slice_idx}")
+    # plt.axis("off")
+    
+    # Overlay landmarks that lie on this slice
+    for z, y, x in commissures:
+        if z == slice_idx:  # Only plot landmarks on this slice
+            plt.scatter(x, y, c='r', s=1)  
+            # print("Gevonden")
+    
+    # Draw and pause
+    plt.draw()
+    plt.pause(0.1)  # pause 2 seconds
+    
+plt.close()
 
 # %% FIND THE WHOLE AORTIC WALL
 
