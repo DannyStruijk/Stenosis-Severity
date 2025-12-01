@@ -4,7 +4,7 @@ import os
 from scipy.ndimage import gaussian_filter
 
 # Set patient ID
-patient_id = "aos14"
+patient_id = "savi_01"
 
 # Read landmarks from file, which were annotated using the GUI
 landmarks_file = r"H:\DATA\Afstuderen\2.Code\Stenosis-Severity\annotations\ras_coordinates.txt"
@@ -13,6 +13,8 @@ landmarks = np.loadtxt(landmarks_file)
 # The landmarks are loaded from the file. Then, sets of commissures and hinge points are made
 commissure_1, commissure_2, commissure_3, center, hinge_1, hinge_2, hinge_3 = landmarks
 cusp_landmarks = functions.calc_leaflet_landmarks(commissure_1, commissure_2, commissure_3, hinge_1, hinge_2, hinge_3)
+
+print("CUSP LANDMARKS", cusp_landmarks)
 
 # Save the landmarks with consistent commissure ordering
 output_path = fr"H:\DATA\Afstuderen\3.Data\SSM\patient_database\{patient_id}\landmarks"
@@ -38,7 +40,7 @@ lcc_path = fr"H:\DATA\Afstuderen\3.Data\SSM\patient_database\{patient_id}\landma
 lcc_ctrlpts = functions.load_leaflet_landmarks(lcc_path)
 leaf_2 = functions.calc_ctrlpoints(lcc_ctrlpts, center)
 interpolated_leaf_2 = functions.interpolate_surface(leaf_2)
-print("Control points of LCC:", leaf_2)
+# print("Control points of LCC:", leaf_2)
 lcc_recon_path = os.path.join(base_recon_path, "lcc", "input_patients", patient_id)
 os.makedirs(lcc_recon_path, exist_ok=True)
 functions.save_surface_evalpts(interpolated_leaf_2, os.path.join(lcc_recon_path, "lcc_points.txt"))
@@ -49,7 +51,7 @@ rcc_path = fr"H:\DATA\Afstuderen\3.Data\SSM\patient_database\{patient_id}\landma
 rcc_ctrlpts = functions.load_leaflet_landmarks(rcc_path)
 leaf_3 = functions.calc_ctrlpoints(rcc_ctrlpts, center)
 interpolated_leaf_3 = functions.interpolate_surface(leaf_3)
-print("Control points of RCC:", leaf_3)
+# print("Control points of RCC:", leaf_3)
 rcc_recon_path = os.path.join(base_recon_path, "rcc", "input_patients", patient_id)
 os.makedirs(rcc_recon_path, exist_ok=True)
 functions.save_surface_evalpts(interpolated_leaf_3, os.path.join(rcc_recon_path, "rcc_points.txt"))

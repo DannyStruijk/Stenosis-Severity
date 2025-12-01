@@ -92,6 +92,7 @@ class InterfaceWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.ui.dicom_dropdown.addItem("Patient 13", "T:/Research_01/CZE-2020.67 - SAVI-AoS/AoS stress/CT/Aosstress13/DICOM/0000208C/AABDE934/AA243C5D/00002411")
         self.ui.dicom_dropdown.addItem("Patient 14", "T:/Research_01/CZE-2020.67 - SAVI-AoS/AoS stress/CT/Aosstress14/DICOM/000037EC/AA4EC564/AA3B0DE6/00007EA9")
         self.ui.dicom_dropdown.addItem("Patient 15", "T:/Research_01/CZE-2020.67 - SAVI-AoS/AoS stress/CT/Aosstress15/DICOM/00007464/AA714246/AA1B4F2E/00008A1B")
+        self.ui.dicom_dropdown.addItem("SAVI_01", "T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE001/DICOM/00003852/AA44D04F/AA7BB8C5/000050B5")
 
     def load_dicom_button(self):
         # Get the patient name and DICOM path from dropdown

@@ -174,6 +174,8 @@ def get_sorted_dicom_files(dicom_dir):
     sorts them based on the Z position (SliceLocation or ImagePositionPatient), 
     and returns a sorted list of file paths with their corresponding Z positions.
     
+    - NOTE: Ascending order, so lowest Z is first.
+    
     Parameters:
     dicom_dir (str): The directory containing the DICOM files.
     
