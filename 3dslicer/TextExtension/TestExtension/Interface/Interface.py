@@ -92,7 +92,17 @@ class InterfaceWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.ui.dicom_dropdown.addItem("Patient 13", "T:/Research_01/CZE-2020.67 - SAVI-AoS/AoS stress/CT/Aosstress13/DICOM/0000208C/AABDE934/AA243C5D/00002411")
         self.ui.dicom_dropdown.addItem("Patient 14", "T:/Research_01/CZE-2020.67 - SAVI-AoS/AoS stress/CT/Aosstress14/DICOM/000037EC/AA4EC564/AA3B0DE6/00007EA9")
         self.ui.dicom_dropdown.addItem("Patient 15", "T:/Research_01/CZE-2020.67 - SAVI-AoS/AoS stress/CT/Aosstress15/DICOM/00007464/AA714246/AA1B4F2E/00008A1B")
+        # Add SAVI-AoS patients
         self.ui.dicom_dropdown.addItem("SAVI_01", "T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE001/DICOM/00003852/AA44D04F/AA7BB8C5/000050B5")
+        self.ui.dicom_dropdown.addItem("SAVI_02", "T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE002/DICOM/0000AFC5/AAAA2796/AAFF16B0/0000ADA6")
+        self.ui.dicom_dropdown.addItem("SAVI_03", "T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE003/DICOM/0000AF6A/AA4272CE/AA72A45E/000050F2")
+        self.ui.dicom_dropdown.addItem("SAVI_04", "T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE004/DICOM/00002F76/AA1F4542/AAB1E4E9/0000CAC5")
+        self.ui.dicom_dropdown.addItem("SAVI_05", "T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE005/DICOM/0000AF52/AA590C3F/AAC428CF/0000FEE0")
+        self.ui.dicom_dropdown.addItem("SAVI_06", "T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE006/DICOM/00000EED/AA87381C/AAAEC035/00002581")
+        self.ui.dicom_dropdown.addItem("SAVI_07", "T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE007/DICOM/000065F6/AAB95BAE/AA7A7E4C/00005896")
+        self.ui.dicom_dropdown.addItem("SAVI_08", "T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE008/DICOM/000053DF/AA102722/AA7E9491/000073C6")
+        self.ui.dicom_dropdown.addItem("SAVI_10", "T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE010/DICOM/00003911/AA8B6291/AA8D4457/0000EDE8")
+
 
     def load_dicom_button(self):
         # Get the patient name and DICOM path from dropdown

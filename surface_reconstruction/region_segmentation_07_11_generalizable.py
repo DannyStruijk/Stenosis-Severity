@@ -11,8 +11,45 @@ import pydicom
 import matplotlib.pyplot as plt
 import nrrd
 from skimage import exposure
+from scipy.ndimage import binary_erosion
 
-# %% PREPROCESSING
+
+# %% PATIENT PATHS & SELECTION OF PATIENT
+
+PATIENT_PATHS = {
+    # AoSstress patients
+    "aos_2":  r"T:/Research_01/CZE-2020.67 - SAVI-AoS/AoS stress/CT/Aosstress02/DICOM/00002C38/AA3D97B3/AA3B5B73/000062B4",
+    "aos_5":  r"T:/Research_01/CZE-2020.67 - SAVI-AoS/Aos stress/CT/Aosstress05/DICOM/0000CD6B/AA3BA81C/AAADD92A/0000C27F",
+    "aos_6":  r"T:/Research_01/CZE-2020.67 - SAVI-AoS/Aos stress/CT/Aosstress06/DICOM/00008A58/AA245852/AA659577/0000A0F7",
+    "aos_8":  r"T:/Research_01/CZE-2020.67 - SAVI-AoS/Aos stress/CT/Aosstress08/DICOM/0000A996/AA934448/AA0D3303/0000F9C1",
+    "aos_9":  r"T:/Research_01/CZE-2020.67 - SAVI-AoS/Aos stress/CT/Aosstress09/DICOM/0000B2D9/AA876FC8/AABB814D/0000534F",
+    "aos_11": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/Aos stress/CT/Aosstress11/DICOM/00006310/AAD9B219/AA824679/00004F79",
+    "aos_12": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/Aos stress/CT/Aosstress12/DICOM/0000B416/AABF5153/AA9CA582/0000799A",
+    "aos_13": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/Aos stress/CT/Aosstress13/DICOM/0000208C/AABDE934/AA243C5D/00002411",
+    "aos_14": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/Aos stress/CT/Aosstress14/DICOM/000037EC/AA4EC564/AA3B0DE6/00007EA9",
+    "aos_15": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/Aos stress/CT/Aosstress15/DICOM/00007464/AA714246/AA1B4F2E/00008A1B",
+
+    # SAVI AoS patients
+    "savi_01": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE001/DICOM/00003852/AA44D04F/AA7BB8C5/000050B5",
+    "savi_02": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE002/DICOM/0000AFC5/AAAA2796/AAFF16B0/0000ADA6",
+    "savi_03": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE003/DICOM/0000AF6A/AA4272CE/AA72A45E/000050F2",
+    "savi_04": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE004/DICOM/00002F76/AA1F4542/AAB1E4E9/0000CAC5",
+    "savi_05": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE005/DICOM/0000AF52/AA590C3F/AAC428CF/0000FEE0",
+    "savi_06": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE006/DICOM/00000EED/AA87381C/AAAEC035/00002581",
+    "savi_07": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE007/DICOM/000065F6/AAB95BAE/AA7A7E4C/00005896",
+    "savi_08": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE008/DICOM/000053DF/AA102722/AA7E9491/000073C6",
+    "savi_10": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE010/DICOM/00003911/AA8B6291/AA8D4457/0000EDE8",
+}
+
+# Choose which patient to work with
+patient_nr = "savi_01"   # e.g. "aos_14" or "savi_07"
+
+# Automatically load directory
+dicom_dir = PATIENT_PATHS[patient_nr]
+
+
+
+# %% ####################################################PREPROCESSING##################################################
 # READING IN THE DICOM & THE EDGE DETECTED IMAGE
 
 from scipy.ndimage import zoom, gaussian_filter
@@ -20,10 +57,8 @@ import pydicom
 import numpy as np
 
 # Load the dicom
-dicom_dir = r"T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE001/DICOM/00003852/AA44D04F/AA7BB8C5/000050B5"
 dicom_reversed = gf.get_sorted_dicom_files(dicom_dir)
 dicom = dicom_reversed[::-1]
-# dicom=dicom_reversed
 raw_volume = gf.dicom_to_matrix(dicom)
 
 # Print to confirm dicom loading
@@ -58,7 +93,8 @@ clipped_dicom = np.clip(raw_volume_hu, low, high)
 print(f"Min and Max values of clipped DICOM: {clipped_dicom.min()}, {clipped_dicom.max()}")
 
 # Smoothing the image a bit
-smoothed_dicom = gaussian_filter(clipped_dicom, sigma=2)  # Note, sigma was changed for patient 11
+smoothed_dicom = gaussian_filter(clipped_dicom, sigma=1)  # Note, sigma was changed for patient 11
+smoothed_non_clipped = gaussian_filter(raw_volume_hu, sigma=1) # also non-clipped dicom is preserved for calcification retrieval
 
 # Print to confirm smoothing
 print(f"Min and Max values of smoothed DICOM: {smoothed_dicom.min()}, {smoothed_dicom.max()}")
@@ -77,9 +113,10 @@ dicom_origin = np.array(dicom_template.ImagePositionPatient, dtype=float)
 # Print origin
 print(f"DICOM origin: {dicom_origin}")
 
-# %% REORIENTATION
+
+
+# %%######################################### REORIENTATION ###########################################################
 # Calculating the vector perpendicualr to the annulus
-patient_nr= "savi_01"  # insert here which patient you would like to analyze
 annular_normal = functions.get_annular_normal(patient_nr)
 
 # Reorient the edge-detected image
@@ -96,8 +133,17 @@ reoriented_dicom, rotation_matrix_dicom, rotation_center_dicom = functions.reori
                                                                                            dicom_origin,
                                                                                            pixel_spacing)
 
+# Lastly, do the reorientation of the non-clipped DICOM 
+rescaled_non_clipped_dicom = functions.zoom(smoothed_non_clipped, pixel_spacing)
+reoriented_non_clipped, rotation_matrix_dicom_non_clip, rotation_center_dicom_non_clip = functions.reorient_volume(rescaled_non_clipped_dicom,
+                                                                                           annular_normal,
+                                                                                           dicom_origin,
+                                                                                           pixel_spacing)
 
-# %% PLOTTING THE ANNOTATED LANDMARKS FOR ALL CUSPS
+
+
+
+# %%##############################%% PLOTTING THE ANNOTATED LANDMARKS FOR ALL CUSPS###################################
 
 # Use the _test files if you want to have the recently newly annotated landmarks of 3Dslicer
 # Dynamically load the landmark files based on the patient number
@@ -146,7 +192,10 @@ lcc_rotated = landmarks_rotated_dict["LCC"]
 rcc_rotated = landmarks_rotated_dict["RCC"]
 ncc_rotated = landmarks_rotated_dict["NCC"]
 
-# %% RETRIEVE ALL OF THE DIFFERENT COORDINATES IN ORDER TO 
+
+
+# %% ####################### RETRIEVE ALL OF THE DIFFERENT COORDINATES IN ORDER TO ##########################
+
 
 
 # --- Load only the first landmark from each file ---
@@ -172,7 +221,9 @@ z_max = np.max(all_rotated[:, 0])
 print(f"Minimum z-coordinate across all cusps: {z_min}")
 print(f"Maximum z-coordinate across all cusps: {z_max}")
 
-#%%%%%%% OPTIONAL VISUALIZATION OF THE CIRCLE
+
+
+#%%%%%%%  ##########################################OPTIONAL VISUALIZATION OF THE CIRCLE#####################################
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -205,7 +256,7 @@ plt.gca().add_patch(circle_patch)
 plt.axis('off')
 plt.show()
 
-# %%% PLOTTING SINGLE SLICE
+# %%% ################################################# PLOTTING SINGLE SLICE#########################################
 
 from skimage import exposure
 
@@ -234,10 +285,10 @@ plt.show()
 
 
 
-#%% PLOTTING ENTIRE FIGURE
+#%% ###################################################PLOTTING ENTIRE FIGURE##################################
 
 # Loop over slice indices
-for slice_idx in range(27,45):  # or any range you want
+for slice_idx in range(z_min,z_max):  # or any range you want
     # Extract the transversal slice
     transversal_slice = reoriented_dicom[slice_idx, :, :]
     
@@ -261,7 +312,7 @@ for slice_idx in range(27,45):  # or any range you want
     
 plt.close()
 
-# %% FIND THE WHOLE AORTIC WALL
+# %%##################################################### FIND THE WHOLE AORTIC WALL##############################
 
 from skimage.segmentation import active_contour
 from skimage.transform import rescale
@@ -299,9 +350,12 @@ crop_bool = True
 for slice_nr in range(z_min_int, z_max_int + 1):
     
     image_pre = reoriented_volume[slice_nr, :, :]
+    dicom_slice = reoriented_non_clipped[slice_nr, :, :]
 
-    # Upsample image
+    # Upsample both the edge detected image as well as the regular dicom
     gradient_upsampled = rescale(image_pre, scale_factor, order=3, preserve_range=True, anti_aliasing=True).astype(image_pre.dtype)
+    dicom_upsampled = rescale(dicom_slice, scale_factor, order=3, preserve_range=True, anti_aliasing=True).astype(dicom_slice.dtype)
+    
     img = gradient_upsampled.astype(np.float32)
     img = img / img.max()
     
@@ -391,7 +445,8 @@ for slice_nr in range(z_min_int, z_max_int + 1):
     slice_data[slice_nr] = {
         "skeleton": skeleton.copy(),
         "roi_mask": roi_mask.copy(),
-        "snake": snake_current.copy()
+        "snake": snake_current.copy(),
+        "slice": dicom_upsampled.copy()
     }
 
     # Store contour info
@@ -399,6 +454,187 @@ for slice_nr in range(z_min_int, z_max_int + 1):
     aortic_wall_contours[slice_nr] = final_snake
     upsampled_snakes[slice_nr] = snake_current.copy()  
     prev_snake = snake_current
+
+
+# %% ------------------------------------------CREATE NEW VOLUME WITH EXCLUSIVE ROI MASK -------------------------
+
+
+# Initialize empty masked volume
+upsample_factor = 4
+
+# Create an empty mask with the same dimensions as the original image
+masked_valve = np.zeros(
+    (
+        reoriented_dicom.shape[0],                     # Z
+        reoriented_dicom.shape[1] * upsample_factor,   # Y
+        reoriented_dicom.shape[2] * upsample_factor    # X
+    ),
+    dtype=reoriented_dicom.dtype
+)
+
+num_slices = reoriented_dicom.shape[0]
+
+# Initialize calcification volume
+calc_volume = np.zeros_like(masked_valve, dtype=bool)
+calc_volume_downsampled = np.zeros_like(reoriented_dicom, dtype=bool)
+
+for slice_nr in range(num_slices):
+
+    # If this slice has stored data, apply ROI
+    if slice_nr in slice_data:
+        
+        # Use the slice data 
+        roi_mask= slice_data[slice_nr]["roi_mask"]
+        slice_img = slice_data[slice_nr]["slice"]
+        
+        # The slice on which the threshold is based, is eroded to remove eventuel calcifications on the aortic wall
+        # we want to have a clean histogram which is not skewed due to calcifications
+        if slice_nr == z_min:
+            roi_mask = binary_erosion(roi_mask, iterations = 5)    
+        
+        # Extract intensities inside ROI
+        roi_values = slice_img[roi_mask > 0]
+        
+        if roi_values.size == 0:
+            median_intensity = np.nan
+        else:
+            median_intensity = np.median(roi_values)
+        
+        print(f"Slice {slice_nr}: median intensity inside ROI = {median_intensity:.2f}")
+        
+        # Compute lower and upper percentiles
+        lower = np.percentile(roi_values, 25)   # remove bottom 5%
+        upper = np.percentile(roi_values, 95)  # remove top 5%
+        
+        # Keep only values within 5th–95th percentile
+        soft_tissue_values = roi_values[(roi_values >= lower) & (roi_values <= upper)]
+        
+        
+        if slice_nr==z_min:
+            # Compute mean and std of soft tissue - this was done previously this way, now percentile is used
+            # mean_val = soft_tissue_values.mean()
+            # std_val = soft_tissue_values.std()
+        
+            # Threshold for calcification: e.g., mean + 3*std
+            calc_threshold =  np.percentile(roi_values, 99.5)  # upper bound used as threshold   
+            print(f"Patient {patient_nr}: Threshold for calcification  = {calc_threshold:.2f}")
+        
+        # Print a histogram - necessary for seperating the calcification from the aortic valve
+        print_histo = True
+        if print_histo == True:
+            plt.clf()
+            plt.hist(roi_values.flatten(), bins=40, color='skyblue', edgecolor='black')
+            plt.title(f"Slice {slice_nr} – ROI intensity histogram")
+            plt.xlabel("Intensity")
+            plt.ylabel("Frequency")
+            plt.grid(True, linestyle='--', alpha=0.5)
+            
+            # Add vertical dashed line for threshold
+            plt.axvline(calc_threshold, color='red', linestyle='--', linewidth=2, label=f'Threshold: {calc_threshold:.1f}')
+            plt.legend()
+            plt.pause(0.2)  # scroll speed
+            
+        
+
+        # Safety check (recommended)
+        if roi_mask.shape != slice_img.shape:
+            raise ValueError(
+                f"ROI mask shape {roi_mask.shape} does not match stored slice shape "
+                f"{slice_img.shape} at slice {slice_nr}"
+            )
+
+        # Apply mask
+        masked_valve[slice_nr] = slice_img * roi_mask
+        
+        # --- Calcification segmentation ---
+        calc_mask = np.zeros_like(slice_img, dtype=bool)
+        calc_mask[roi_mask > 0] = slice_img[roi_mask > 0] > calc_threshold
+        calc_volume[slice_nr] = calc_mask  # store in 3D volume
+        calc_volume_downsampled[slice_nr] = rescale(calc_mask, 1/scale_factor, order=0, preserve_range=True, anti_aliasing=False).astype(dicom_slice.dtype)
+
+    # Otherwise leave slice empty
+    else:
+        masked_valve[slice_nr] = 0
+
+# # (optional) Visualization fo the ROI
+
+for z in range(z_min, z_max + 1):
+    if z not in slice_data:
+        continue
+
+    plt.clf()
+
+    # Show the original slice (masked valve)
+    slice_img = masked_valve[z]  # or slice_data[z]["slice"] if you prefer original
+    plt.imshow(slice_img, cmap="gray")
+
+    # Overlay calcification in red using contour
+    plt.contour(calc_volume[z], colors='red', linewidths=1)
+
+    plt.title(f"Slice {z} – Calcification overlay")
+    plt.axis("off")
+    plt.pause(0.15)
+
+plt.show()
+
+
+
+# %% ---------------------------------------- Creating calcification mask ---------------------------------
+import functions
+# Rotating the calcification segmentation back to the original orientation - 
+# note that the volume is still upsampled, downsampling is done after rotation.
+# Before rotation
+num_true_before = np.count_nonzero(calc_volume_downsampled)
+num_false_before = calc_volume.size - num_true_before
+
+print(f"Before rotation (upsampled): True={num_true_before}, False={num_false_before}")
+
+# Rotate back
+dicom_calcification = functions.rotate_segmentation_back(
+    calc_volume,
+    rotation_matrix,
+    rotation_center,
+    upsample_factor
+)
+
+# After rotation
+num_true_after = np.count_nonzero(dicom_calcification)
+num_false_after = dicom_calcification.size - num_true_after
+
+print(f"After rotation (still upsampled): True={num_true_after}, False={num_false_after}")
+
+# Optional: check difference
+num_changed = np.sum(calc_volume != dicom_calcification)
+print(f"Number of voxels changed due to rotation: {num_changed}")
+
+
+#%% ###################################################PLOTTING ENTIRE FIGURE##################################
+
+# Loop over slice indices
+for slice_idx in range(z_min,z_max):  # or any range you want
+    # Extract the transversal slice
+    transversal_slice = calc_volume_downsampled[slice_idx, :, :]
+    
+    # Clear the current figure
+    plt.clf()
+    
+    # Show the slice
+    plt.imshow(transversal_slice, cmap="gray")
+    plt.title(f"Transversal slice at x={slice_idx}")
+    # plt.axis("off")
+    
+    # Overlay landmarks that lie on this slice
+    for z, y, x in commissures:
+        if z == slice_idx:  # Only plot landmarks on this slice
+            plt.scatter(x, y, c='r', s=1)  
+            # print("Gevonden")
+    
+    # Draw and pause
+    plt.draw()
+    plt.pause(0.1)  # pause 2 seconds
+    
+plt.close()
+
 
 
 # %%------------------------------- EXTRACTION OF THE BOUNDARIES ---------------------------
