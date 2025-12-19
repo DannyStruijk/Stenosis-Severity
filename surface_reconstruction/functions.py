@@ -1243,6 +1243,43 @@ def compute_slice_spacing(dicom_list):
     return round(float(abs(np.median(diffs))), 3)
 
 
+def rotate_segmentation_back(seg_rotated, R, rotation_center, upscaling_factor):
+    """
+    Rotate a segmentation from rotated/annular-aligned space
+    back to original DICOM space.
+
+    Parameters
+    ----------
+    seg_rotated : np.ndarray
+        3D segmentation in rotated space (binary or labels)
+    R : np.ndarray
+        3x3 rotation matrix used to align original volume
+
+    Returns
+    -------
+    seg_original : np.ndarray
+        Segmentation in original DICOM space
+    """
+    # Center of rotated volume - since we are working with upsampled image, center also needs to be upsampled
+    center = rotation_center * upscaling_factor
+
+    # Rotation matrix: rotated -> original
+    M_back = R
+
+    # Offset for rotation around center
+    offset_back = center - M_back @ center
+
+    # Apply affine transform
+    seg_original = affine_transform(
+        seg_rotated,
+        M_back,
+        offset=offset_back,
+        order=0       # nearest neighbor for masks
+    )
+
+    return seg_original
+
+
 
 
 

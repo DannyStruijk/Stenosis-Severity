@@ -4,7 +4,7 @@ import os
 from scipy.ndimage import gaussian_filter
 
 # Set patient ID
-patient_id = "savi_01"
+patient_id = "savi_10"
 
 # Read landmarks from file, which were annotated using the GUI
 landmarks_file = r"H:\DATA\Afstuderen\2.Code\Stenosis-Severity\annotations\ras_coordinates.txt"
