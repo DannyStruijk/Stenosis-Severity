@@ -14,7 +14,7 @@ from skimage import exposure
 from scipy.ndimage import binary_erosion
 
 
-# %% PATIENT PATHS & SELECTION OF PATIENT
+# %% ----------------------------------------PATIENT PATHS & SELECTION OF PATIENT -----------------------------
 
 PATIENT_PATHS = {
     # AoSstress patients
@@ -49,7 +49,7 @@ dicom_dir = PATIENT_PATHS[patient_nr]
 
 
 
-# %% ####################################################PREPROCESSING##################################################
+# %% -------------------------------------------- PREPROCESSING ----------------------------------------
 # READING IN THE DICOM & THE EDGE DETECTED IMAGE
 
 from scipy.ndimage import zoom, gaussian_filter
@@ -115,7 +115,7 @@ print(f"DICOM origin: {dicom_origin}")
 
 
 
-# %%######################################### REORIENTATION ###########################################################
+# %%------------------------------------------REORIENTATION ---------------------------------------
 from skimage.transform import rescale
 
 # in this code the the anisotropic vxel is first concerted to isotropic voxel with the pixel spacing
@@ -152,7 +152,7 @@ reoriented_non_clipped, rotation_matrix_dicom_non_clip, rotation_center_dicom_no
 
 
 
-# %%##############################%% PLOTTING THE ANNOTATED LANDMARKS FOR ALL CUSPS###################################
+# %% ----------------------------------- PLOTTING THE ANNOTATED LANDMARKS FOR ALL CUSPS --------------------------
 
 # Use the _test files if you want to have the recently newly annotated landmarks of 3Dslicer
 # Dynamically load the landmark files based on the patient number
@@ -204,7 +204,7 @@ ncc_rotated = landmarks_rotated_dict["NCC"]
 
 
 
-# %% ####################### RETRIEVE ALL OF THE DIFFERENT COORDINATES IN ORDER TO ##########################
+# %% ------------------------------------ RETRIEVE ALL OF THE DIFFERENT COORDINATES --------
 
 
 
@@ -233,40 +233,7 @@ print(f"Maximum z-coordinate across all cusps: {z_max}")
 
 
 
-#%%%%%%%  ##########################################OPTIONAL VISUALIZATION OF THE CIRCLE#####################################
-
-import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib.patches as patches
-
-slice_idx=37
-
-# Assuming 'circle_snake' and 'reoriented_dicom' are available
-# Convert 3D circle points to 2D pixel coordinates
-circle_x = np.round(circle_snake[:, 0]).astype(int)
-circle_y = np.round(circle_snake[:, 1]).astype(int)
-
-# Extract the specific DICOM slice
-dicom_slice = reoriented_dicom[slice_idx, :, :]
-
-# Plot the DICOM slice and overlay the circle
-plt.figure(figsize=(8, 8))
-plt.imshow(dicom_slice, cmap='gray')
-
-# Plot the circle points
-plt.scatter(circle_x, circle_y, color='r', s=5)
-
-# Optionally, draw the circle
-cx, cy = np.mean(circle_x), np.mean(circle_y)
-r = np.mean(np.sqrt((circle_x - cx)**2 + (circle_y - cy)**2))
-circle_patch = patches.Circle((cx, cy), r, linewidth=2, edgecolor='r', facecolor='none')
-plt.gca().add_patch(circle_patch)
-
-# Show the plot
-plt.axis('off')
-plt.show()
-
-# %%% ################################################# PLOTTING SINGLE SLICE#########################################
+# %%% ------------------------------------------ PLOTTING SINGLE SLICE ---------------------------
 
 from skimage import exposure
 
@@ -295,7 +262,7 @@ plt.show()
 
 
 
-#%% ###################################################PLOTTING ENTIRE FIGURE##################################
+#%%  ------------------------------------------- PLOTTING ENTIRE FIGURE  ------------------------------
 
 # Loop over slice indices
 for slice_idx in range(z_min,z_max):  # or any range you want
@@ -322,7 +289,7 @@ for slice_idx in range(z_min,z_max):  # or any range you want
     
 plt.close()
 
-# %%##################################################### FIND THE WHOLE AORTIC WALL##############################
+# %% ------------------------------------------- FIND THE WHOLE AORTIC WALL ------------------------
 
 from skimage.segmentation import active_contour
 from skimage.transform import rescale
@@ -525,7 +492,7 @@ for slice_nr in range(z_min_int, z_max_int + 1):
     prev_snake = snake_current
 
 
-# %% ------------------------------------------CREATE NEW VOLUME WITH EXCLUSIVE ROI MASK -------------------------
+# %% ------------------------------------------ IDENTIFICATION OF CALCIFICATION -------------------------
 from skimage.morphology import binary_erosion, disk
 
 
@@ -659,7 +626,7 @@ for z in range(z_min, z_max + 1):
 plt.show()
 
 
-#%% ###################################################PLOTTING ENTIRE FIGURE##################################
+#%% --------------------------------  PLOTTING ENTIRE FIGURE  --------------------------------------
 
 # Loop over slice indices
 for slice_idx in range(z_min,z_max):  # or any range you want
@@ -688,7 +655,7 @@ plt.close()
 
 
 
-# %%------------------------------- EXTRACTION OF THE BOUNDARIES ---------------------------
+# %%-------------------------------  EXTRACTION OF THE LEAFET BOUNDARIES ---------------------------
 
 from skimage.morphology import binary_erosion
 from scipy.ndimage import gaussian_filter
@@ -908,19 +875,23 @@ for slice_nr, slice_info in slice_data.items():
         "lcc_ncc_boundary": cleaned_lcc_ncc_boundary.copy(),
         "rcc_lcc_boundary": cleaned_rcc_lcc_boundary.copy(),
         "com_to_com": seg_c2c["LCC"].copy(),
-        "aortic_wall_contour": aortic_wall_contour.copy()
+        "aortic_wall_contour": aortic_wall_contour.copy(),
+        "height": slice_nr
     }
     RCC_data[slice_nr] = {
         "mask": rcc_lcc_mask.copy(),
         "rcc_lcc_boundary": cleaned_rcc_lcc_boundary.copy(),
         "ncc_rcc_boundary": cleaned_ncc_rcc_boundary.copy(),
-        "com_to_com": seg_c2c["RCC"].copy()
+        "com_to_com": seg_c2c["RCC"].copy(),
+        "height": slice_nr
+        
     }
     NCC_data[slice_nr] = {
         "mask": ncc_rcc_mask.copy(),
         "ncc_rcc_boundary": cleaned_ncc_rcc_boundary.copy(),
         "lcc_ncc_boundary": cleaned_lcc_ncc_boundary.copy(),
-        "com_to_com": seg_c2c["NCC"].copy()
+        "com_to_com": seg_c2c["NCC"].copy(),
+        "height": slice_nr
     }
     
     # Optional visualization (COM-to-COM segments + boundaries)
@@ -943,29 +914,89 @@ for slice_nr, slice_info in slice_data.items():
     print(f"Size of NCC-RCC Boundary (Slice {slice_nr}):", cleaned_ncc_rcc_boundary.shape)
     
     
+# %% --- Save each contour segment as VTK ---
+import os
+import numpy as np
+import functions  # Import functions from your functions.py file
+
+# Collect all boundaries (list of NumPy arrays) and corresponding heights (z-values)
+lcc_boundaries = []
+rcc_boundaries = []
+ncc_boundaries = []
+heights = []  # Corresponding heights for each boundary
+
+for slice_nr in slice_data:
+    print(f"Processing slice {slice_nr}...")
+
+    # Get the boundary data from your existing dictionary (RCC_data, LCC_data, NCC_data)
+    lcc_boundary = LCC_data[slice_nr]["lcc_ncc_boundary"]
+    rcc_boundary = RCC_data[slice_nr]["rcc_lcc_boundary"]
+    ncc_boundary = NCC_data[slice_nr]["ncc_rcc_boundary"]
     
-# %%Plotting the aortic wall contour 
-import functions
+    # Get the height (z-coordinate) for the current slice, which might be a value in your dataset
+    slice_height = LCC_data[slice_nr]["height"]  # Ensure this field exists in your data
 
-# Define commissures:
-commissure_points = {
-    'lcc_ncc':  lcc_ncc_com,
-    'rcc_lcc': rcc_lcc_com,
-    'ncc_rcc': ncc_rcc_com,
-}
+    # Store the boundaries and corresponding height
+    lcc_boundaries.append(np.array(lcc_boundary))
+    rcc_boundaries.append(np.array(rcc_boundary))
+    ncc_boundaries.append(np.array(ncc_boundary))
+    heights.append(slice_height)  # Store the z-coordinate (height)
 
-# Generate the mask
-mask = functions.create_mercedes_mask(reoriented_dicom[z_min, :, :], commissure_points, center, line_thickness=12)
+# Combine boundaries for LCC, RCC, NCC into vtkPolyData objects with z-coordinate consideration
+lcc_combined_polydata = functions.combine_boundaries_to_polydata(lcc_boundaries, heights)
+rcc_combined_polydata = functions.combine_boundaries_to_polydata(rcc_boundaries, heights)
+ncc_combined_polydata = functions.combine_boundaries_to_polydata(ncc_boundaries, heights)
 
-# Visualization of the slice and mask
-plt.figure(figsize=(8, 8))
+# Save each combined polydata to a VTK file
+output_path = "H:/DATA/Afstuderen/3.Data/output_valve_segmentation/savi01"
+os.makedirs(output_path, exist_ok=True)
 
-# Plot the slice
-plt.imshow(reoriented_dicom[z_min, :, :], cmap='gray', origin='upper', alpha=1.0)
+# Save the combined boundaries
+functions.save_vtk_polydata(lcc_combined_polydata, os.path.join(output_path, "LCC_combined_boundaries.vtk"))
+functions.save_vtk_polydata(rcc_combined_polydata, os.path.join(output_path, "RCC_combined_boundaries.vtk"))
+functions.save_vtk_polydata(ncc_combined_polydata, os.path.join(output_path, "NCC_combined_boundaries.vtk"))
 
-# Plot the mask with semi-transparency on top of the slice
-plt.imshow(mask, cmap='jet', alpha=0.3)  # Adjust alpha for transparency
+# %% ------------------------ COM-TO-COM SEGMENTS ----------------------------
 
-plt.title("Slice with Thickened Line Mask")
-plt.axis('off')
-plt.show()
+import os
+import numpy as np
+import functions  # Import functions from your functions.py file
+
+# Collect all com_to_com segments (list of NumPy arrays) and corresponding heights (z-values)
+lcc_com_to_com = []
+rcc_com_to_com = []
+ncc_com_to_com = []
+heights_com_to_com = []  # Corresponding heights for each com_to_com segment
+
+for slice_nr in slice_data:
+    print(f"Processing slice {slice_nr} for com_to_com segments...")
+
+    # Get the com_to_com data from your existing dictionary (RCC_data, LCC_data, NCC_data)
+    lcc_com_to_com_segment = LCC_data[slice_nr]["com_to_com"]
+    rcc_com_to_com_segment = RCC_data[slice_nr]["com_to_com"]
+    ncc_com_to_com_segment = NCC_data[slice_nr]["com_to_com"]
+    
+    # Get the height (z-coordinate) for the current slice, which might be a value in your dataset
+    slice_height = LCC_data[slice_nr]["height"]  # Ensure this field exists in your data
+
+    # Store the com_to_com segments and corresponding height
+    lcc_com_to_com.append(np.array(lcc_com_to_com_segment))
+    rcc_com_to_com.append(np.array(rcc_com_to_com_segment))
+    ncc_com_to_com.append(np.array(ncc_com_to_com_segment))
+    
+    heights_com_to_com.append(slice_height)  # Store the z-coordinate (height)
+
+# Combine com_to_com segments for LCC, RCC, NCC into vtkPolyData objects with z-coordinate consideration
+lcc_com_to_com_polydata = functions.combine_boundaries_to_polydata(lcc_com_to_com, heights_com_to_com)
+rcc_com_to_com_polydata = functions.combine_boundaries_to_polydata(rcc_com_to_com, heights_com_to_com)
+ncc_com_to_com_polydata = functions.combine_boundaries_to_polydata(ncc_com_to_com, heights_com_to_com)
+
+# Save each combined polydata to a VTK file for com_to_com segments
+output_path = "H:/DATA/Afstuderen/3.Data/output_valve_segmentation/savi01"
+os.makedirs(output_path, exist_ok=True)
+
+# Save the combined com_to_com segments
+functions.save_vtk_polydata(lcc_com_to_com_polydata, os.path.join(output_path, "LCC_combined_com_to_com.vtk"))
+functions.save_vtk_polydata(rcc_com_to_com_polydata, os.path.join(output_path, "RCC_combined_com_to_com.vtk"))
+functions.save_vtk_polydata(ncc_com_to_com_polydata, os.path.join(output_path, "NCC_combined_com_to_com.vtk"))
+

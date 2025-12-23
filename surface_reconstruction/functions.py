@@ -1335,6 +1335,47 @@ def create_mercedes_mask(image, commissure_points, center_point, line_thickness=
 
     return mask
 
+def numpy_to_vtk_points(np_array, z_value=0):
+    """Converts a numpy array of shape (N, 2) to vtk points, using z_value for the z-coordinate."""
+    vtk_points = vtk.vtkPoints()
+    for pt in np_array:
+        vtk_points.InsertNextPoint(pt[1], pt[0], z_value)  # x and y coordinates from numpy, z is from the slice's height
+    return vtk_points
 
+def create_vtk_polydata(np_array, z_value=0):
+    """Creates a VTK polydata object from a numpy array of boundary points with z_value as the height."""
+    vtk_points = numpy_to_vtk_points(np_array, z_value)
+    
+    # Create a polyline cell
+    polyline = vtk.vtkCellArray()
+    num_points = len(np_array)
+    polyline.InsertNextCell(num_points)
+    
+    for i in range(num_points):
+        polyline.InsertCellPoint(i)  # Insert each point into the polyline
 
+    # Create a polydata object and set the points and cells
+    polydata = vtk.vtkPolyData()
+    polydata.SetPoints(vtk_points)
+    polydata.SetLines(polyline)
+    
+    return polydata
+
+def combine_boundaries_to_polydata(boundaries, heights):
+    """Combine all the slice boundaries into a single vtkPolyData object with corresponding heights (z)."""
+    append_filter = vtk.vtkAppendPolyData()
+
+    for boundary, height in zip(boundaries, heights):
+        polydata = create_vtk_polydata(boundary, height)
+        append_filter.AddInputData(polydata)
+
+    append_filter.Update()
+    return append_filter.GetOutput()
+
+def save_vtk_polydata(polydata, filename):
+    """Saves the VTK polydata to a .vtk file."""
+    writer = vtk.vtkPolyDataWriter()
+    writer.SetFileName(filename)
+    writer.SetInputData(polydata)
+    writer.Write()
 
