@@ -116,26 +116,35 @@ print(f"DICOM origin: {dicom_origin}")
 
 
 # %%######################################### REORIENTATION ###########################################################
+from skimage.transform import rescale
+
+# in this code the the anisotropic vxel is first concerted to isotropic voxel with the pixel spacing
+# Next, the image is already upsampled for higher resolution. Results in a better rotation.
+
 # Calculating the vector perpendicualr to the annulus
 annular_normal = functions.get_annular_normal(patient_nr)
+scale_factor = 4
 
 # Reorient the edge-detected image
 rescaled_volume = functions.zoom(volume, pixel_spacing)
-reoriented_volume, rotation_matrix, rotation_center = functions.reorient_volume(rescaled_volume, 
+upsampled_volume = rescale(rescaled_volume, scale_factor, order=3, preserve_range=True, anti_aliasing=True).astype(rescaled_volume.dtype)
+reoriented_volume, rotation_matrix, rotation_center = functions.reorient_volume(upsampled_volume, 
                                                                                 annular_normal, 
                                                                                 dicom_origin, 
                                                                                 pixel_spacing)
 
 # Now als do the reorientation on the regular DICOM
 rescaled_dicom = functions.zoom(smoothed_dicom, pixel_spacing)
-reoriented_dicom, rotation_matrix_dicom, rotation_center_dicom = functions.reorient_volume(rescaled_dicom,
+upsampled_dicom = rescale(rescaled_dicom, scale_factor, order=3, preserve_range=True, anti_aliasing=True).astype(rescaled_dicom.dtype)
+reoriented_dicom, rotation_matrix_dicom, rotation_center_dicom = functions.reorient_volume(upsampled_dicom,
                                                                                            annular_normal,
                                                                                            dicom_origin,
                                                                                            pixel_spacing)
 
 # Lastly, do the reorientation of the non-clipped DICOM 
 rescaled_non_clipped_dicom = functions.zoom(smoothed_non_clipped, pixel_spacing)
-reoriented_non_clipped, rotation_matrix_dicom_non_clip, rotation_center_dicom_non_clip = functions.reorient_volume(rescaled_non_clipped_dicom,
+upsampled_non_clipped_dicom = rescale(rescaled_non_clipped_dicom, scale_factor, order=3, preserve_range=True, anti_aliasing=True).astype(rescaled_non_clipped_dicom.dtype)
+reoriented_non_clipped, rotation_matrix_dicom_non_clip, rotation_center_dicom_non_clip = functions.reorient_volume(upsampled_non_clipped_dicom,
                                                                                            annular_normal,
                                                                                            dicom_origin,
                                                                                            pixel_spacing)
@@ -170,9 +179,10 @@ for cusp_name, file_path in landmark_files.items():
     
     # 3. Scale according to voxel spacing
     landmarks_scaled = landmarks_zyx.copy()
-    landmarks_scaled[:, 0] *= slice_thickness   # z-axis
-    landmarks_scaled[:, 1] *= pixel_spacing_y  # y-axis
-    landmarks_scaled[:, 2] *= pixel_spacing_x  # x-axis
+    landmarks_scaled[:, 0] *= slice_thickness * scale_factor  # z-axis
+    landmarks_scaled[:, 1] *= pixel_spacing_y  * scale_factor # y-axis
+    landmarks_scaled[:, 2] *= pixel_spacing_x * scale_factor # x-axis
+
     
     # 4. Round to integer voxel indices
     landmarks_scaled_int = np.round(landmarks_scaled).astype(int)
@@ -322,6 +332,7 @@ from skimage.morphology import disk, dilation, skeletonize
 from skimage.filters import threshold_otsu
 from skimage.draw import polygon2mask
 
+
 # To find the whole aortic wall the active contours method is applied to each slice
 # Then, each found wall is accumulated with the previous one to create an aortic valve
 
@@ -343,7 +354,7 @@ slice_data = {}   # ✅ NEW: store per-slice info (snake, ROI mask, skeleton)
 
 prev_snake = 0
 show_intermediate = False
-crop_bool = True
+crop_bool = False
 
 # -------------------------------------- LOOP THROUGH SLICES ---------------------------
 
@@ -352,11 +363,11 @@ for slice_nr in range(z_min_int, z_max_int + 1):
     image_pre = reoriented_volume[slice_nr, :, :]
     dicom_slice = reoriented_non_clipped[slice_nr, :, :]
 
-    # Upsample both the edge detected image as well as the regular dicom
-    gradient_upsampled = rescale(image_pre, scale_factor, order=3, preserve_range=True, anti_aliasing=True).astype(image_pre.dtype)
-    dicom_upsampled = rescale(dicom_slice, scale_factor, order=3, preserve_range=True, anti_aliasing=True).astype(dicom_slice.dtype)
+    # Upsample both the edge detected image as well as the regular dicom - not needed anymore i think, since upsampling is done priorly
+    # gradient_upsampled = rescale(image_pre, scale_factor, order=3, preserve_range=True, anti_aliasing=True).astype(image_pre.dtype)
+    # dicom_upsampled = rescale(dicom_slice, scale_factor, order=3, preserve_range=True, anti_aliasing=True).astype(dicom_slice.dtype)
     
-    img = gradient_upsampled.astype(np.float32)
+    img = image_pre
     img = img / img.max()
     
     # yesequalization
@@ -365,7 +376,7 @@ for slice_nr in range(z_min_int, z_max_int + 1):
 
     # Initialize snake
     if slice_nr == z_min_int:
-        snake_current = circle_snake.copy() * scale_factor
+        snake_current = circle_snake.copy()
     else:
         snake_current = prev_snake.copy()
 
@@ -403,8 +414,7 @@ for slice_nr in range(z_min_int, z_max_int + 1):
     roi_mask = polygon2mask(new_image.shape, snake_current) 
 
     reoriented_slice_dicom = reoriented_dicom[slice_nr, :, :]
-    upscaled_slice = rescale(reoriented_slice_dicom, 4, order=3, preserve_range=True, anti_aliasing=True).astype(reoriented_slice_dicom.dtype)
-    roi_image = upscaled_slice * roi_mask.astype(reoriented_slice_dicom.dtype)
+    roi_image = reoriented_slice_dicom * roi_mask.astype(reoriented_slice_dicom.dtype)
     
     roi_pixels = roi_image[roi_mask]
     p_low, p_high = np.percentile(roi_pixels, (10, 100))
@@ -414,19 +424,36 @@ for slice_nr in range(z_min_int, z_max_int + 1):
     roi_windowed[roi_mask] = (roi_windowed[roi_mask] - p_low) / (p_high - p_low)
 
     # ---------------------------------------- SKELETONIZATION -----------------------------------
-    roi_windowed /= roi_windowed.max()
+    # Assuming roi_image and roi_mask are already defined
+    # Perform processing steps without normalization
     roi_pixels = roi_windowed[roi_mask]
+    
+    # Plot the histogram of the intensity values
+    plt.figure(figsize=(8, 6))
+    plt.hist(roi_pixels, bins=50, color='gray', alpha=0.7)
+    plt.title("Histogram of ROI Intensity Values")
+    plt.xlabel("Intensity")
+    plt.ylabel("Frequency")
+    
+    # Calculate Otsu threshold and plot it
     threshold_val = threshold_otsu(roi_pixels)
+    plt.axvline(threshold_val, color='r', linestyle='--', label=f'Otsu Threshold: {threshold_val:.2f}')
+    plt.legend()
+    plt.show()
+    
+    # Apply Otsu threshold
     fixed_mask = (roi_windowed > threshold_val) & roi_mask
     inverted_mask = ~fixed_mask
     closed_inverted = dilation(inverted_mask, disk(3))
     eroded_foreground = closed_inverted * roi_mask
+    
+    # Perform skeletonization and thickening
     skeleton = skeletonize(eroded_foreground)
     thicker_skeleton = dilation(skeleton, disk(3))
 
     # Visualization (optional crop)
     if crop_bool:
-        points = np.array([lcc_com, rcc_com, ncc_com]) * 4
+        points = np.array([lcc_com, rcc_com, ncc_com]) 
         x_min, x_max = points[:, 2].min(), points[:, 2].max()
         y_min, y_max = points[:, 1].min(), points[:, 1].max()
         pad = 100
@@ -446,11 +473,11 @@ for slice_nr in range(z_min_int, z_max_int + 1):
         "skeleton": skeleton.copy(),
         "roi_mask": roi_mask.copy(),
         "snake": snake_current.copy(),
-        "slice": dicom_upsampled.copy()
+        "slice": dicom_slice.copy()
     }
 
     # Store contour info
-    final_snake = snake_current / scale_factor
+    final_snake = snake_current
     aortic_wall_contours[slice_nr] = final_snake
     upsampled_snakes[slice_nr] = snake_current.copy()  
     prev_snake = snake_current
@@ -466,8 +493,8 @@ upsample_factor = 4
 masked_valve = np.zeros(
     (
         reoriented_dicom.shape[0],                     # Z
-        reoriented_dicom.shape[1] * upsample_factor,   # Y
-        reoriented_dicom.shape[2] * upsample_factor    # X
+        reoriented_dicom.shape[1],   # Y
+        reoriented_dicom.shape[2]    # X
     ),
     dtype=reoriented_dicom.dtype
 )
@@ -550,7 +577,7 @@ for slice_nr in range(num_slices):
         calc_mask = np.zeros_like(slice_img, dtype=bool)
         calc_mask[roi_mask > 0] = slice_img[roi_mask > 0] > calc_threshold
         calc_volume[slice_nr] = calc_mask  # store in 3D volume
-        calc_volume_downsampled[slice_nr] = rescale(calc_mask, 1/scale_factor, order=0, preserve_range=True, anti_aliasing=False).astype(dicom_slice.dtype)
+        # calc_volume_downsampled[slice_nr] = rescale(calc_mask, 1/scale_factor, order=0, preserve_range=True, anti_aliasing=False).astype(dicom_slice.dtype)
 
     # Otherwise leave slice empty
     else:
@@ -613,7 +640,7 @@ print(f"Number of voxels changed due to rotation: {num_changed}")
 # Loop over slice indices
 for slice_idx in range(z_min,z_max):  # or any range you want
     # Extract the transversal slice
-    transversal_slice = calc_volume_downsampled[slice_idx, :, :]
+    transversal_slice = calc_volume[slice_idx, :, :]
     
     # Clear the current figure
     plt.clf()
@@ -650,21 +677,20 @@ import functions
 # Parameters
 alpha, beta, gamma = 0.1, 0.1, 0.01
 total_iterations = 20
-scale_factor = 4  # upscaling
 
 # Leaflet-specific storage
 LCC_data, RCC_data, NCC_data = {}, {}, {}
 
 # Retrieval and upscaling of points
-hinge_lcc = lcc_rotated[2][1:3] * 4
-hinge_rcc = rcc_rotated[2][1:3] * 4
-hinge_ncc = ncc_rotated[2][1:3] * 4
+hinge_lcc = lcc_rotated[2][1:3]
+hinge_rcc = rcc_rotated[2][1:3] 
+hinge_ncc = ncc_rotated[2][1:3]
 
-rcc_lcc_com = lcc_com[1:3] * 4
-lcc_ncc_com = ncc_com[1:3] * 4
-ncc_rcc_com = rcc_com[1:3] * 4
+rcc_lcc_com = lcc_com[1:3] 
+lcc_ncc_com = ncc_com[1:3] 
+ncc_rcc_com = rcc_com[1:3] 
 
-center = lcc_rotated[3][1:3] * 4
+center = lcc_rotated[3][1:3]
 mercedes_slice = lcc_rotated[3][0]
 
 # Initialize previous intersections with None (persistent storage across slices)
@@ -681,6 +707,8 @@ base_commissure = {
     "ncc_rcc": ncc_rcc_com
 }
 
+commissure_points = [rcc_lcc_com, lcc_ncc_com, ncc_rcc_com]
+
 mercedes_star = False
 
 # Loop over slices
@@ -689,13 +717,7 @@ for slice_nr, slice_info in slice_data.items():
 
     # --- Upscale slice for visualization / mask ---
     reoriented_slice = reoriented_dicom[slice_nr, :, :]
-    upscaled = rescale(
-        reoriented_slice,
-        scale_factor,
-        order=3,
-        preserve_range=True,
-        anti_aliasing=True
-    ).astype(reoriented_slice.dtype)
+    upscaled = reoriented_slice
 
     # --- Active contour refinement ---
     temp_skeleton = slice_info["skeleton"]
@@ -706,6 +728,7 @@ for slice_nr, slice_info in slice_data.items():
     blurred_skeleton_norm = gaussian_filter(temp_skeleton.astype(float), sigma=7)
     blurred_skeleton_norm /= blurred_skeleton_norm.max() + 1e-8
 
+    # The snake is rerun, to close off the entire aortic wall. Previous snake could have had holes in it
     for i in range(total_iterations):
         snake_current = active_contour(
             blurred_skeleton_norm,
@@ -718,6 +741,14 @@ for slice_nr, slice_info in slice_data.items():
             max_num_iter=1,
             boundary_condition="periodic"
         )
+        
+    # --- Visualization of the intermediate active contour --- optional, if the contour is failigng
+    # plt.figure(figsize=(6, 6))
+    # plt.imshow(blurred_skeleton_norm, cmap="gray")  # Show the blurred skeleton (background)
+    # # plt.plot(snake_current[:, 1], snake_current[:, 0], '-r', lw=2, alpha=0.8)  # Show the evolving snake
+    # plt.title(f"Active contour iteration {i+1} — Slice {slice_nr}")
+    # plt.axis("off")
+    # plt.show()
 
     # --- Isolate inner skeleton ---
     skeleton_mask = polygon2mask(temp_skeleton.shape, snake_current)
@@ -728,9 +759,9 @@ for slice_nr, slice_info in slice_data.items():
     aortic_wall_contour = functions.resample_closed_contour(snake_current)
 
     # Find closest points to hinge points
-    i_lcc = functions.closest_contour_point(lcc_rotated[2][1:3]*scale_factor, aortic_wall_contour)
-    i_rcc = functions.closest_contour_point(rcc_rotated[2][1:3]*scale_factor, aortic_wall_contour)
-    i_ncc = functions.closest_contour_point(ncc_rotated[2][1:3]*scale_factor, aortic_wall_contour)
+    i_lcc = functions.closest_contour_point(lcc_rotated[2][1:3], aortic_wall_contour)
+    i_rcc = functions.closest_contour_point(rcc_rotated[2][1:3], aortic_wall_contour)
+    i_ncc = functions.closest_contour_point(ncc_rotated[2][1:3], aortic_wall_contour)
 
     # Create contour segments
     seg_lcc_ncc = functions.contour_segment(aortic_wall_contour, i_lcc, i_ncc)
@@ -745,10 +776,22 @@ for slice_nr, slice_info in slice_data.items():
     ncc_rcc_mask, ncc_rcc_boundary = functions.create_boundary_mask(
         center, aortic_wall_contour, i_ncc, i_rcc, seg_ncc_rcc, upscaled, inner_skeleton)
 
-    # Clean boundaries
-    cleaned_lcc_ncc_boundary = functions.clean_boundary_from_mask(lcc_ncc_boundary, aortic_wall_contour)
-    cleaned_rcc_lcc_boundary = functions.clean_boundary_from_mask(rcc_lcc_boundary, aortic_wall_contour)
-    cleaned_ncc_rcc_boundary = functions.clean_boundary_from_mask(ncc_rcc_boundary, aortic_wall_contour)
+    # Check if commissure points from the previous slice are available
+    commissure_points = {
+        'lcc_ncc': prev_intersections['lcc_ncc'] if prev_intersections['lcc_ncc'] is not None else base_commissure['lcc_ncc'],
+        'rcc_lcc': prev_intersections['rcc_lcc'] if prev_intersections['rcc_lcc'] is not None else base_commissure['rcc_lcc'],
+        'ncc_rcc': prev_intersections['ncc_rcc'] if prev_intersections['ncc_rcc'] is not None else base_commissure['ncc_rcc']
+    }
+
+    com_points = [commissure_points['lcc_ncc'], commissure_points['rcc_lcc'], commissure_points['ncc_rcc']]
+
+    # Clean boundaries with the commissure points (from previous slice or base)
+    cleaned_lcc_ncc_boundary, mercedes_mask = functions.clean_boundary_from_mask(
+        lcc_ncc_boundary, aortic_wall_contour, 3, com_points, center)
+    cleaned_rcc_lcc_boundary, mercedes_mask  = functions.clean_boundary_from_mask(
+        rcc_lcc_boundary, aortic_wall_contour, 3, com_points, center)
+    cleaned_ncc_rcc_boundary, mercedes_mask = functions.clean_boundary_from_mask(
+        ncc_rcc_boundary, aortic_wall_contour, 3, com_points, center)
 
     # --- Find intersections with wall ---
     intersections = {}
@@ -761,9 +804,10 @@ for slice_nr, slice_info in slice_data.items():
             cleaned_lcc_ncc_boundary,
             cleaned_rcc_lcc_boundary,
             cleaned_ncc_rcc_boundary,
-            slice_idx=slice_nr,
+            slice_nr,
+            mercedes_mask,
             plot=True
-        )
+            )
     
     commissure_names = ["lcc_ncc", "rcc_lcc", "ncc_rcc"]
     commissure_indices = {}
@@ -777,33 +821,55 @@ for slice_nr, slice_info in slice_data.items():
     # 2. Decide fallback strategy for THIS slice
     # --------------------------------------------
     found_this_slice = {name: intersections.get(name) is not None for name in commissure_names}
-    
+        
     # Case A — All 3 found this slice → use them & update prev_intersections
     if all(found_this_slice.values()):
+        print(f"Slice {slice_nr}: All 3 intersections found. Using them and updating previous intersections.")
         for name in commissure_names:
+            print(f"  Using intersection for {name} from this slice.")
             prev_intersections[name] = intersections[name]
             commissure_indices[name] = functions.closest_contour_point(
                 intersections[name],
                 aortic_wall_contour
             )
     
-    # Case B — Missing intersections, but we have a full previous set → use ALL prev_intersections
+    # Case B — Some intersections missing, use available ones and previous for missing ones
     elif have_full_prev:
+        print(f"Slice {slice_nr}: Missing intersections, but previous intersections are available. Using previous intersections.")
         for name in commissure_names:
-            commissure_indices[name] = functions.closest_contour_point(
-                prev_intersections[name],
-                aortic_wall_contour
-            )
+            if intersections.get(name) is not None:  # If intersection is found, use it
+                print(f"  Using intersection for {name} from this slice.")
+                commissure_indices[name] = functions.closest_contour_point(
+                    intersections[name],
+                    aortic_wall_contour
+                )
+            else:  # Otherwise, use previous intersection
+                print(f"  Using previous intersection for {name}.")
+                commissure_indices[name] = functions.closest_contour_point(
+                    prev_intersections[name],
+                    aortic_wall_contour
+                )
     
     # Case C — Early slices where we do NOT have all 3 prev intersections yet
     # → fall back per-intersection to base commissures
     else:
+        print(f"Slice {slice_nr}: Not all intersections found and no full previous set. Falling back to base commissures for missing intersections.")
         for name in commissure_names:
-            fallback = intersections.get(name) or prev_intersections[name] or base_commissure[name]
+            # Print the fallback logic for each commissure
+            fallback = intersections.get(name) or prev_intersections.get(name) or base_commissure[name]
+            if intersections.get(name) is not None:
+                print(f"  Using intersection for {name} found in this slice.")
+            elif prev_intersections.get(name) is not None:
+                print(f"  Using previous intersection for {name}.")
+            else:
+                print(f"  Using base commissure for {name} (no previous or current intersection).")
+            
             commissure_indices[name] = functions.closest_contour_point(
                 fallback,
                 aortic_wall_contour
             )
+
+    print(f"{slice_nr} intersections: ", intersections)
 
     # Create COM-to-COM segments
     seg_c2c = {
@@ -832,10 +898,11 @@ for slice_nr, slice_info in slice_data.items():
         "lcc_ncc_boundary": cleaned_lcc_ncc_boundary.copy(),
         "com_to_com": seg_c2c["NCC"].copy()
     }
-
+    
     # Optional visualization (COM-to-COM segments + boundaries)
     plt.figure(figsize=(6, 6))
     plt.imshow(upscaled, cmap='gray', origin='upper')
+    plt.imshow(mercedes_mask, cmap='jet', alpha=0.3)  # Adjust alpha for transparency
     plt.plot(seg_c2c["LCC"][:, 1], seg_c2c["LCC"][:, 0], color='cyan', lw=3, label='LCC')
     plt.plot(seg_c2c["RCC"][:, 1], seg_c2c["RCC"][:, 0], color='green', lw=3, label='RCC')
     plt.plot(seg_c2c["NCC"][:, 1], seg_c2c["NCC"][:, 0], color='magenta', lw=3, label='NCC')
@@ -846,5 +913,35 @@ for slice_nr, slice_info in slice_data.items():
     plt.axis('off')
     plt.legend()
     plt.show()
+    # Print the size of the boundaries
+    print(f"Size of LCC-NCC Boundary (Slice {slice_nr}):", cleaned_lcc_ncc_boundary.shape)
+    print(f"Size of RCC-LCC Boundary (Slice {slice_nr}):", cleaned_rcc_lcc_boundary.shape)
+    print(f"Size of NCC-RCC Boundary (Slice {slice_nr}):", cleaned_ncc_rcc_boundary.shape)
     
     
+    
+# %%Plotting the aortic wall contour 
+import functions
+
+# Define commissures:
+commissure_points = {
+    'lcc_ncc':  lcc_ncc_com,
+    'rcc_lcc': rcc_lcc_com,
+    'ncc_rcc': ncc_rcc_com,
+}
+
+# Generate the mask
+mask = functions.create_mercedes_mask(reoriented_dicom[z_min, :, :], commissure_points, center, line_thickness=12)
+
+# Visualization of the slice and mask
+plt.figure(figsize=(8, 8))
+
+# Plot the slice
+plt.imshow(reoriented_dicom[z_min, :, :], cmap='gray', origin='upper', alpha=1.0)
+
+# Plot the mask with semi-transparency on top of the slice
+plt.imshow(mask, cmap='jet', alpha=0.3)  # Adjust alpha for transparency
+
+plt.title("Slice with Thickened Line Mask")
+plt.axis('off')
+plt.show()
