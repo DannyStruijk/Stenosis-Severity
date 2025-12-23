@@ -331,6 +331,7 @@ import matplotlib.pyplot as plt
 from skimage.morphology import disk, dilation, skeletonize
 from skimage.filters import threshold_otsu
 from skimage.draw import polygon2mask
+from skimage.filters import gaussian
 
 
 # To find the whole aortic wall the active contours method is applied to each slice
@@ -410,46 +411,87 @@ for slice_nr in range(z_min_int, z_max_int + 1):
     plt.axis("off")
     plt.show()
 
-    # ----------------------------------------- BUILD ROI ----------------------------------------
+     # ----------------------------------------- BUILD ROI ----------------------------------------
     roi_mask = polygon2mask(new_image.shape, snake_current) 
-
     reoriented_slice_dicom = reoriented_dicom[slice_nr, :, :]
-    roi_image = reoriented_slice_dicom * roi_mask.astype(reoriented_slice_dicom.dtype)
     
-    roi_pixels = roi_image[roi_mask]
-    p_low, p_high = np.percentile(roi_pixels, (10, 100))
-
-    roi_windowed = np.zeros_like(roi_image, dtype=np.float32)
-    roi_windowed[roi_mask] = np.clip(roi_image[roi_mask], p_low, p_high)
-    roi_windowed[roi_mask] = (roi_windowed[roi_mask] - p_low) / (p_high - p_low)
-
-    # ---------------------------------------- SKELETONIZATION -----------------------------------
-    # Assuming roi_image and roi_mask are already defined
-    # Perform processing steps without normalization
-    roi_pixels = roi_windowed[roi_mask]
+    # Apply Gaussian blur to the reoriented slice (sigma controls the blur intensity)
+    sigma = 3  # Adjust this value based on how much blur you want
+    blurred_slice = gaussian(reoriented_slice_dicom, sigma=sigma)
     
-    # Plot the histogram of the intensity values
+    # Multiply the blurred image with the ROI mask
+    roi_image_blurred = blurred_slice * roi_mask.astype(reoriented_slice_dicom.dtype)
+    
+    # Multiply the original (non-blurred) image with the ROI mask
+    roi_image_original = reoriented_slice_dicom * roi_mask.astype(reoriented_slice_dicom.dtype)
+    
+    # Plot both images side by side for comparison
+    plt.figure(figsize=(12, 6))
+    
+    # Original ROI image (without blur)
+    plt.subplot(1, 2, 1)
+    plt.imshow(roi_image_original, cmap='gray')
+    plt.title("ROI Image (No Blur)")
+    plt.axis("off")
+    
+    # Blurred ROI image
+    plt.subplot(1, 2, 2)
+    plt.imshow(roi_image_blurred, cmap='gray')
+    plt.title("ROI Image (With Blur)")
+    plt.axis("off")
+    
+    plt.tight_layout()
+    plt.show()
+    
+    # ---------------------------------------- PROCESSING ---------------------------------------
+    
+    # Initialize the threshold variable for all slices
+    if slice_nr == z_min:
+        # Calculate the threshold for the first slice based on the 10th percentile
+        roi_pixels_blurred = roi_image_blurred[roi_mask]  # Use blurred ROI pixels
+        percentile_10th = np.percentile(roi_pixels_blurred, 10)  # 10th percentile as threshold
+        print(f"Calculated 10th Percentile Threshold for Slice {slice_nr}: {percentile_10th:.2f}")
+    else:
+        # Use the previously calculated threshold for all other slices
+        percentile_10th = globals().get("percentile_10th", 0)
+    
+    # Apply the 10th percentile threshold to the blurred image
+    percentile_mask = (roi_image_blurred > percentile_10th) & roi_mask
+    
+    # Visualize the histogram of the intensity values of the blurred image
     plt.figure(figsize=(8, 6))
-    plt.hist(roi_pixels, bins=50, color='gray', alpha=0.7)
-    plt.title("Histogram of ROI Intensity Values")
+    plt.hist(roi_pixels_blurred, bins=50, color='gray', alpha=0.7)
+    plt.title("Histogram of ROI Intensity Values (Blurred)")
     plt.xlabel("Intensity")
     plt.ylabel("Frequency")
     
-    # Calculate Otsu threshold and plot it
-    threshold_val = threshold_otsu(roi_pixels)
-    plt.axvline(threshold_val, color='r', linestyle='--', label=f'Otsu Threshold: {threshold_val:.2f}')
+    # Mark the 10th percentile threshold on the histogram
+    plt.axvline(percentile_10th, color='g', linestyle='--', label=f'10th Percentile Threshold: {percentile_10th:.2f}')
     plt.legend()
     plt.show()
     
-    # Apply Otsu threshold
-    fixed_mask = (roi_windowed > threshold_val) & roi_mask
-    inverted_mask = ~fixed_mask
+    # ---------------------------------------- SKELETONIZATION -----------------------------------
+    
+    # Apply the mask based on the 10th percentile threshold
+    inverted_mask = ~percentile_mask
     closed_inverted = dilation(inverted_mask, disk(3))
     eroded_foreground = closed_inverted * roi_mask
     
     # Perform skeletonization and thickening
     skeleton = skeletonize(eroded_foreground)
     thicker_skeleton = dilation(skeleton, disk(3))
+    
+    # Final visualization of the skeletonized result
+    plt.figure(figsize=(6, 6))
+    plt.imshow(blurred_slice, cmap='gray')
+    plt.imshow(thicker_skeleton, cmap='Reds', alpha=0.5)
+    plt.title(f"Skeletonization with Percentile Threshold — Slice {slice_nr}")
+    plt.axis("off")
+    plt.show()
+    
+    # Optionally, store the threshold for future slices
+    if slice_nr == z_min:
+        globals()["percentile_10th"] = percentile_10th  # Store the threshold for future slices
 
     # Visualization (optional crop)
     if crop_bool:
@@ -484,10 +526,8 @@ for slice_nr in range(z_min_int, z_max_int + 1):
 
 
 # %% ------------------------------------------CREATE NEW VOLUME WITH EXCLUSIVE ROI MASK -------------------------
+from skimage.morphology import binary_erosion, disk
 
-
-# Initialize empty masked volume
-upsample_factor = 4
 
 # Create an empty mask with the same dimensions as the original image
 masked_valve = np.zeros(
@@ -517,8 +557,22 @@ for slice_nr in range(num_slices):
         # The slice on which the threshold is based, is eroded to remove eventuel calcifications on the aortic wall
         # we want to have a clean histogram which is not skewed due to calcifications
         if slice_nr == z_min:
-            roi_mask = binary_erosion(roi_mask, iterations = 5)    
+            roi_mask = binary_erosion(roi_mask, disk(3))   
+            # Assuming roi_mask is already defined
+
+        # Plot the original roi_mask
+        plt.figure(figsize=(12, 6))
         
+        # Original ROI Mask (Before erosion)
+        plt.subplot(1, 2, 1)
+        plt.imshow(roi_mask, cmap='gray')
+        plt.title("ROI Mask Before Erosion")
+        plt.axis('off')
+        
+       
+        plt.tight_layout()
+        plt.show()
+                
         # Extract intensities inside ROI
         roi_values = slice_img[roi_mask > 0]
         
@@ -543,7 +597,7 @@ for slice_nr in range(num_slices):
             # std_val = soft_tissue_values.std()
         
             # Threshold for calcification: e.g., mean + 3*std
-            calc_threshold =  np.percentile(roi_values, 99.5)  # upper bound used as threshold   
+            calc_threshold =  np.percentile(roi_values, 99)  # upper bound used as threshold   
             print(f"Patient {patient_nr}: Threshold for calcification  = {calc_threshold:.2f}")
         
         # Print a histogram - necessary for seperating the calcification from the aortic valve
@@ -603,36 +657,6 @@ for z in range(z_min, z_max + 1):
     plt.pause(0.15)
 
 plt.show()
-
-
-
-# %% ---------------------------------------- Creating calcification mask ---------------------------------
-import functions
-# Rotating the calcification segmentation back to the original orientation - 
-# note that the volume is still upsampled, downsampling is done after rotation.
-# Before rotation
-num_true_before = np.count_nonzero(calc_volume_downsampled)
-num_false_before = calc_volume.size - num_true_before
-
-print(f"Before rotation (upsampled): True={num_true_before}, False={num_false_before}")
-
-# Rotate back
-dicom_calcification = functions.rotate_segmentation_back(
-    calc_volume,
-    rotation_matrix,
-    rotation_center,
-    upsample_factor
-)
-
-# After rotation
-num_true_after = np.count_nonzero(dicom_calcification)
-num_false_after = dicom_calcification.size - num_true_after
-
-print(f"After rotation (still upsampled): True={num_true_after}, False={num_false_after}")
-
-# Optional: check difference
-num_changed = np.sum(calc_volume != dicom_calcification)
-print(f"Number of voxels changed due to rotation: {num_changed}")
 
 
 #%% ###################################################PLOTTING ENTIRE FIGURE##################################
