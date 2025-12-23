@@ -1006,12 +1006,9 @@ def find_all_boundary_intersections(
     rcc_lcc_boundary,
     ncc_rcc_boundary,
     slice_idx,
+    mercedes_mask,
     plot=False,
 ):
-
-    print(f"LCC-NCC boundary shape: {None if seg_lcc_ncc is None else lcc_ncc_boundary.shape}")
-    print(f"RCC-LCC boundary shape: {None if seg_rcc_lcc is None else rcc_lcc_boundary.shape}")
-    print(f"NCC-RCC boundary shape: {None if seg_ncc_rcc is None else ncc_rcc_boundary.shape}")
 
     boundaries = {
         "lcc_ncc": (lcc_ncc_boundary, seg_lcc_ncc, "cyan"),
@@ -1039,7 +1036,7 @@ def find_all_boundary_intersections(
             print(f"{name} total length: {total_length}")
 
         # Skip if boundary is too short
-        if total_length < 10:  # adjust threshold in pixels
+        if total_length < 5:  # adjust threshold in pixels
             intersections[name] = None
             continue
 
@@ -1058,7 +1055,16 @@ def find_all_boundary_intersections(
             distances = np.linalg.norm(seg_points[:, None, :] - line_points[None, :, :], axis=2)
             idx_seg, idx_line = np.unravel_index(np.argmin(distances), distances.shape)
             intersection = seg_points[idx_seg]
-            intersections[name] = tuple(intersection)
+            
+            # Check if the intersection is inside the Mercedes mask
+            if mercedes_mask is not None:
+                if not mercedes_mask[int(intersection[0]), int(intersection[1])]:  # Check if the point is inside the mask
+                    print(f"Intersection for {name} is outside the mercedes mask. Using previous intersection.")
+                    intersections[name] = None
+                else:
+                    intersections[name] = tuple(intersection)
+            else:
+                intersections[name] = tuple(intersection)
 
         except Exception as e:
             print(f"[Warning] Could not compute intersection for {name}: {e}")
@@ -1094,12 +1100,12 @@ from scipy.spatial import cKDTree
 import numpy as np
 from skimage.measure import label, regionprops
 
-def clean_boundary_from_mask(mask, aortic_wall_points=None, min_dist=3):
+def clean_boundary_from_mask(mask, aortic_wall_points, min_dist, commissures, center):
     """
     Extract the largest connected component from a binary mask 
     and return its coordinates in (y, x) order.
     
-    Optionally, remove points that are too close to the aortic wall
+    First filters according to the Mercedes mask, then removes points that are too close to the aortic wall
     based on Euclidean distance.
     
     Parameters
@@ -1110,16 +1116,27 @@ def clean_boundary_from_mask(mask, aortic_wall_points=None, min_dist=3):
         Coordinates of aortic wall points.
     min_dist : float
         Minimum Euclidean distance (in pixels) from the aortic wall.
+    commissures : dict
+        Dictionary of commissure points (for creating the Mercedes mask).
+    center : tuple
+        Coordinates of the center point (x, y).
     
     Returns
     -------
     coords : Nx2 array of (y, x)
         Filtered boundary points.
     """
-    labeled = label(mask)
+    # Create the Mercedes mask
+    mercedes_mask = create_mercedes_mask(mask, commissures, center)
+
+    # Apply the Mercedes mask to the input mask
+    filtered_mask = mask * mercedes_mask
+    
+    # Label the connected components
+    labeled = label(filtered_mask)
     if labeled.max() == 0:
-        print("[Info] Mask is empty, returning empty array.")
-        return np.zeros((0, 2), dtype=int)
+        print("[Info] Mask is empty after applying the Mercedes mask, returning empty array.")
+        return np.zeros((0, 2), dtype=int), mask
 
     # Largest connected component
     regions = regionprops(labeled)
@@ -1127,7 +1144,7 @@ def clean_boundary_from_mask(mask, aortic_wall_points=None, min_dist=3):
     coords = largest_region.coords
     print(f"[Info] Largest component has {len(coords)} points before filtering.")
 
-    # Filter based on distance to aortic wall points
+    # # Filter based on distance to aortic wall points
     if aortic_wall_points is not None and len(aortic_wall_points) > 0:
         tree = cKDTree(aortic_wall_points)
         dists, _ = tree.query(coords)
@@ -1137,7 +1154,7 @@ def clean_boundary_from_mask(mask, aortic_wall_points=None, min_dist=3):
         print(f"[Info] Removed {removed_count} points too close to aortic wall.")
         print(f"[Info] Remaining points after filtering: {len(coords)}")
 
-    return coords
+    return coords, mercedes_mask
 
 from skimage.filters import sobel
 from scipy.ndimage import gaussian_filter
@@ -1279,6 +1296,44 @@ def rotate_segmentation_back(seg_rotated, R, rotation_center, upscaling_factor):
 
     return seg_original
 
+from skimage.draw import line
+
+
+def create_mercedes_mask(image, commissure_points, center_point, line_thickness=14):
+    """
+    Creates a mask of lines connecting the commissures to the center with specified thickness.
+    
+    Parameters:
+    - image: The image in which to draw the lines (used for shape).
+    - commissure_points: A list of tuples where each tuple contains the coordinates (x, y) of a commissure.
+    - center_point: A tuple (x, y) for the center point.
+    - line_thickness: Thickness of the lines to be drawn.
+    
+    Returns:
+    - A mask (binary image) with the thickened lines.
+    """
+    # Initialize the mask with zeros (black)
+    mask = np.zeros(image.shape, dtype=np.uint8)
+
+    # Loop through each commissure and draw a thick line
+    for commissure_coords in commissure_points:
+        print(commissure_coords)
+        x1, y1 = commissure_coords  # Swap x and y
+        x2, y2 = center_point  # Swap x and y
+        
+        # Use skimage's line function to get the line coordinates
+        rr, cc = line(int(x1), int(y1), int(x2), int(y2))
+        
+        # Loop through the line points and thicken the line
+        for i in range(-line_thickness//2, line_thickness//2 + 1):
+            for j in range(-line_thickness//2, line_thickness//2 + 1):
+                rr_offset = rr + i
+                cc_offset = cc + j
+                # Ensure the points are within image bounds (for both rr and cc)
+                valid_indices = (rr_offset >= 0) & (rr_offset < mask.shape[0]) & (cc_offset >= 0) & (cc_offset < mask.shape[1])
+                mask[rr_offset[valid_indices], cc_offset[valid_indices]] = 1
+
+    return mask
 
 
 
