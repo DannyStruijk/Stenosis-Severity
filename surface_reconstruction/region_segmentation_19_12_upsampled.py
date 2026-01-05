@@ -206,8 +206,6 @@ ncc_rotated = landmarks_rotated_dict["NCC"]
 
 # %% ------------------------------------ RETRIEVE ALL OF THE DIFFERENT COORDINATES --------
 
-
-
 # --- Load only the first landmark from each file ---
 lcc_com = lcc_rotated[0, :]
 rcc_com = rcc_rotated[0, :]
@@ -493,6 +491,8 @@ for slice_nr in range(z_min_int, z_max_int + 1):
 
 
 # %% ------------------------------------------ IDENTIFICATION OF CALCIFICATION -------------------------
+
+
 from skimage.morphology import binary_erosion, disk
 
 
@@ -507,10 +507,10 @@ masked_valve = np.zeros(
 )
 
 num_slices = reoriented_dicom.shape[0]
+print(num_slices)
 
 # Initialize calcification volume
 calc_volume = np.zeros_like(masked_valve, dtype=bool)
-calc_volume_downsampled = np.zeros_like(reoriented_dicom, dtype=bool)
 
 for slice_nr in range(num_slices):
 
@@ -598,7 +598,6 @@ for slice_nr in range(num_slices):
         calc_mask = np.zeros_like(slice_img, dtype=bool)
         calc_mask[roi_mask > 0] = slice_img[roi_mask > 0] > calc_threshold
         calc_volume[slice_nr] = calc_mask  # store in 3D volume
-        # calc_volume_downsampled[slice_nr] = rescale(calc_mask, 1/scale_factor, order=0, preserve_range=True, anti_aliasing=False).astype(dicom_slice.dtype)
 
     # Otherwise leave slice empty
     else:
@@ -607,6 +606,8 @@ for slice_nr in range(num_slices):
 # # (optional) Visualization fo the ROI
 
 for z in range(z_min, z_max + 1):
+    if slice_nr not in slice_data:
+        print(f"Warning: Slice {slice_nr} not found in slice_data")
     if z not in slice_data:
         continue
 
@@ -948,7 +949,7 @@ rcc_combined_polydata = functions.combine_boundaries_to_polydata(rcc_boundaries,
 ncc_combined_polydata = functions.combine_boundaries_to_polydata(ncc_boundaries, heights)
 
 # Save each combined polydata to a VTK file
-output_path = "H:/DATA/Afstuderen/3.Data/output_valve_segmentation/savi01"
+output_path = f"H:/DATA/Afstuderen/3.Data/output_valve_segmentation/{patient_nr}"
 os.makedirs(output_path, exist_ok=True)
 
 # Save the combined boundaries
@@ -992,7 +993,7 @@ rcc_com_to_com_polydata = functions.combine_boundaries_to_polydata(rcc_com_to_co
 ncc_com_to_com_polydata = functions.combine_boundaries_to_polydata(ncc_com_to_com, heights_com_to_com)
 
 # Save each combined polydata to a VTK file for com_to_com segments
-output_path = "H:/DATA/Afstuderen/3.Data/output_valve_segmentation/savi01"
+output_path = f"H:/DATA/Afstuderen/3.Data/output_valve_segmentation/{patient_nr}"
 os.makedirs(output_path, exist_ok=True)
 
 # Save the combined com_to_com segments
@@ -1000,3 +1001,51 @@ functions.save_vtk_polydata(lcc_com_to_com_polydata, os.path.join(output_path, "
 functions.save_vtk_polydata(rcc_com_to_com_polydata, os.path.join(output_path, "RCC_combined_com_to_com.vtk"))
 functions.save_vtk_polydata(ncc_com_to_com_polydata, os.path.join(output_path, "NCC_combined_com_to_com.vtk"))
 
+# %% -------------------------------- SAVING THE CALCIFICATION VOLUME ----------------------
+
+output_path = f"H:/DATA/Afstuderen/3.Data/output_valve_segmentation/{patient_nr}"
+patient_nr = "savi_01"
+file_type = "calc_volume"
+functions.save_volume_as_stl(calc_volume, output_path, patient_nr, file_type)
+
+# %% -------------------------------- COVNERTING THE BOUNDARIES IN 3D OBJECT ---------------
+
+from skimage.morphology import binary_dilation, cube
+
+# --- Process RCC to LCC Boundary ---
+rcc_lcc_boundary_3d = functions.create_3d_mask_from_boundary_points(RCC_data, calc_volume.shape, "rcc_lcc_boundary")
+dilated_mask_3d_rcc_lcc = binary_dilation(rcc_lcc_boundary_3d, cube(3))  # Adjust the cube size as needed
+file_type_rcc_lcc = "rcc_lcc_boundary"
+functions.save_volume_as_stl(dilated_mask_3d_rcc_lcc, output_path, patient_nr, file_type_rcc_lcc)
+
+# --- Process NCC to RCC Boundary ---
+ncc_rcc_boundary_3d = functions.create_3d_mask_from_boundary_points(NCC_data, calc_volume.shape, "ncc_rcc_boundary")
+dilated_mask_3d_ncc_rcc = binary_dilation(ncc_rcc_boundary_3d, cube(3))  # Adjust the cube size as needed
+file_type_ncc_rcc = "ncc_rcc_boundary"
+functions.save_volume_as_stl(dilated_mask_3d_ncc_rcc, output_path, patient_nr, file_type_ncc_rcc)
+
+# --- Process LCC to NCC Boundary ---
+lcc_ncc_boundary_3d = functions.create_3d_mask_from_boundary_points(LCC_data, calc_volume.shape, "lcc_ncc_boundary")
+dilated_mask_3d_lcc_ncc = binary_dilation(lcc_ncc_boundary_3d, cube(3))  # Adjust the cube size as needed
+file_type_lcc_ncc = "lcc_ncc_boundary"
+functions.save_volume_as_stl(dilated_mask_3d_lcc_ncc, output_path, patient_nr, file_type_lcc_ncc)
+
+# %% ----------------------------- AORTIC WALL --------------------------------
+
+# --- Process RCC to LCC COM to COM Boundary ---
+rcc_lcc_com_to_com_3d = functions.create_3d_mask_from_boundary_points(RCC_data, calc_volume.shape, "com_to_com")
+dilated_mask_3d_rcc_lcc_com_to_com = binary_dilation(rcc_lcc_com_to_com_3d, cube(3))
+file_type_rcc_lcc_com_to_com = "rcc_lcc_com_to_com"
+functions.save_volume_as_stl(dilated_mask_3d_rcc_lcc_com_to_com, output_path, patient_nr, file_type_rcc_lcc_com_to_com)
+
+# --- Process NCC to RCC COM to COM Boundary ---
+ncc_rcc_com_to_com_3d = functions.create_3d_mask_from_boundary_points(NCC_data, calc_volume.shape, "com_to_com")
+dilated_mask_3d_ncc_rcc_com_to_com = binary_dilation(ncc_rcc_com_to_com_3d, cube(3))
+file_type_ncc_rcc_com_to_com = "ncc_rcc_com_to_com"
+functions.save_volume_as_stl(dilated_mask_3d_ncc_rcc_com_to_com, output_path, patient_nr, file_type_ncc_rcc_com_to_com)
+
+# --- Process LCC to NCC COM to COM Boundary ---
+lcc_ncc_com_to_com_3d = functions.create_3d_mask_from_boundary_points(LCC_data, calc_volume.shape, "com_to_com")
+dilated_mask_3d_lcc_ncc_com_to_com = binary_dilation(lcc_ncc_com_to_com_3d, cube(3))
+file_type_lcc_ncc_com_to_com = "lcc_ncc_com_to_com"
+functions.save_volume_as_stl(dilated_mask_3d_lcc_ncc_com_to_com, output_path, patient_nr, file_type_lcc_ncc_com_to_com)
