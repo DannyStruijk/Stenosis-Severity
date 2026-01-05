@@ -1379,3 +1379,75 @@ def save_vtk_polydata(polydata, filename):
     writer.SetInputData(polydata)
     writer.Write()
 
+# Function to create VTK PolyData from a boolean mask (like calc_volume)
+def create_vtk_polydata_from_mask(mask, spacing=(1.0, 1.0, 1.0)):
+    """Creates vtkImageData from a 3D boolean mask (e.g., calc_volume)."""
+    # Get dimensions
+    print("yhello")
+    dims = mask.shape
+
+    # Create a vtkImageData to hold the mask
+    vtk_image = vtk.vtkImageData()
+    vtk_image.SetDimensions(dims[2], dims[1], dims[0])  # (x, y, z) for VTK image data
+    vtk_image.SetSpacing(spacing)  # Adjust spacing if necessary
+
+    # Convert the mask to uint8 (0 or 1) for VTK
+    mask_int = np.asarray(mask, dtype=np.uint8)
+
+    # Convert numpy array to vtk array using vtk.numpy_interface
+    vtk_array = vtk.numpy_interface.array_to_vtk(mask_int.flatten(), deep=True, array_type=vtk.VTK_UNSIGNED_CHAR)
+
+    # Set the scalar array to the VTK image
+    vtk_image.GetPointData().SetScalars(vtk_array)
+    
+    return vtk_image
+
+from skimage import measure
+
+def save_volume_as_stl(calc_volume, output_path, patient_nr, file_type):
+    """Save the calcification volume as an STL file."""
+    # Use skimage to find contours (isosurface) from the calcification mask
+    verts, faces, _, _ = measure.marching_cubes(calc_volume, level=0.5)
+    
+    # Create a VTK polydata object
+    polydata = vtk.vtkPolyData()
+
+    # Create VTK points and add them to the polydata
+    points = vtk.vtkPoints()
+    for vert in verts:
+        points.InsertNextPoint(vert)
+    polydata.SetPoints(points)
+
+    # Create VTK cells (faces) and add them to the polydata
+    cells = vtk.vtkCellArray()
+    for face in faces:
+        cells.InsertNextCell(3, face.astype(int))  # faces need to be integer type
+    polydata.SetPolys(cells)
+
+    # Write the polydata to an STL file
+    stl_writer = vtk.vtkSTLWriter()
+    output_filename = os.path.join(output_path, f"{patient_nr}_{file_type}.stl")
+    stl_writer.SetFileName(output_filename)
+    stl_writer.SetInputData(polydata)
+    stl_writer.Write()
+
+    print(f"Calcification volume saved as STL: {output_filename}")
+
+def create_3d_mask_from_boundary_points(boundary_data, calc_volume_shape, which_boundary):
+    """Create a 3D binary mask from the boundary points."""
+    # Initialize a 3D mask with the same shape as calc_volume, all set to False
+    mask_3d = np.zeros(calc_volume_shape, dtype=bool)
+
+    # Iterate over each slice in the boundary data
+    for slice_nr, data in boundary_data.items():
+        boundary_points = data[which_boundary]  # Boundary points (Nx2 array)
+
+        # Convert boundary points to slice coordinates (row, col)
+        for point in boundary_points:
+            y, x = point.astype(int)  # boundary points are (y, x), mapping to (row, col)
+            
+            # Make sure the coordinates are within bounds
+            if 0 <= y < calc_volume_shape[1] and 0 <= x < calc_volume_shape[2]:
+                mask_3d[slice_nr, y, x] = True  # Set the corresponding voxel to True
+
+    return mask_3d
