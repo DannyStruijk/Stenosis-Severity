@@ -263,7 +263,7 @@ plt.show()
 #%%  ------------------------------------------- PLOTTING ENTIRE FIGURE  ------------------------------
 
 # Loop over slice indices
-for slice_idx in range(z_min,z_max):  # or any range you want
+for slice_idx in range(z_min,z_max+20):  # or any range you want
     # Extract the transversal slice
     transversal_slice = reoriented_dicom[slice_idx, :, :]
     
@@ -488,6 +488,65 @@ for slice_nr in range(z_min_int, z_max_int + 1):
     aortic_wall_contours[slice_nr] = final_snake
     upsampled_snakes[slice_nr] = snake_current.copy()  
     prev_snake = snake_current
+
+# %% ----------------------------------------- FINDING PART OF LVOT ----------------------------------
+
+# Here I am look at the contours below the hinge points, so that the LVOT is (partially) visualized as an object
+# this gives extra information about the shaep of the LVOT and gives the aortic valve more context
+
+# ----------------------------------- FINDING CONTOURS FOR z_max TO z_max+20 --------------------
+
+# Define new variables to store contours for LVOT (left ventricular outflow tract)
+aortic_wall_contours_lvot = {}
+
+# Loop for finding contours from z_max to z_max + 20
+for slice_nr in range(z_max + 1, z_max + 15):  # Process slices from z_max + 1 to z_max + 20
+    image_pre = reoriented_volume[slice_nr, :, :]
+    dicom_slice = reoriented_non_clipped[slice_nr, :, :]
+
+    img = image_pre
+    img = img / img.max()
+
+    # Initialize snake for the new slices
+    if slice_nr == z_max + 1:
+        snake_current = aortic_wall_contours[z_max].copy()
+    else:
+        snake_current = prev_snake.copy()
+
+    # --------------------------------------- ACTIVE CONTOUR EVOLUTION --------------------------
+    for i in range(total_iterations):
+        snake_current = active_contour(
+            img,
+            snake_current,
+            alpha=alpha,
+            beta=beta,
+            gamma=gamma,
+            w_edge=1,
+            w_line=10,
+            max_num_iter=1,
+            boundary_condition="periodic"
+        )
+
+        if show_intermediate and ((i + 1) % 5 == 0 or i == total_iterations - 1):
+            plt.figure(figsize=(6, 6))
+            plt.imshow(new_image, cmap="gray")
+            plt.plot(snake_current[:, 1], snake_current[:, 0], '-b', lw=2, alpha=0.8)
+            plt.title(f"Snake evolution — Slice {slice_nr}, Iteration {i+1}")
+            plt.axis("off")
+            plt.show()
+
+    # --- Final visualization per slice --- 
+    plt.figure(figsize=(6, 6))
+    plt.imshow(img, cmap="gray")
+    plt.plot(snake_current[:, 1], snake_current[:, 0], '-r', lw=2, alpha=0.9)
+    plt.title(f"Final aortic wall contour — Slice {slice_nr}")
+    plt.axis("off")
+    plt.show()
+    
+    # Store data for new slices
+    aortic_wall_contours_lvot[slice_nr] = {"lvot": snake_current}
+    prev_snake = snake_current  # Update the snake for the next iteration
+
 
 
 # %% ------------------------------------------ IDENTIFICATION OF CALCIFICATION -------------------------
@@ -914,7 +973,9 @@ for slice_nr, slice_info in slice_data.items():
     print(f"Size of RCC-LCC Boundary (Slice {slice_nr}):", cleaned_rcc_lcc_boundary.shape)
     print(f"Size of NCC-RCC Boundary (Slice {slice_nr}):", cleaned_ncc_rcc_boundary.shape)
     
-    
+
+
+
 # %% --- Save each contour segment as VTK ---
 import os
 import numpy as np
@@ -1049,3 +1110,216 @@ lcc_ncc_com_to_com_3d = functions.create_3d_mask_from_boundary_points(LCC_data, 
 dilated_mask_3d_lcc_ncc_com_to_com = binary_dilation(lcc_ncc_com_to_com_3d, cube(3))
 file_type_lcc_ncc_com_to_com = "lcc_ncc_com_to_com"
 functions.save_volume_as_stl(dilated_mask_3d_lcc_ncc_com_to_com, output_path, patient_nr, file_type_lcc_ncc_com_to_com)
+
+
+# %% ----------------------- REORIENT THE VOLUMES BACK TO THEIR ORIGINAL SPACE ----------------------
+
+## The objects are made in the reoriented space. Now reorient it back so it is in the patient space
+inverse_zoom = (
+    1 / pixel_spacing[0],
+    1 / pixel_spacing[1],
+    1 / pixel_spacing[2],
+)
+
+# Compute the downsample factor once (inverse of previous upsampling)
+downsample_factor = 1/4  # undo previous 4× upsampling
+
+# Visual check whether the reoriented object has been done right
+# --- Process RCC to LCC Boundary ---
+rcc_lcc_boundary_reoriented = functions.reorient_volume_back(dilated_mask_3d_rcc_lcc, dicom_origin, rotation_matrix_dicom)
+rcc_lcc_boundary_reoriented = functions.downsample_and_rescale(rcc_lcc_boundary_reoriented, downsample_factor=downsample_factor, inverse_zoom=inverse_zoom)
+file_type_rcc_lcc = "rcc_lcc_boundary_reoriented"
+functions.save_volume_as_stl(rcc_lcc_boundary_reoriented, output_path, patient_nr, file_type_rcc_lcc)
+
+# --- Process NCC to RCC Boundary ---
+ncc_rcc_boundary_reoriented = functions.reorient_volume_back(dilated_mask_3d_ncc_rcc, dicom_origin, rotation_matrix_dicom)
+ncc_rcc_boundary_reoriented = functions.downsample_and_rescale(ncc_rcc_boundary_reoriented, downsample_factor=downsample_factor, inverse_zoom=inverse_zoom)
+file_type_ncc_rcc = "ncc_rcc_boundary"
+functions.save_volume_as_stl(ncc_rcc_boundary_reoriented, output_path, patient_nr, file_type_ncc_rcc)
+
+# --- Process LCC to NCC Boundary ---
+lcc_ncc_boundary_reoriented = functions.reorient_volume_back(dilated_mask_3d_lcc_ncc, dicom_origin, rotation_matrix_dicom)
+lcc_ncc_boundary_reoriented = functions.downsample_and_rescale(lcc_ncc_boundary_reoriented, downsample_factor=downsample_factor, inverse_zoom=inverse_zoom)
+file_type_lcc_ncc = "lcc_ncc_boundary"
+functions.save_volume_as_stl(lcc_ncc_boundary_reoriented, output_path, patient_nr, file_type_lcc_ncc)
+
+# --- Process RCC to LCC COM to COM Boundary ---
+rcc_lcc_com_to_com_reoriented = functions.reorient_volume_back(dilated_mask_3d_rcc_lcc_com_to_com, dicom_origin, rotation_matrix_dicom)
+rcc_lcc_com_to_com_reoriented = functions.downsample_and_rescale(rcc_lcc_com_to_com_reoriented, downsample_factor=downsample_factor, inverse_zoom=inverse_zoom)
+file_type_rcc_lcc_com_to_com = "rcc_lcc_com_to_com"
+functions.save_volume_as_stl(rcc_lcc_com_to_com_reoriented, output_path, patient_nr, file_type_rcc_lcc_com_to_com)
+
+# --- Process NCC to RCC COM to COM Boundary ---
+ncc_rcc_com_to_com_reoriented = functions.reorient_volume_back(dilated_mask_3d_ncc_rcc_com_to_com, dicom_origin, rotation_matrix_dicom)
+ncc_rcc_com_to_com_reoriented = functions.downsample_and_rescale(ncc_rcc_com_to_com_reoriented, downsample_factor=downsample_factor, inverse_zoom=inverse_zoom)
+file_type_ncc_rcc_com_to_com = "ncc_rcc_com_to_com"
+functions.save_volume_as_stl(ncc_rcc_com_to_com_reoriented, output_path, patient_nr, file_type_ncc_rcc_com_to_com)
+
+# --- Process LCC to NCC COM to COM Boundary ---
+lcc_ncc_com_to_com_reoriented = functions.reorient_volume_back(dilated_mask_3d_lcc_ncc_com_to_com, dicom_origin, rotation_matrix_dicom)
+lcc_ncc_com_to_com_reoriented = functions.downsample_and_rescale(lcc_ncc_com_to_com_reoriented, downsample_factor=downsample_factor, inverse_zoom=inverse_zoom)
+file_type_lcc_ncc_com_to_com = "lcc_ncc_com_to_com"
+functions.save_volume_as_stl(lcc_ncc_com_to_com_reoriented, output_path, patient_nr, file_type_lcc_ncc_com_to_com)
+
+# --- Process calcfication mask --------------
+calcification_mask_reoriented = functions.reorient_volume_back(calc_volume, dicom_origin, rotation_matrix_dicom)
+calcification_mask_reoriented = functions.downsample_and_rescale(calcification_mask_reoriented, downsample_factor=downsample_factor, inverse_zoom=inverse_zoom)
+file_type_calc_volume = "calc_volume_reoriented"
+functions.save_volume_as_stl(calcification_mask_reoriented, output_path, patient_nr, file_type_calc_volume)
+
+# %%----------------------------------------------SAVE THE ORIGINAL ONE --------------------------
+# ============================
+# SAVE ORIGINAL (NON-REORIENTED) MASK OBJECTS
+# ============================
+
+# --- Process RCC to LCC Boundary ---
+file_type_rcc_lcc_original = "rcc_lcc_boundary_original"
+functions.save_volume_as_stl(dilated_mask_3d_rcc_lcc, output_path, patient_nr, file_type_rcc_lcc_original)
+
+# --- Process NCC to RCC Boundary ---
+file_type_ncc_rcc_original = "ncc_rcc_boundary_original"
+functions.save_volume_as_stl(dilated_mask_3d_ncc_rcc, output_path, patient_nr, file_type_ncc_rcc_original)
+
+# --- Process LCC to NCC Boundary ---
+file_type_lcc_ncc_original = "lcc_ncc_boundary_original"
+functions.save_volume_as_stl(dilated_mask_3d_lcc_ncc, output_path, patient_nr, file_type_lcc_ncc_original)
+
+# --- Process RCC to LCC COM to COM Boundary ---
+file_type_rcc_lcc_com_to_com_original = "rcc_lcc_com_to_com_original"
+functions.save_volume_as_stl(dilated_mask_3d_rcc_lcc_com_to_com, output_path, patient_nr, file_type_rcc_lcc_com_to_com_original)
+
+# --- Process NCC to RCC COM to COM Boundary ---
+file_type_ncc_rcc_com_to_com_original = "ncc_rcc_com_to_com_original"
+functions.save_volume_as_stl(dilated_mask_3d_ncc_rcc_com_to_com, output_path, patient_nr, file_type_ncc_rcc_com_to_com_original)
+
+# --- Process LCC to NCC COM to COM Boundary ---
+file_type_lcc_ncc_com_to_com_original = "lcc_ncc_com_to_com_original"
+functions.save_volume_as_stl(dilated_mask_3d_lcc_ncc_com_to_com, output_path, patient_nr, file_type_lcc_ncc_com_to_com_original)
+
+
+# %% OVERLAY ALL OF THE MASKS ON TOP OF THE AORTIC VALVE, CT ORIENTATION IN PYTHON
+
+# The "to-be-overlaid" objects with underscores
+masks = {
+    "LCC_com_to_com": lcc_ncc_com_to_com_reoriented,
+    "NCC_com_to_com": ncc_rcc_com_to_com_reoriented,
+    "RCC_com_to_com": rcc_lcc_com_to_com_reoriented,
+    "RCC_to_LCC": rcc_lcc_boundary_reoriented,
+    "NCC_to_RCC": ncc_rcc_boundary_reoriented,
+    "LCC_to_NCC": lcc_ncc_boundary_reoriented
+}
+
+# Distinct colors per mask
+colors = {
+    "LCC_com_to_com": "cyan",
+    "NCC_com_to_com": "yellow",
+    "RCC_com_to_com": "magenta",
+    "RCC_to_LCC": "cyan",
+    "NCC_to_RCC": "yellow",
+    "LCC_to_NCC": "magenta"
+}
+
+print("upsampled_volume:", upsampled_volume.shape)
+for k, v in masks.items():
+    print(k, v.shape)
+
+for slice_idx in range(200, 250):
+
+    plt.clf()
+    
+    vol_slice = smoothed_dicom[slice_idx, :, :]
+    plt.imshow(vol_slice, cmap="gray")
+    plt.title(f"Slice {slice_idx}")
+
+    total_counts = {}
+
+    for name, mask in masks.items():
+        mask_slice = mask[slice_idx, :, :]
+        count_yes = np.count_nonzero(mask_slice)
+        total_counts[name] = count_yes
+
+        if count_yes > 0:
+            ys, xs = np.argwhere(mask_slice > 0).T
+            plt.scatter(xs, ys, s=3, c=colors[name], label=name)
+
+    print(f"Slice {slice_idx}: {total_counts}")
+
+    plt.draw()
+    plt.pause(0.2)
+
+plt.close()
+
+
+# %% ----------------------------- LVOT CONTOURS ------------------------------------
+
+aortic_wall_lvot_3d = functions.create_3d_mask_from_boundary_points(aortic_wall_contours_lvot, calc_volume.shape, "lvot")
+dilated_lvot = binary_dilation(aortic_wall_lvot_3d, cube(3))
+file_type_lvot = "lvot"
+functions.save_volume_as_stl(dilated_lvot, output_path, patient_nr, file_type_lvot)
+
+# %% ---------------------------- CONVERT THE 3D binary map INTO USABLE DICOM SPACED OBJECGT
+
+from skimage import measure
+import trimesh
+
+
+# We have the 3D volume matrix of the calc volume. Should be converted into pointcloud, taking the DICOM origin etc. into account
+
+# shape (340, 512, 512)
+# calcification_mask_reoriented 
+calc_volume_points_zyx = np.argwhere(calcification_mask_reoriented > 0)  # shape (N, 3) with columns (z, y, x)
+calc_volume_points = calc_volume_points_zyx[:, ::-1]
+calc_volume_points_dicom = calc_volume_points * np.array([pixel_spacing_x, pixel_spacing_y, slice_thickness])
+calc_volume_lps = calc_volume_points_dicom + dicom_origin
+
+# Pointcloud conversion
+import pyvista as pv
+
+output_dir = r"H:\DATA\Afstuderen\3.Data\output_valve_segmentation\savi_01"
+os.makedirs(output_dir, exist_ok=True)
+
+cloud = pv.PolyData(calc_volume_lps)
+
+save_path = os.path.join(output_dir, "calcification_pointcloud.vtk")
+cloud.save(save_path)
+
+print(f"[OK] Pointcloud saved to: {save_path}")
+
+# ---------------------------- STEP 2: STL SURFACE VIA MARCHING CUBES ----------------------------
+# Run marching cubes
+verts, faces, normals, values = measure.marching_cubes(
+    calcification_mask_reoriented,
+    level=0.5,
+    spacing=(slice_thickness, pixel_spacing_y, pixel_spacing_x)  # z, y, x spacing
+)
+
+# Swap axes from (z, y, x) -> (x, y, z)
+verts = verts[:, ::-1]  # reverse column order
+
+# Shift vertices to DICOM origin
+verts += dicom_origin
+
+# Create mesh and save as STL
+mesh = trimesh.Trimesh(vertices=verts, faces=faces)
+stl_path = os.path.join(output_dir, "calcification_surface_xyz.stl")
+mesh.export(stl_path)
+print(f"[OK] STL surface saved in XYZ: {stl_path}")
+
+#%%%
+
+output_path = "H:\DATA\Afstuderen\3.Data\output_valve_segmentation\savi_01\patient_space"
+
+# NOW SAVE ALL THE BOUNDARIES IN THIS LOOP
+# Loop over all masks and save as STL
+for name, volume in masks.items():
+    functions.save_volume_as_stl_patient_space(
+        calc_volume=volume,
+        output_path=output_path,
+        patient_nr=patient_nr,
+        file_type=name,  # use the dictionary key directly
+        pixel_spacing_x=pixel_spacing_x,
+        pixel_spacing_y=pixel_spacing_y,
+        slice_thickness=slice_thickness,
+        dicom_origin=dicom_origin
+    )
+    
