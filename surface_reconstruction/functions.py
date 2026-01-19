@@ -503,8 +503,7 @@ def reorient_volume(volume, annular_normal, dicom_origin, spacing):
                   [-axis[1], axis[0], 0]])
     R = np.eye(3) + np.sin(angle) * K + (1 - np.cos(angle)) * (K @ K)
     
-    print("Rotation matrix: ", R)
-
+    # print("Rotation matrix: ", R)
     M = np.linalg.inv(R)
 
     # Offset so rotation is around this point
@@ -513,8 +512,39 @@ def reorient_volume(volume, annular_normal, dicom_origin, spacing):
     
     reoriented_volume = affine_transform(volume, M, offset=offset, order=1)
 
+    # Rotation matrix is returned so that it can be used for the inverse rotation
     return reoriented_volume, R, center
 
+def reorient_volume_back(volume, dicom_origin, rotation_matrix):
+    """
+    Reorient a 3D volume back to its original orientation by applying the inverse of the
+    rotation matrix used for the original reorientation.
+
+    Parameters
+    ----------
+    volume : np.ndarray
+        3D numpy array in (z, y, x) order.
+    dicom_origin : array-like
+        Origin of the DICOM volume in physical coordinates (x, y, z).
+    rotation_matrix : np.ndarray
+        The 3x3 rotation matrix used during the original reorientation.
+
+    Returns
+    -------
+    reoriented_back_volume : np.ndarray
+        The reoriented volume after reversing the original rotation.
+    """
+
+    # Apply the inverse of the rotation matrix
+    inverse_rotation_matrix = np.linalg.inv(rotation_matrix)
+
+    # Offset so rotation is around the DICOM origin (reverse the original transformation)
+    center = np.array(volume.shape) / 2
+    offset = center - rotation_matrix @ center
+
+    reoriented_back_volume = affine_transform(volume, rotation_matrix, offset=offset, order=1)
+
+    return reoriented_back_volume
 
 def vtk_to_volume_space(surface, origin, spacing):
     """
@@ -1431,7 +1461,7 @@ def save_volume_as_stl(calc_volume, output_path, patient_nr, file_type):
     stl_writer.SetInputData(polydata)
     stl_writer.Write()
 
-    print(f"Calcification volume saved as STL: {output_filename}")
+    print(f"{file_type} volume saved as STL: {output_filename}")
 
 def create_3d_mask_from_boundary_points(boundary_data, calc_volume_shape, which_boundary):
     """Create a 3D binary mask from the boundary points."""
@@ -1451,3 +1481,82 @@ def create_3d_mask_from_boundary_points(boundary_data, calc_volume_shape, which_
                 mask_3d[slice_nr, y, x] = True  # Set the corresponding voxel to True
 
     return mask_3d
+
+def downsample_and_rescale(volume, downsample_factor, inverse_zoom):
+    """
+    Downsamples a volume by a factor and then rescales it using inverse_zoom.
+    
+    Parameters
+    ----------
+    volume : np.ndarray
+        Input 3D volume.
+    downsample_factor : float or tuple of 3 floats
+        Factor to downsample the volume. Can be a single float or per-axis.
+    inverse_zoom : tuple of 3 floats
+        Zoom factors to restore voxel spacing after processing.
+    is_mask : bool, default False
+        If True, use nearest-neighbor interpolation (order=0), otherwise linear interpolation (order=1).
+    
+    Returns
+    -------
+    np.ndarray
+        Processed volume.
+    """
+    # Step 1: Downsample
+    volume_down = zoom(volume, downsample_factor, order=0)
+    
+    # Step 2: Rescale using inverse_zoom
+    volume_rescaled = zoom(volume_down, inverse_zoom, order=0)
+    
+    return volume_rescaled
+
+
+import trimesh
+
+def save_volume_as_stl_patient_space(calc_volume, output_path, patient_nr, file_type,
+                                     pixel_spacing_x, pixel_spacing_y, slice_thickness,
+                                     dicom_origin):
+    """
+    Save a 3D binary calcification volume as an STL file in patient (DICOM) space.
+    
+    Parameters
+    ----------
+    calc_volume : np.ndarray
+        3D binary mask of calcification (shape: z, y, x)
+    output_path : str
+        Folder where the STL will be saved
+    patient_nr : str or int
+        Patient identifier for filename
+    file_type : str
+        Type of volume, e.g., 'calcification'
+    pixel_spacing_x : float
+        Voxel size in x direction (mm)
+    pixel_spacing_y : float
+        Voxel size in y direction (mm)
+    slice_thickness : float
+        Voxel size in z direction (mm)
+    dicom_origin : np.ndarray
+        Origin of the volume in patient coordinates (x0, y0, z0)
+    """
+    
+    verts, faces, normals, values = measure.marching_cubes(
+        calc_volume,  # convert to smaller type
+        level=0.5,
+        spacing=(slice_thickness, pixel_spacing_y, pixel_spacing_x)
+    )
+    
+    # Convert verts from (z, y, x) -> (x, y, z)
+    verts = verts[:, ::-1]
+    
+    # Shift to patient (DICOM) space using the origin
+    verts += dicom_origin
+    
+    # Create mesh
+    mesh = trimesh.Trimesh(vertices=verts, faces=faces)
+    
+    # Save STL
+    output_filename = os.path.join(output_path, f"{patient_nr}_{file_type}.stl")
+    mesh.export(output_filename)
+    
+    print(f"[OK] {file_type} volume saved as STL in patient space: {output_filename}")
+
