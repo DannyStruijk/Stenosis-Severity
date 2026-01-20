@@ -1506,15 +1506,15 @@ def downsample_and_rescale(volume, downsample_factor, inverse_zoom):
     volume_down = zoom(volume, downsample_factor, order=0)
     
     # Step 2: Rescale using inverse_zoom
-    volume_rescaled = zoom(volume_down, inverse_zoom, order=0)
+    volume_rescaled = zoom(volume, inverse_zoom, order=0)
     
     return volume_rescaled
 
 
 import trimesh
 
-def save_volume_as_stl_patient_space(calc_volume, output_path, patient_nr, file_type,
-                                     pixel_spacing_x, pixel_spacing_y, slice_thickness,
+def save_volume_as_stl_patient_space(volume, output_path, patient_nr, file_type,
+                                     zoom_x, zoom_y, zoom_z,
                                      dicom_origin):
     """
     Save a 3D binary calcification volume as an STL file in patient (DICOM) space.
@@ -1540,9 +1540,9 @@ def save_volume_as_stl_patient_space(calc_volume, output_path, patient_nr, file_
     """
     
     verts, faces, normals, values = measure.marching_cubes(
-        calc_volume,  # convert to smaller type
+        volume,  # convert to smaller type
         level=0.5,
-        spacing=(slice_thickness, pixel_spacing_y, pixel_spacing_x)
+        spacing=(zoom_z, zoom_y, zoom_x)
     )
     
     # Convert verts from (z, y, x) -> (x, y, z)
