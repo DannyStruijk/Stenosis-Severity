@@ -48,7 +48,6 @@ patient_nr = "savi_01"   # e.g. "aos_14" or "savi_07"
 dicom_dir = PATIENT_PATHS[patient_nr]
 
 
-
 # %% -------------------------------------------- PREPROCESSING ----------------------------------------
 # READING IN THE DICOM & THE EDGE DETECTED IMAGE
 
@@ -123,28 +122,28 @@ from skimage.transform import rescale
 
 # Calculating the vector perpendicualr to the annulus
 annular_normal = functions.get_annular_normal(patient_nr)
-scale_factor = 4
+old_spacing = np.array([0.4, 0.35, 0.35])
+target_spacing = 0.35
+
+zoom_factors = old_spacing / target_spacing
 
 # Reorient the edge-detected image
-rescaled_volume = functions.zoom(volume, pixel_spacing)
-upsampled_volume = rescale(rescaled_volume, scale_factor, order=3, preserve_range=True, anti_aliasing=True).astype(rescaled_volume.dtype)
-reoriented_volume, rotation_matrix, rotation_center = functions.reorient_volume(upsampled_volume, 
+rescaled_volume = functions.zoom(volume, zoom_factors)
+reoriented_volume, rotation_matrix, rotation_center = functions.reorient_volume(rescaled_volume, 
                                                                                 annular_normal, 
                                                                                 dicom_origin, 
                                                                                 pixel_spacing)
 
 # Now als do the reorientation on the regular DICOM
-rescaled_dicom = functions.zoom(smoothed_dicom, pixel_spacing)
-upsampled_dicom = rescale(rescaled_dicom, scale_factor, order=3, preserve_range=True, anti_aliasing=True).astype(rescaled_dicom.dtype)
-reoriented_dicom, rotation_matrix_dicom, rotation_center_dicom = functions.reorient_volume(upsampled_dicom,
+rescaled_dicom = functions.zoom(smoothed_dicom, zoom_factors)
+reoriented_dicom, rotation_matrix_dicom, rotation_center_dicom = functions.reorient_volume(rescaled_dicom,
                                                                                            annular_normal,
                                                                                            dicom_origin,
                                                                                            pixel_spacing)
 
 # Lastly, do the reorientation of the non-clipped DICOM 
-rescaled_non_clipped_dicom = functions.zoom(smoothed_non_clipped, pixel_spacing)
-upsampled_non_clipped_dicom = rescale(rescaled_non_clipped_dicom, scale_factor, order=3, preserve_range=True, anti_aliasing=True).astype(rescaled_non_clipped_dicom.dtype)
-reoriented_non_clipped, rotation_matrix_dicom_non_clip, rotation_center_dicom_non_clip = functions.reorient_volume(upsampled_non_clipped_dicom,
+rescaled_non_clipped_dicom = functions.zoom(smoothed_non_clipped, zoom_factors)
+reoriented_non_clipped, rotation_matrix_dicom_non_clip, rotation_center_dicom_non_clip = functions.reorient_volume(rescaled_non_clipped_dicom,
                                                                                            annular_normal,
                                                                                            dicom_origin,
                                                                                            pixel_spacing)
@@ -162,7 +161,6 @@ landmark_files = {
     "NCC": f"H:/DATA/Afstuderen/3.Data/SSM/patient_database/{patient_nr}/landmarks/ncc_template_landmarks.txt"
 }   
 
-# I removed test from this!
 
 # Dictionary to store processed landmarks
 landmarks_rotated_dict = {}
@@ -179,9 +177,9 @@ for cusp_name, file_path in landmark_files.items():
     
     # 3. Scale according to voxel spacing
     landmarks_scaled = landmarks_zyx.copy()
-    landmarks_scaled[:, 0] *= slice_thickness * scale_factor  # z-axis
-    landmarks_scaled[:, 1] *= pixel_spacing_y  * scale_factor # y-axis
-    landmarks_scaled[:, 2] *= pixel_spacing_x * scale_factor # x-axis
+    landmarks_scaled[:, 0] *= zoom_factors[0]
+    landmarks_scaled[:, 1] *= zoom_factors[1]
+    landmarks_scaled[:, 2] *= zoom_factors[2]
 
     
     # 4. Round to integer voxel indices
@@ -263,7 +261,7 @@ plt.show()
 #%%  ------------------------------------------- PLOTTING ENTIRE FIGURE  ------------------------------
 
 # Loop over slice indices
-for slice_idx in range(z_min,z_max+20):  # or any range you want
+for slice_idx in range(z_min,z_max+10):  # or any range you want
     # Extract the transversal slice
     transversal_slice = reoriented_dicom[slice_idx, :, :]
     
@@ -276,10 +274,10 @@ for slice_idx in range(z_min,z_max+20):  # or any range you want
     # plt.axis("off")
     
     # Overlay landmarks that lie on this slice
-    for z, y, x in commissures:
+    for z, y, x in all_rotated:
         if z == slice_idx:  # Only plot landmarks on this slice
             plt.scatter(x, y, c='r', s=1)  
-            # print("Gevonden")
+            
     
     # Draw and pause
     plt.draw()
@@ -304,7 +302,7 @@ from skimage.filters import gaussian
 
 # ------------------------------------- INITIALIZING VARIABLES FOR ACTIVE CONTOURS ------------------
 
-alpha = 0.01   # elasticity (snake tension)
+alpha = 0.02   # elasticity (snake tension)
 beta = 0.1     # rigidity (smoothness)
 gamma = 0.01   # step size
 total_iterations = 20
@@ -414,7 +412,7 @@ for slice_nr in range(z_min_int, z_max_int + 1):
     if slice_nr == z_min:
         # Calculate the threshold for the first slice based on the 10th percentile
         roi_pixels_blurred = roi_image_blurred[roi_mask]  # Use blurred ROI pixels
-        percentile_10th = np.percentile(roi_pixels_blurred, 10)  # 10th percentile as threshold
+        percentile_10th = np.percentile(roi_pixels_blurred, 15)  # 10th percentile as threshold
         print(f"Calculated 10th Percentile Threshold for Slice {slice_nr}: {percentile_10th:.2f}")
     else:
         # Use the previously calculated threshold for all other slices
@@ -1010,7 +1008,7 @@ rcc_combined_polydata = functions.combine_boundaries_to_polydata(rcc_boundaries,
 ncc_combined_polydata = functions.combine_boundaries_to_polydata(ncc_boundaries, heights)
 
 # Save each combined polydata to a VTK file
-output_path = f"H:/DATA/Afstuderen/3.Data/output_valve_segmentation/{patient_nr}"
+output_path = f"H:/DATA/Afstuderen/3.Data/output_valve_segmentation/{patient_nr}/vtk"
 os.makedirs(output_path, exist_ok=True)
 
 # Save the combined boundaries
@@ -1054,7 +1052,7 @@ rcc_com_to_com_polydata = functions.combine_boundaries_to_polydata(rcc_com_to_co
 ncc_com_to_com_polydata = functions.combine_boundaries_to_polydata(ncc_com_to_com, heights_com_to_com)
 
 # Save each combined polydata to a VTK file for com_to_com segments
-output_path = f"H:/DATA/Afstuderen/3.Data/output_valve_segmentation/{patient_nr}"
+output_path = f"H:/DATA/Afstuderen/3.Data/output_valve_segmentation/{patient_nr},vtk"
 os.makedirs(output_path, exist_ok=True)
 
 # Save the combined com_to_com segments
@@ -1064,7 +1062,11 @@ functions.save_vtk_polydata(ncc_com_to_com_polydata, os.path.join(output_path, "
 
 # %% -------------------------------- SAVING THE CALCIFICATION VOLUME ----------------------
 
-output_path = f"H:/DATA/Afstuderen/3.Data/output_valve_segmentation/{patient_nr}"
+# Define output pathfor the all the segmentations in patient space, make if not existent
+output_path = f"H:/DATA/Afstuderen/3.Data/output_valve_segmentation/{patient_nr}/patient_space"
+os.makedirs(output_path, exist_ok=True)
+
+# Save the previously calculated calcium volume as an STL
 patient_nr = "savi_01"
 file_type = "calc_volume"
 functions.save_volume_as_stl(calc_volume, output_path, patient_nr, file_type)
@@ -1072,6 +1074,10 @@ functions.save_volume_as_stl(calc_volume, output_path, patient_nr, file_type)
 # %% -------------------------------- COVNERTING THE BOUNDARIES IN 3D OBJECT ---------------
 
 from skimage.morphology import binary_dilation, cube
+
+output_path = f"H:/DATA/Afstuderen/3.Data/output_valve_segmentation/{patient_nr}/python_dicom_space"
+os.makedirs(output_path, exist_ok=True)
+
 
 # --- Process RCC to LCC Boundary ---
 rcc_lcc_boundary_3d = functions.create_3d_mask_from_boundary_points(RCC_data, calc_volume.shape, "rcc_lcc_boundary")
@@ -1116,13 +1122,15 @@ functions.save_volume_as_stl(dilated_mask_3d_lcc_ncc_com_to_com, output_path, pa
 
 ## The objects are made in the reoriented space. Now reorient it back so it is in the patient space
 inverse_zoom = (
-    1 / pixel_spacing[0],
-    1 / pixel_spacing[1],
-    1 / pixel_spacing[2],
+    1 / zoom_factors[0],
+    1 / zoom_factors[1],
+    1 / zoom_factors[2],
 )
 
-# Compute the downsample factor once (inverse of previous upsampling)
-downsample_factor = 1/4  # undo previous 4× upsampling
+downsample_factor = 1.14
+
+output_path = f"H:/DATA/Afstuderen/3.Data/output_valve_segmentation/{patient_nr}/patient_space"
+os.makedirs(output_path, exist_ok=True)
 
 # Visual check whether the reoriented object has been done right
 # --- Process RCC to LCC Boundary ---
@@ -1167,37 +1175,16 @@ calcification_mask_reoriented = functions.downsample_and_rescale(calcification_m
 file_type_calc_volume = "calc_volume_reoriented"
 functions.save_volume_as_stl(calcification_mask_reoriented, output_path, patient_nr, file_type_calc_volume)
 
-# %%----------------------------------------------SAVE THE ORIGINAL ONE --------------------------
-# ============================
-# SAVE ORIGINAL (NON-REORIENTED) MASK OBJECTS
-# ============================
+#%% ------------------------------------------- SAVE THE LVOT ----------------------------
 
-# --- Process RCC to LCC Boundary ---
-file_type_rcc_lcc_original = "rcc_lcc_boundary_original"
-functions.save_volume_as_stl(dilated_mask_3d_rcc_lcc, output_path, patient_nr, file_type_rcc_lcc_original)
-
-# --- Process NCC to RCC Boundary ---
-file_type_ncc_rcc_original = "ncc_rcc_boundary_original"
-functions.save_volume_as_stl(dilated_mask_3d_ncc_rcc, output_path, patient_nr, file_type_ncc_rcc_original)
-
-# --- Process LCC to NCC Boundary ---
-file_type_lcc_ncc_original = "lcc_ncc_boundary_original"
-functions.save_volume_as_stl(dilated_mask_3d_lcc_ncc, output_path, patient_nr, file_type_lcc_ncc_original)
-
-# --- Process RCC to LCC COM to COM Boundary ---
-file_type_rcc_lcc_com_to_com_original = "rcc_lcc_com_to_com_original"
-functions.save_volume_as_stl(dilated_mask_3d_rcc_lcc_com_to_com, output_path, patient_nr, file_type_rcc_lcc_com_to_com_original)
-
-# --- Process NCC to RCC COM to COM Boundary ---
-file_type_ncc_rcc_com_to_com_original = "ncc_rcc_com_to_com_original"
-functions.save_volume_as_stl(dilated_mask_3d_ncc_rcc_com_to_com, output_path, patient_nr, file_type_ncc_rcc_com_to_com_original)
-
-# --- Process LCC to NCC COM to COM Boundary ---
-file_type_lcc_ncc_com_to_com_original = "lcc_ncc_com_to_com_original"
-functions.save_volume_as_stl(dilated_mask_3d_lcc_ncc_com_to_com, output_path, patient_nr, file_type_lcc_ncc_com_to_com_original)
+# --- Process LVOT ---------------------
+aortic_wall_lvot_3d = functions.create_3d_mask_from_boundary_points(aortic_wall_contours_lvot, calc_volume.shape, "lvot")
+dilated_lvot = binary_dilation(aortic_wall_lvot_3d, cube(3))
+lvot_patient_space = functions.reorient_volume_back(dilated_lvot, dicom_origin, rotation_matrix_dicom)
+lvot_reoriented = functions.downsample_and_rescale(lvot_patient_space, downsample_factor=downsample_factor, inverse_zoom=inverse_zoom)
 
 
-# %% OVERLAY ALL OF THE MASKS ON TOP OF THE AORTIC VALVE, CT ORIENTATION IN PYTHON
+#%%%
 
 # The "to-be-overlaid" objects with underscores
 masks = {
@@ -1206,7 +1193,9 @@ masks = {
     "RCC_com_to_com": rcc_lcc_com_to_com_reoriented,
     "RCC_to_LCC": rcc_lcc_boundary_reoriented,
     "NCC_to_RCC": ncc_rcc_boundary_reoriented,
-    "LCC_to_NCC": lcc_ncc_boundary_reoriented
+    "LCC_to_NCC": lcc_ncc_boundary_reoriented,
+    "LVOT": lvot_reoriented,
+    "calc_volume" : calcification_mask_reoriented
 }
 
 # Distinct colors per mask
@@ -1219,108 +1208,19 @@ colors = {
     "LCC_to_NCC": "magenta"
 }
 
-print("upsampled_volume:", upsampled_volume.shape)
-for k, v in masks.items():
-    print(k, v.shape)
+output_path = r"H:\DATA\Afstuderen\3.Data\output_valve_segmentation\savi_01\patient_space"
 
-for slice_idx in range(200, 250):
-
-    plt.clf()
-    
-    vol_slice = smoothed_dicom[slice_idx, :, :]
-    plt.imshow(vol_slice, cmap="gray")
-    plt.title(f"Slice {slice_idx}")
-
-    total_counts = {}
-
-    for name, mask in masks.items():
-        mask_slice = mask[slice_idx, :, :]
-        count_yes = np.count_nonzero(mask_slice)
-        total_counts[name] = count_yes
-
-        if count_yes > 0:
-            ys, xs = np.argwhere(mask_slice > 0).T
-            plt.scatter(xs, ys, s=3, c=colors[name], label=name)
-
-    print(f"Slice {slice_idx}: {total_counts}")
-
-    plt.draw()
-    plt.pause(0.2)
-
-plt.close()
-
-
-# %% ----------------------------- LVOT CONTOURS ------------------------------------
-
-aortic_wall_lvot_3d = functions.create_3d_mask_from_boundary_points(aortic_wall_contours_lvot, calc_volume.shape, "lvot")
-dilated_lvot = binary_dilation(aortic_wall_lvot_3d, cube(3))
-file_type_lvot = "lvot"
-functions.save_volume_as_stl(dilated_lvot, output_path, patient_nr, file_type_lvot)
-
-# %% ---------------------------- CONVERT THE 3D binary map INTO USABLE DICOM SPACED OBJECGT
-
-from skimage import measure
-import trimesh
-
-
-# We have the 3D volume matrix of the calc volume. Should be converted into pointcloud, taking the DICOM origin etc. into account
-
-# calcification_mask_reoriented 
-calc_volume_points_zyx = np.argwhere(calcification_mask_reoriented > 0)  # shape (N, 3) with columns (z, y, x)
-calc_volume_points = calc_volume_points_zyx[:, ::-1]
-calc_volume_points_dicom = calc_volume_points * np.array([pixel_spacing_x, pixel_spacing_y, slice_thickness])
-calc_volume_lps = calc_volume_points_dicom + dicom_origin
-
-# Pointcloud conversion
-import pyvista as pv
-
-output_dir = r"H:\DATA\Afstuderen\3.Data\output_valve_segmentation\savi_01"
-os.makedirs(output_dir, exist_ok=True)
-
-cloud = pv.PolyData(calc_volume_lps)
-
-save_path = os.path.join(output_dir, "calcification_pointcloud.vtk")
-cloud.save(save_path)
-
-print(f"[OK] Pointcloud saved to: {save_path}")
-
-# ---------------------------- STEP 2: STL SURFACE VIA MARCHING CUBES ----------------------------
-# Run marching cubes
-verts, faces, normals, values = measure.marching_cubes(
-    calcification_mask_reoriented,
-    level=0.5,
-    spacing=(slice_thickness, pixel_spacing_y, pixel_spacing_x)  # z, y, x spacing
-)
-
-# Swap axes from (z, y, x) -> (x, y, z)
-verts = verts[:, ::-1]  # reverse column order
-
-# Shift vertices to DICOM origin
-verts += dicom_origin
-
-# Create mesh and save as STL
-mesh = trimesh.Trimesh(vertices=verts, faces=faces)
-stl_path = os.path.join(output_dir, "calcification_surface_xyz.stl")
-mesh.export(stl_path)
-print(f"[OK] STL surface saved in XYZ: {stl_path}")
-
-
-
-#%%%
-
-output_path = "H:\DATA\Afstuderen\3.Data\output_valve_segmentation\savi_01\patient_space"
 
 # NOW SAVE ALL THE BOUNDARIES IN THIS LOOP
 # Loop over all masks and save as STL
 for name, volume in masks.items():
     functions.save_volume_as_stl_patient_space(
-        calc_volume=volume,
+        volume=volume,
         output_path=output_path,
         patient_nr=patient_nr,
-        file_type=name,  # use the dictionary key directly
-        pixel_spacing_x=pixel_spacing_x,
-        pixel_spacing_y=pixel_spacing_y,
-        slice_thickness=slice_thickness,
+        file_type=name, 
+        zoom_x=pixel_spacing[2],
+        zoom_y=pixel_spacing[1],
+        zoom_z=pixel_spacing[0],
         dicom_origin=dicom_origin
     )
-    
