@@ -835,7 +835,7 @@ from scipy.spatial import distance_matrix
 #     return ordered_points
 
 
-def circle_through_commissures(points, n_points=50):
+def circle_through_commissures(points, n_points=40):
     """
     Fit a circle through 3 commissure landmarks in 3D and return points on the circle.
 
@@ -1559,4 +1559,6 @@ def save_volume_as_stl_patient_space(volume, output_path, patient_nr, file_type,
     mesh.export(output_filename)
     
     print(f"[OK] {file_type} volume saved as STL in patient space: {output_filename}")
+
+
 

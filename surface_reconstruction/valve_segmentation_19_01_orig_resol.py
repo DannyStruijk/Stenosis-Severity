@@ -54,6 +54,7 @@ dicom_dir = PATIENT_PATHS[patient_nr]
 from scipy.ndimage import zoom, gaussian_filter
 import pydicom
 import numpy as np
+import gc
 
 # Load the dicom
 dicom_reversed = gf.get_sorted_dicom_files(dicom_dir)
@@ -69,9 +70,8 @@ dicom_template = pydicom.dcmread(dicom[0][0])
 slope = float(getattr(dicom_template, "RescaleSlope", 1))
 intercept = float(getattr(dicom_template, "RescaleIntercept", 0))
 
-# Print slope and intercept to confirm
+# Print slope and intercept to confirm - use print and intercept to calculate the real HU 
 print(f"RescaleSlope: {slope}, RescaleIntercept: {intercept}")
-
 raw_volume_hu = raw_volume.astype(np.float32) * slope + intercept
 
 # Print to confirm HU transformation
@@ -112,7 +112,9 @@ dicom_origin = np.array(dicom_template.ImagePositionPatient, dtype=float)
 # Print origin
 print(f"DICOM origin: {dicom_origin}")
 
-
+# Prevent memory leakage
+del raw_volume_hu
+del raw_volume
 
 # %%------------------------------------------REORIENTATION ---------------------------------------
 from skimage.transform import rescale
@@ -148,7 +150,9 @@ reoriented_non_clipped, rotation_matrix_dicom_non_clip, rotation_center_dicom_no
                                                                                            dicom_origin,
                                                                                            pixel_spacing)
 
-
+del rescaled_non_clipped_dicom
+del rescaled_dicom
+del rescaled_volume
 
 
 # %% ----------------------------------- PLOTTING THE ANNOTATED LANDMARKS FOR ALL CUSPS --------------------------
@@ -302,8 +306,8 @@ from skimage.filters import gaussian
 
 # ------------------------------------- INITIALIZING VARIABLES FOR ACTIVE CONTOURS ------------------
 
-alpha = 0.02   # elasticity (snake tension)
-beta = 0.1     # rigidity (smoothness)
+alpha = 0.01   # elasticity (snake tension)
+beta = 0.5     # rigidity (smoothness)
 gamma = 0.01   # step size
 total_iterations = 20
 scale_factor = 4
@@ -498,7 +502,7 @@ for slice_nr in range(z_min_int, z_max_int + 1):
 aortic_wall_contours_lvot = {}
 
 # Loop for finding contours from z_max to z_max + 20
-for slice_nr in range(z_max + 1, z_max + 15):  # Process slices from z_max + 1 to z_max + 20
+for slice_nr in range(z_max + 1, z_max + 12):  # Process slices from z_max + 1 to z_max + 20
     image_pre = reoriented_volume[slice_nr, :, :]
     dicom_slice = reoriented_non_clipped[slice_nr, :, :]
 
@@ -770,14 +774,15 @@ for slice_nr, slice_info in slice_data.items():
 
     # --- Active contour refinement ---
     temp_skeleton = slice_info["skeleton"]
-    downsampled_snake = slice_info["snake"].copy()
-    snake_current = functions.resample_closed_contour(downsampled_snake)
+    init_snake = slice_info["snake"].copy()
+    snake_current = functions.resample_closed_contour(init_snake)
 
     # Preparing image for active contours    
     blurred_skeleton_norm = gaussian_filter(temp_skeleton.astype(float), sigma=7)
     blurred_skeleton_norm /= blurred_skeleton_norm.max() + 1e-8
 
     # The snake is rerun, to close off the entire aortic wall. Previous snake could have had holes in it
+    # However update: since 20-01-2026 not using this contour anymore for aortic wall, as it was too small
     for i in range(total_iterations):
         snake_current = active_contour(
             blurred_skeleton_norm,
@@ -805,7 +810,7 @@ for slice_nr, slice_info in slice_data.items():
     inner_skeleton = temp_skeleton * roi_mask_eroded.astype(temp_skeleton.dtype)
 
     # Upsample contour for accurate indices
-    aortic_wall_contour = functions.resample_closed_contour(snake_current)
+    aortic_wall_contour = functions.resample_closed_contour(init_snake)
 
     # Find closest points to hinge points
     i_lcc = functions.closest_contour_point(lcc_rotated[2][1:3], aortic_wall_contour)
@@ -1012,9 +1017,9 @@ output_path = f"H:/DATA/Afstuderen/3.Data/output_valve_segmentation/{patient_nr}
 os.makedirs(output_path, exist_ok=True)
 
 # Save the combined boundaries
-functions.save_vtk_polydata(lcc_combined_polydata, os.path.join(output_path, "LCC_combined_boundaries.vtk"))
-functions.save_vtk_polydata(rcc_combined_polydata, os.path.join(output_path, "RCC_combined_boundaries.vtk"))
-functions.save_vtk_polydata(ncc_combined_polydata, os.path.join(output_path, "NCC_combined_boundaries.vtk"))
+# functions.save_vtk_polydata(lcc_combined_polydata, os.path.join(output_path, "LCC_combined_boundaries.vtk"))
+# functions.save_vtk_polydata(rcc_combined_polydata, os.path.join(output_path, "RCC_combined_boundaries.vtk"))
+# functions.save_vtk_polydata(ncc_combined_polydata, os.path.join(output_path, "NCC_combined_boundaries.vtk"))
 
 # %% ------------------------ COM-TO-COM SEGMENTS ----------------------------
 
@@ -1062,6 +1067,8 @@ functions.save_vtk_polydata(ncc_com_to_com_polydata, os.path.join(output_path, "
 
 # %% -------------------------------- SAVING THE CALCIFICATION VOLUME ----------------------
 
+gaussian = 1.5
+
 # Define output pathfor the all the segmentations in patient space, make if not existent
 output_path = f"H:/DATA/Afstuderen/3.Data/output_valve_segmentation/{patient_nr}/patient_space"
 os.makedirs(output_path, exist_ok=True)
@@ -1069,7 +1076,7 @@ os.makedirs(output_path, exist_ok=True)
 # Save the previously calculated calcium volume as an STL
 patient_nr = "savi_01"
 file_type = "calc_volume"
-functions.save_volume_as_stl(calc_volume, output_path, patient_nr, file_type)
+calc_volume_smooth = gaussian_filter(calc_volume.astype(np.float32), sigma=gaussian)  
 
 # %% -------------------------------- COVNERTING THE BOUNDARIES IN 3D OBJECT ---------------
 
@@ -1082,43 +1089,56 @@ os.makedirs(output_path, exist_ok=True)
 # --- Process RCC to LCC Boundary ---
 rcc_lcc_boundary_3d = functions.create_3d_mask_from_boundary_points(RCC_data, calc_volume.shape, "rcc_lcc_boundary")
 dilated_mask_3d_rcc_lcc = binary_dilation(rcc_lcc_boundary_3d, cube(3))  # Adjust the cube size as needed
+rcc_lcc_boundary_smooth = gaussian_filter(dilated_mask_3d_rcc_lcc.astype(np.float32), sigma=gaussian)  
 file_type_rcc_lcc = "rcc_lcc_boundary"
-functions.save_volume_as_stl(dilated_mask_3d_rcc_lcc, output_path, patient_nr, file_type_rcc_lcc)
 
 # --- Process NCC to RCC Boundary ---
 ncc_rcc_boundary_3d = functions.create_3d_mask_from_boundary_points(NCC_data, calc_volume.shape, "ncc_rcc_boundary")
 dilated_mask_3d_ncc_rcc = binary_dilation(ncc_rcc_boundary_3d, cube(3))  # Adjust the cube size as needed
+ncc_rcc_boundary_smooth = gaussian_filter(dilated_mask_3d_ncc_rcc.astype(np.float32), sigma=gaussian)  
 file_type_ncc_rcc = "ncc_rcc_boundary"
-functions.save_volume_as_stl(dilated_mask_3d_ncc_rcc, output_path, patient_nr, file_type_ncc_rcc)
 
 # --- Process LCC to NCC Boundary ---
 lcc_ncc_boundary_3d = functions.create_3d_mask_from_boundary_points(LCC_data, calc_volume.shape, "lcc_ncc_boundary")
 dilated_mask_3d_lcc_ncc = binary_dilation(lcc_ncc_boundary_3d, cube(3))  # Adjust the cube size as needed
+lcc_ncc_boundary_smooth = gaussian_filter(dilated_mask_3d_lcc_ncc.astype(np.float32), sigma=gaussian)  
 file_type_lcc_ncc = "lcc_ncc_boundary"
-functions.save_volume_as_stl(dilated_mask_3d_lcc_ncc, output_path, patient_nr, file_type_lcc_ncc)
 
 # %% ----------------------------- AORTIC WALL --------------------------------
 
+from scipy.ndimage import binary_closing, binary_dilation
+
+# Structuring elements
+closing_structure = cube(5)   # adjust if holes are bigger
+dilation_structure = cube(3)  # optional, remove if you don't want to thicken
+gaussian = 1.5
+
 # --- Process RCC to LCC COM to COM Boundary ---
 rcc_lcc_com_to_com_3d = functions.create_3d_mask_from_boundary_points(RCC_data, calc_volume.shape, "com_to_com")
-dilated_mask_3d_rcc_lcc_com_to_com = binary_dilation(rcc_lcc_com_to_com_3d, cube(3))
+rcc_lcc_com_to_com_3d_closed = binary_closing(rcc_lcc_com_to_com_3d, structure=closing_structure)
+dilated_mask_3d_rcc_lcc_com_to_com = binary_dilation(rcc_lcc_com_to_com_3d_closed, cube(3))
+rcc_lcc_smooth = gaussian_filter(dilated_mask_3d_rcc_lcc_com_to_com.astype(np.float32), sigma=gaussian)  
 file_type_rcc_lcc_com_to_com = "rcc_lcc_com_to_com"
-functions.save_volume_as_stl(dilated_mask_3d_rcc_lcc_com_to_com, output_path, patient_nr, file_type_rcc_lcc_com_to_com)
 
 # --- Process NCC to RCC COM to COM Boundary ---
 ncc_rcc_com_to_com_3d = functions.create_3d_mask_from_boundary_points(NCC_data, calc_volume.shape, "com_to_com")
-dilated_mask_3d_ncc_rcc_com_to_com = binary_dilation(ncc_rcc_com_to_com_3d, cube(3))
+ncc_rcc_com_to_com_3d_closed = binary_closing(ncc_rcc_com_to_com_3d, structure=closing_structure)
+dilated_mask_3d_ncc_rcc_com_to_com = binary_dilation(ncc_rcc_com_to_com_3d_closed, cube(3))
+ncc_rcc_smooth = gaussian_filter(dilated_mask_3d_ncc_rcc_com_to_com.astype(np.float32), sigma=gaussian)  
 file_type_ncc_rcc_com_to_com = "ncc_rcc_com_to_com"
-functions.save_volume_as_stl(dilated_mask_3d_ncc_rcc_com_to_com, output_path, patient_nr, file_type_ncc_rcc_com_to_com)
 
 # --- Process LCC to NCC COM to COM Boundary ---
 lcc_ncc_com_to_com_3d = functions.create_3d_mask_from_boundary_points(LCC_data, calc_volume.shape, "com_to_com")
-dilated_mask_3d_lcc_ncc_com_to_com = binary_dilation(lcc_ncc_com_to_com_3d, cube(3))
+lcc_ncc_com_to_com_3d_closed = binary_closing(lcc_ncc_com_to_com_3d, structure=closing_structure)
+dilated_mask_3d_lcc_ncc_com_to_com = binary_dilation(lcc_ncc_com_to_com_3d_closed, closing_structure)
+lcc_ncc_smooth = gaussian_filter(dilated_mask_3d_lcc_ncc_com_to_com.astype(np.float32), sigma=gaussian)  
 file_type_lcc_ncc_com_to_com = "lcc_ncc_com_to_com"
-functions.save_volume_as_stl(dilated_mask_3d_lcc_ncc_com_to_com, output_path, patient_nr, file_type_lcc_ncc_com_to_com)
 
 
 # %% ----------------------- REORIENT THE VOLUMES BACK TO THEIR ORIGINAL SPACE ----------------------
+
+del clipped_dicom
+del gradient_volume
 
 ## The objects are made in the reoriented space. Now reorient it back so it is in the patient space
 inverse_zoom = (
@@ -1134,54 +1154,88 @@ os.makedirs(output_path, exist_ok=True)
 
 # Visual check whether the reoriented object has been done right
 # --- Process RCC to LCC Boundary ---
-rcc_lcc_boundary_reoriented = functions.reorient_volume_back(dilated_mask_3d_rcc_lcc, dicom_origin, rotation_matrix_dicom)
+rcc_lcc_boundary_reoriented = functions.reorient_volume_back(rcc_lcc_boundary_smooth, dicom_origin, rotation_matrix_dicom)
 rcc_lcc_boundary_reoriented = functions.downsample_and_rescale(rcc_lcc_boundary_reoriented, downsample_factor=downsample_factor, inverse_zoom=inverse_zoom)
 file_type_rcc_lcc = "rcc_lcc_boundary_reoriented"
-functions.save_volume_as_stl(rcc_lcc_boundary_reoriented, output_path, patient_nr, file_type_rcc_lcc)
 
 # --- Process NCC to RCC Boundary ---
-ncc_rcc_boundary_reoriented = functions.reorient_volume_back(dilated_mask_3d_ncc_rcc, dicom_origin, rotation_matrix_dicom)
+ncc_rcc_boundary_reoriented = functions.reorient_volume_back(ncc_rcc_boundary_smooth, dicom_origin, rotation_matrix_dicom)
 ncc_rcc_boundary_reoriented = functions.downsample_and_rescale(ncc_rcc_boundary_reoriented, downsample_factor=downsample_factor, inverse_zoom=inverse_zoom)
 file_type_ncc_rcc = "ncc_rcc_boundary"
-functions.save_volume_as_stl(ncc_rcc_boundary_reoriented, output_path, patient_nr, file_type_ncc_rcc)
 
 # --- Process LCC to NCC Boundary ---
-lcc_ncc_boundary_reoriented = functions.reorient_volume_back(dilated_mask_3d_lcc_ncc, dicom_origin, rotation_matrix_dicom)
+lcc_ncc_boundary_reoriented = functions.reorient_volume_back(lcc_ncc_boundary_smooth, dicom_origin, rotation_matrix_dicom)
 lcc_ncc_boundary_reoriented = functions.downsample_and_rescale(lcc_ncc_boundary_reoriented, downsample_factor=downsample_factor, inverse_zoom=inverse_zoom)
 file_type_lcc_ncc = "lcc_ncc_boundary"
-functions.save_volume_as_stl(lcc_ncc_boundary_reoriented, output_path, patient_nr, file_type_lcc_ncc)
 
 # --- Process RCC to LCC COM to COM Boundary ---
-rcc_lcc_com_to_com_reoriented = functions.reorient_volume_back(dilated_mask_3d_rcc_lcc_com_to_com, dicom_origin, rotation_matrix_dicom)
+rcc_lcc_com_to_com_reoriented = functions.reorient_volume_back(rcc_lcc_smooth, dicom_origin, rotation_matrix_dicom)
 rcc_lcc_com_to_com_reoriented = functions.downsample_and_rescale(rcc_lcc_com_to_com_reoriented, downsample_factor=downsample_factor, inverse_zoom=inverse_zoom)
 file_type_rcc_lcc_com_to_com = "rcc_lcc_com_to_com"
-functions.save_volume_as_stl(rcc_lcc_com_to_com_reoriented, output_path, patient_nr, file_type_rcc_lcc_com_to_com)
 
 # --- Process NCC to RCC COM to COM Boundary ---
-ncc_rcc_com_to_com_reoriented = functions.reorient_volume_back(dilated_mask_3d_ncc_rcc_com_to_com, dicom_origin, rotation_matrix_dicom)
+ncc_rcc_com_to_com_reoriented = functions.reorient_volume_back(ncc_rcc_smooth, dicom_origin, rotation_matrix_dicom)
 ncc_rcc_com_to_com_reoriented = functions.downsample_and_rescale(ncc_rcc_com_to_com_reoriented, downsample_factor=downsample_factor, inverse_zoom=inverse_zoom)
 file_type_ncc_rcc_com_to_com = "ncc_rcc_com_to_com"
-functions.save_volume_as_stl(ncc_rcc_com_to_com_reoriented, output_path, patient_nr, file_type_ncc_rcc_com_to_com)
 
 # --- Process LCC to NCC COM to COM Boundary ---
-lcc_ncc_com_to_com_reoriented = functions.reorient_volume_back(dilated_mask_3d_lcc_ncc_com_to_com, dicom_origin, rotation_matrix_dicom)
+lcc_ncc_com_to_com_reoriented = functions.reorient_volume_back(lcc_ncc_smooth, dicom_origin, rotation_matrix_dicom)
 lcc_ncc_com_to_com_reoriented = functions.downsample_and_rescale(lcc_ncc_com_to_com_reoriented, downsample_factor=downsample_factor, inverse_zoom=inverse_zoom)
 file_type_lcc_ncc_com_to_com = "lcc_ncc_com_to_com"
-functions.save_volume_as_stl(lcc_ncc_com_to_com_reoriented, output_path, patient_nr, file_type_lcc_ncc_com_to_com)
 
 # --- Process calcfication mask --------------
-calcification_mask_reoriented = functions.reorient_volume_back(calc_volume, dicom_origin, rotation_matrix_dicom)
+calcification_mask_reoriented = functions.reorient_volume_back(calc_volume_smooth, dicom_origin, rotation_matrix_dicom)
 calcification_mask_reoriented = functions.downsample_and_rescale(calcification_mask_reoriented, downsample_factor=downsample_factor, inverse_zoom=inverse_zoom)
 file_type_calc_volume = "calc_volume_reoriented"
-functions.save_volume_as_stl(calcification_mask_reoriented, output_path, patient_nr, file_type_calc_volume)
 
 #%% ------------------------------------------- SAVE THE LVOT ----------------------------
 
 # --- Process LVOT ---------------------
 aortic_wall_lvot_3d = functions.create_3d_mask_from_boundary_points(aortic_wall_contours_lvot, calc_volume.shape, "lvot")
 dilated_lvot = binary_dilation(aortic_wall_lvot_3d, cube(3))
-lvot_patient_space = functions.reorient_volume_back(dilated_lvot, dicom_origin, rotation_matrix_dicom)
+lvot_smooth = gaussian_filter(dilated_lvot.astype(np.float32), sigma=gaussian)  
+lvot_patient_space = functions.reorient_volume_back(lvot_smooth, dicom_origin, rotation_matrix_dicom)
 lvot_reoriented = functions.downsample_and_rescale(lvot_patient_space, downsample_factor=downsample_factor, inverse_zoom=inverse_zoom)
+
+
+#%% -------------------------------- CONNECTING THE BOUNDARY AND THE AORTIC WALL ------------
+
+# Combine the aortic wall and do a closign so that the boundary connercting to the aortic wall has no hole in it anymore
+# first try it for the NCC_to_RCC boundary as this one has a lot of distance to the aortic wall
+
+combined_mask = np.logical_or.reduce([
+    ncc_rcc_com_to_com_reoriented,
+    rcc_lcc_com_to_com_reoriented,
+    ncc_rcc_boundary_reoriented
+])
+
+# Loop over slice indices
+for slice_idx in range(z_min, z_max+10):  # or any range you want
+    # Extract the transversal slice
+    transversal_slice = volume[slice_idx, :, :]
+    
+    # Extract mask slice (should be same shape)
+    mask_slice = combined_mask[slice_idx, :, :]
+    
+    # Clear the current figure
+    plt.clf()
+    
+    # Show the base slice
+    plt.imshow(transversal_slice, cmap="gray")
+    
+    # Overlay mask slice (boolean) in a color (e.g., red)
+    # 'alpha' controls transparency
+    plt.imshow(mask_slice, cmap="Reds", alpha=0.4)
+    
+    plt.title(f"Transversal slice at x={slice_idx}")
+    
+    plt.draw()
+    plt.pause(0.1)
+    
+plt.close()
+
+
+
 
 
 #%%%
