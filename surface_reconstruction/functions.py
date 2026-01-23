@@ -1146,9 +1146,7 @@ def clean_boundary_from_mask(mask, aortic_wall_points, min_dist, commissures, ce
         Coordinates of aortic wall points.
     min_dist : float
         Minimum Euclidean distance (in pixels) from the aortic wall.
-    commissures : dict
-        Dictionary of commissure points (for creating the Mercedes mask).
-    center : tuple
+     center : tuple
         Coordinates of the center point (x, y).
     
     Returns
