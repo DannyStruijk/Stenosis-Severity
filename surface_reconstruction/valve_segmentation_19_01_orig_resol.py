@@ -9,10 +9,11 @@ import functions
 import numpy as np
 import pydicom
 import matplotlib.pyplot as plt
-import nrrd
 from skimage import exposure
 from scipy.ndimage import binary_erosion
-
+import os
+from scipy.ndimage import gaussian_filter
+from skimage.morphology import binary_dilation, cube, binary_closing
 
 # %% ----------------------------------------PATIENT PATHS & SELECTION OF PATIENT -----------------------------
 
@@ -50,11 +51,6 @@ dicom_dir = PATIENT_PATHS[patient_nr]
 
 # %% -------------------------------------------- PREPROCESSING ----------------------------------------
 # READING IN THE DICOM & THE EDGE DETECTED IMAGE
-
-from scipy.ndimage import zoom, gaussian_filter
-import pydicom
-import numpy as np
-import gc
 
 # Load the dicom
 dicom_reversed = gf.get_sorted_dicom_files(dicom_dir)
@@ -976,9 +972,6 @@ for slice_nr, slice_info in slice_data.items():
 
 
 # %% --- Save each contour segment as VTK ---
-import os
-import numpy as np
-import functions  # Import functions from your functions.py file
 
 # Collect all boundaries (list of NumPy arrays) and corresponding heights (z-values)
 lcc_boundaries = []
@@ -1019,10 +1012,6 @@ os.makedirs(output_path, exist_ok=True)
 
 # %% ------------------------ COM-TO-COM SEGMENTS ----------------------------
 
-import os
-import numpy as np
-import functions  # Import functions from your functions.py file
-
 # Collect all com_to_com segments (list of NumPy arrays) and corresponding heights (z-values)
 lcc_com_to_com = []
 rcc_com_to_com = []
@@ -1062,7 +1051,6 @@ functions.save_vtk_polydata(rcc_com_to_com_polydata, os.path.join(output_path, "
 functions.save_vtk_polydata(ncc_com_to_com_polydata, os.path.join(output_path, "NCC_combined_com_to_com.vtk"))
 
 # %% -------------------------------- SAVING THE CALCIFICATION VOLUME ----------------------
-
 gaussian_blur = 1.5
 
 # Define output pathfor the all the segmentations in patient space, make if not existent
@@ -1075,12 +1063,6 @@ file_type = "calc_volume"
 calc_volume_smooth = gaussian_filter(calc_volume.astype(np.float32), sigma=gaussian_blur)  
 
 # %% -------------------------------- COVNERTING THE BOUNDARIES IN 3D OBJECT ---------------
-
-from skimage.morphology import binary_dilation, cube
-
-output_path = f"H:/DATA/Afstuderen/3.Data/output_valve_segmentation/{patient_nr}/python_dicom_space"
-os.makedirs(output_path, exist_ok=True)
-
 
 # --- Process RCC to LCC Boundary ---
 rcc_lcc_boundary_3d = functions.create_3d_mask_from_boundary_points(RCC_data, calc_volume.shape, "rcc_lcc_boundary")
@@ -1101,8 +1083,6 @@ lcc_ncc_boundary_smooth = gaussian_filter(dilated_mask_3d_lcc_ncc.astype(np.floa
 file_type_lcc_ncc = "lcc_ncc_boundary"
 
 # %% ----------------------------- AORTIC WALL --------------------------------
-
-from scipy.ndimage import binary_closing, binary_dilation
 
 # Structuring elements
 closing_structure = cube(5)   # adjust if holes are bigger
@@ -1183,10 +1163,23 @@ calcification_mask_reoriented = functions.reorient_volume_back(calc_volume_smoot
 calcification_mask_reoriented = functions.downsample_and_rescale(calcification_mask_reoriented, downsample_factor=downsample_factor, inverse_zoom=inverse_zoom)
 file_type_calc_volume = "calc_volume_reoriented"
 
+
 #%% ------------------------------------------- SAVE THE LVOT ----------------------------
 
 # --- Process LVOT ---------------------
-aortic_wall_lvot_3d = functions.create_3d_mask_from_boundary_points(aortic_wall_contours_lvot, calc_volume.shape, "lvot")
+lvot_resampled = {}
+for slice_nr, data in aortic_wall_contours_lvot.items():
+    contour = data['lvot']  # extract the NumPy array
+    if contour is not None and len(contour) > 0:
+        lvot_resampled[slice_nr] = {"lvot": functions.resample_closed_contour(contour)}
+    else:
+        lvot_resampled[slice_nr] = {"lvot": None}
+        
+aortic_wall_lvot_3d = functions.create_3d_mask_from_boundary_points(
+    lvot_resampled, calc_volume.shape, "lvot"
+)
+
+
 dilated_lvot = binary_dilation(aortic_wall_lvot_3d, cube(3))
 lvot_smooth = gaussian_filter(dilated_lvot.astype(np.float32), sigma=gaussian_blur)  
 lvot_patient_space = functions.reorient_volume_back(lvot_smooth, dicom_origin, rotation_matrix_dicom)
@@ -1206,18 +1199,6 @@ masks = {
     "LVOT": lvot_reoriented,
     "calc_volume" : calcification_mask_reoriented
 }
-
-# Distinct colors per mask
-colors = {
-    "LCC_com_to_com": "cyan",
-    "NCC_com_to_com": "yellow",
-    "RCC_com_to_com": "magenta",
-    "RCC_to_LCC": "cyan",
-    "NCC_to_RCC": "yellow",
-    "LCC_to_NCC": "magenta"
-}
-
-output_path = r"H:\DATA\Afstuderen\3.Data\output_valve_segmentation\savi_01\patient_space"
 
 
 # NOW SAVE ALL THE BOUNDARIES IN THIS LOOP
