@@ -136,22 +136,14 @@ reoriented_volume, rotation_matrix, rotation_center = functions.reorient_volume(
                                                                                 dicom_origin, 
                                                                                 pixel_spacing)
 
-# Now als do the reorientation on the regular DICOM
-rescaled_dicom = functions.zoom(smoothed_dicom, zoom_factors)
-reoriented_dicom, rotation_matrix_dicom, rotation_center_dicom = functions.reorient_volume(rescaled_dicom,
-                                                                                           annular_normal,
-                                                                                           dicom_origin,
-                                                                                           pixel_spacing)
-
 # Lastly, do the reorientation of the non-clipped DICOM 
 rescaled_non_clipped_dicom = functions.zoom(smoothed_non_clipped, zoom_factors)
-reoriented_non_clipped, rotation_matrix_dicom_non_clip, rotation_center_dicom_non_clip = functions.reorient_volume(rescaled_non_clipped_dicom,
+reoriented_non_clipped, rotation_matrix_dicom, rotation_center_dicom_non_clip = functions.reorient_volume(rescaled_non_clipped_dicom,
                                                                                            annular_normal,
                                                                                            dicom_origin,
                                                                                            pixel_spacing)
 
 del rescaled_non_clipped_dicom
-del rescaled_dicom
 del rescaled_volume
 
 
@@ -241,7 +233,7 @@ from skimage import exposure
 slice_idx = 50
 
 # Extract the transversal slice
-transversal_slice = reoriented_dicom[slice_idx, :, :]
+transversal_slice = reoriented_non_clipped[slice_idx, :, :]
 
 # Plot the slice
 plt.figure(figsize=(6,6))
@@ -267,7 +259,7 @@ plt.show()
 # Loop over slice indices
 for slice_idx in range(z_min,z_max+10):  # or any range you want
     # Extract the transversal slice
-    transversal_slice = reoriented_dicom[slice_idx, :, :]
+    transversal_slice = reoriented_non_clipped[slice_idx, :, :]
     
     # Clear the current figure
     plt.clf()
@@ -318,7 +310,7 @@ print(f"Processing slices from {z_min_int} to {z_max_int}")
 
 aortic_wall_contours = {}
 upsampled_snakes = {}
-slice_data = {}   # ✅ NEW: store per-slice info (snake, ROI mask, skeleton)
+slice_data = {}   
 
 prev_snake = 0
 show_intermediate = False
@@ -330,16 +322,9 @@ for slice_nr in range(z_min_int, z_max_int + 1):
     
     image_pre = reoriented_volume[slice_nr, :, :]
     dicom_slice = reoriented_non_clipped[slice_nr, :, :]
-
-    # Upsample both the edge detected image as well as the regular dicom - not needed anymore i think, since upsampling is done priorly
-    # gradient_upsampled = rescale(image_pre, scale_factor, order=3, preserve_range=True, anti_aliasing=True).astype(image_pre.dtype)
-    # dicom_upsampled = rescale(dicom_slice, scale_factor, order=3, preserve_range=True, anti_aliasing=True).astype(dicom_slice.dtype)
-    
+ 
     img = image_pre
     img = img / img.max()
-    
-    # yesequalization
-    # new_image = exposure.equalize_adapthist(img, clip_limit=0.03)
     new_image= img
 
     # Initialize snake
@@ -378,111 +363,16 @@ for slice_nr in range(z_min_int, z_max_int + 1):
     plt.axis("off")
     plt.show()
 
-     # ----------------------------------------- BUILD ROI ----------------------------------------
-    roi_mask = polygon2mask(new_image.shape, snake_current) 
-    reoriented_slice_dicom = reoriented_dicom[slice_nr, :, :]
-    
-    # Apply Gaussian blur to the reoriented slice (sigma controls the blur intensity)
-    sigma = 3  # Adjust this value based on how much blur you want
-    blurred_slice = gaussian(reoriented_slice_dicom, sigma=sigma)
-    
-    # Multiply the blurred image with the ROI mask
-    roi_image_blurred = blurred_slice * roi_mask.astype(reoriented_slice_dicom.dtype)
-    
-    # Multiply the original (non-blurred) image with the ROI mask
-    roi_image_original = reoriented_slice_dicom * roi_mask.astype(reoriented_slice_dicom.dtype)
-    
-    # Plot both images side by side for comparison
-    plt.figure(figsize=(12, 6))
-    
-    # Original ROI image (without blur)
-    plt.subplot(1, 2, 1)
-    plt.imshow(roi_image_original, cmap='gray')
-    plt.title("ROI Image (No Blur)")
-    plt.axis("off")
-    
-    # Blurred ROI image
-    plt.subplot(1, 2, 2)
-    plt.imshow(roi_image_blurred, cmap='gray')
-    plt.title("ROI Image (With Blur)")
-    plt.axis("off")
-    
-    plt.tight_layout()
-    plt.show()
-    
-    # ---------------------------------------- PROCESSING ---------------------------------------
-    
-    # Initialize the threshold variable for all slices
-    if slice_nr == z_min:
-        # Calculate the threshold for the first slice based on the 10th percentile
-        roi_pixels_blurred = roi_image_blurred[roi_mask]  # Use blurred ROI pixels
-        percentile_10th = np.percentile(roi_pixels_blurred, 15)  # 10th percentile as threshold
-        print(f"Calculated 10th Percentile Threshold for Slice {slice_nr}: {percentile_10th:.2f}")
-    else:
-        # Use the previously calculated threshold for all other slices
-        percentile_10th = globals().get("percentile_10th", 0)
-    
-    # Apply the 10th percentile threshold to the blurred image
-    percentile_mask = (roi_image_blurred > percentile_10th) & roi_mask
-    
-    # Visualize the histogram of the intensity values of the blurred image
-    plt.figure(figsize=(8, 6))
-    plt.hist(roi_pixels_blurred, bins=50, color='gray', alpha=0.7)
-    plt.title("Histogram of ROI Intensity Values (Blurred)")
-    plt.xlabel("Intensity")
-    plt.ylabel("Frequency")
-    
-    # Mark the 10th percentile threshold on the histogram
-    plt.axvline(percentile_10th, color='g', linestyle='--', label=f'10th Percentile Threshold: {percentile_10th:.2f}')
-    plt.legend()
-    plt.show()
-    
-    # ---------------------------------------- SKELETONIZATION -----------------------------------
-    
-    # Apply the mask based on the 10th percentile threshold
-    inverted_mask = ~percentile_mask
-    closed_inverted = dilation(inverted_mask, disk(3))
-    eroded_foreground = closed_inverted * roi_mask
-    
-    # Perform skeletonization and thickening
-    skeleton = skeletonize(eroded_foreground)
-    thicker_skeleton = dilation(skeleton, disk(3))
-    
-    # Final visualization of the skeletonized result
-    plt.figure(figsize=(6, 6))
-    plt.imshow(blurred_slice, cmap='gray')
-    plt.imshow(thicker_skeleton, cmap='Reds', alpha=0.5)
-    plt.title(f"Skeletonization with Percentile Threshold — Slice {slice_nr}")
-    plt.axis("off")
-    plt.show()
-    
-    # Optionally, store the threshold for future slices
-    if slice_nr == z_min:
-        globals()["percentile_10th"] = percentile_10th  # Store the threshold for future slices
 
-    # Visualization (optional crop)
-    if crop_bool:
-        points = np.array([lcc_com, rcc_com, ncc_com]) 
-        x_min, x_max = points[:, 2].min(), points[:, 2].max()
-        y_min, y_max = points[:, 1].min(), points[:, 1].max()
-        pad = 100
-        x_min, x_max = int(x_min - pad), int(x_max + pad)
-        y_min, y_max = int(y_min - pad), int(y_max + pad)
-        cropped_roi = new_image[y_min:y_max, x_min:x_max]
-        cropped_skeleton = thicker_skeleton[y_min:y_max, x_min:x_max]
-        plt.figure(figsize=(6,6))
-        plt.imshow(cropped_roi, cmap='gray')
-        plt.imshow(cropped_skeleton, cmap='Reds', alpha=0.4)
-        plt.axis('off')
-        plt.title(f"Cropped around commissures - Slice {slice_nr}")
-        plt.show()
+    roi_mask = polygon2mask(new_image.shape, snake_current) 
+    
 
     # Store data for *every* slice
+    # note that the skeletonization now takes place in a later step
     slice_data[slice_nr] = {
-        "skeleton": skeleton.copy(),
         "roi_mask": roi_mask.copy(),
         "snake": snake_current.copy(),
-        "slice": dicom_slice.copy()
+        "slice": dicom_slice.copy(),
     }
 
     # Store contour info
@@ -560,14 +450,14 @@ from skimage.morphology import binary_erosion, disk
 # Create an empty mask with the same dimensions as the original image
 masked_valve = np.zeros(
     (
-        reoriented_dicom.shape[0],                     # Z
-        reoriented_dicom.shape[1],   # Y
-        reoriented_dicom.shape[2]    # X
+        reoriented_non_clipped.shape[0],                     # Z
+        reoriented_non_clipped.shape[1],   # Y
+        reoriented_non_clipped.shape[2]    # X
     ),
-    dtype=reoriented_dicom.dtype
+    dtype=reoriented_non_clipped.dtype
 )
 
-num_slices = reoriented_dicom.shape[0]
+num_slices = reoriented_non_clipped.shape[0]
 print(num_slices)
 
 # Initialize calcification volume
@@ -769,16 +659,115 @@ for slice_nr, slice_info in slice_data.items():
     print(f"Processing slice {slice_nr}...")
 
     # --- Upscale slice for visualization / mask ---
-    reoriented_slice = reoriented_dicom[slice_nr, :, :]
-    upscaled = reoriented_slice
+    reoriented_slice = reoriented_non_clipped[slice_nr, :, :]
+    roi_mask = slice_info["roi_mask"]
 
     # --- Active contour refinement ---
-    temp_skeleton = slice_info["skeleton"]
     init_snake = slice_info["snake"].copy()
     snake_current = functions.resample_closed_contour(init_snake)
+    
+    
+    # --------- CONTEXT DEPENDENT CLIPPING  -------
+    # Updated: now we are using the previously calculated eroded_foreground, i.e. the calculated ROI
+    # So the whole skeletonization which took place in the previous loop will now be done. This is done
+    # so that the context-dependent clipping can be achieved.
+    
+    
+    # Check if commissure points from the previous slice are available
+    commissure_points = {
+        'lcc_ncc': prev_intersections['lcc_ncc'] if prev_intersections['lcc_ncc'] is not None else base_commissure['lcc_ncc'],
+        'rcc_lcc': prev_intersections['rcc_lcc'] if prev_intersections['rcc_lcc'] is not None else base_commissure['rcc_lcc'],
+        'ncc_rcc': prev_intersections['ncc_rcc'] if prev_intersections['ncc_rcc'] is not None else base_commissure['ncc_rcc']
+    }
+    
+    init_coms = [
+        commissure_points['lcc_ncc'],
+        commissure_points['rcc_lcc'],
+        commissure_points['ncc_rcc']
+    ]
+    init_mercedes = functions.create_mercedes_mask(reoriented_slice, init_coms, center, line_thickness = 8)
+    print(init_mercedes.shape)
+    slice_clipped = reoriented_slice.copy()
+        
+    # 1) Low clipping only inside ROI
+    slice_clipped[(slice_clipped < 100) & (roi_mask > 0)] = 100
+    
+    # 2) High clipping inside mercedes: >450 -> 0
+    slice_clipped[(init_mercedes == 1) & (slice_clipped > 450)] = 100
+    
+    # 3) High clipping outside mercedes: >450 -> 450
+    slice_clipped[(init_mercedes == 0) & (slice_clipped > 450)] = 450
+    
+    # Check for any zero pixels
+    num_zeros = np.sum(slice_clipped == 0)
 
+
+     # ----------------------------------------- SKELETONIZATION  ----------------------------------------
+    # Apply Gaussian blur to the reoriented slice (sigma controls the blur intensity)
+    sigma = 3  # Adjust this value based on how much blur you want
+    blurred_slice = gaussian(slice_clipped, sigma=sigma)
+    
+    # Multiply the blurred image with the ROI mask
+    roi_image_blurred = blurred_slice * roi_mask.astype(slice_clipped.dtype)
+    
+    # Multiply the original (non-blurred) image with the ROI mask
+    roi_image_original = slice_clipped * roi_mask.astype(slice_clipped.dtype)
+   
+    # Initialize the threshold variable for all slices
+    if slice_nr == z_min:
+        # Calculate the threshold for the first slice based on the 10th percentile
+        roi_pixels_blurred = roi_image_blurred[roi_mask]  # Use blurred ROI pixels
+        percentile_10th = np.percentile(roi_pixels_blurred, 15)  # 10th percentile as threshold
+        print(f"Calculated 10th Percentile Threshold for Slice {slice_nr}: {percentile_10th:.2f}")
+    else:
+        # Use the previously calculated threshold for all other slices
+        percentile_10th = globals().get("percentile_10th", 0)
+    
+    # Apply the 10th percentile threshold to the blurred image
+    percentile_mask = (roi_image_blurred > percentile_10th) & roi_mask
+    
+    # Visualize the histogram of the intensity values of the blurred image
+    plot_histo = False
+    
+    if plot_histo == True: 
+        plt.figure(figsize=(8, 6))
+        plt.hist(roi_pixels_blurred, bins=50, color='gray', alpha=0.7)
+        plt.title("Histogram of ROI Intensity Values (Blurred)")
+        plt.xlabel("Intensity")
+        plt.ylabel("Frequency")
+        
+        # Mark the 10th percentile threshold on the histogram
+        plt.axvline(percentile_10th, color='g', linestyle='--', label=f'10th Percentile Threshold: {percentile_10th:.2f}')
+        plt.legend()
+        plt.show()
+
+    # Apply the mask based on the 10th percentile threshold
+    inverted_mask = ~percentile_mask
+    closed_inverted = dilation(inverted_mask, disk(1))
+    eroded_foreground = closed_inverted * roi_mask
+    
+    # Perform skeletonization and thickening
+    skeleton = skeletonize(eroded_foreground)
+    thicker_skeleton = dilation(skeleton, disk(3))
+    
+    # Final visualization of the skeletonized result
+    plt.figure(figsize=(6, 6))
+    plt.imshow(blurred_slice, cmap='gray')
+    plt.imshow(thicker_skeleton, cmap='Reds', alpha=0.5)
+    plt.title(f"Skeletonization with Percentile Threshold — Slice {slice_nr}")
+    plt.axis("off")
+    plt.show()
+    
+    # Optionally, store the threshold for future slices
+    if slice_nr == z_min:
+        globals()["percentile_10th"] = percentile_10th  # Store the threshold for future slices
+
+
+    # --------------------------------------------------FINDIGN BOUNDARIES -----------------------
+    
+    
     # Preparing image for active contours    
-    blurred_skeleton_norm = gaussian_filter(temp_skeleton.astype(float), sigma=7)
+    blurred_skeleton_norm = gaussian_filter(skeleton.astype(float), sigma=7)
     blurred_skeleton_norm /= blurred_skeleton_norm.max() + 1e-8
 
     # The snake is rerun, to close off the entire aortic wall. Previous snake could have had holes in it
@@ -805,9 +794,9 @@ for slice_nr, slice_info in slice_data.items():
     # plt.show()
 
     # --- Isolate inner skeleton ---
-    skeleton_mask = polygon2mask(temp_skeleton.shape, snake_current)
+    skeleton_mask = polygon2mask(skeleton.shape, snake_current)
     roi_mask_eroded = binary_erosion(skeleton_mask)
-    inner_skeleton = temp_skeleton * roi_mask_eroded.astype(temp_skeleton.dtype)
+    inner_skeleton = skeleton * roi_mask_eroded.astype(skeleton.dtype)
 
     # Upsample contour for accurate indices
     aortic_wall_contour = functions.resample_closed_contour(init_snake)
@@ -824,11 +813,11 @@ for slice_nr, slice_info in slice_data.items():
 
     # Create leaflet masks and boundaries
     lcc_ncc_mask, lcc_ncc_boundary = functions.create_boundary_mask(
-        center, aortic_wall_contour, i_lcc, i_ncc, seg_lcc_ncc, upscaled, inner_skeleton)
+        center, aortic_wall_contour, i_lcc, i_ncc, seg_lcc_ncc, slice_clipped, inner_skeleton)
     rcc_lcc_mask, rcc_lcc_boundary = functions.create_boundary_mask(
-        center, aortic_wall_contour, i_rcc, i_lcc, seg_rcc_lcc, upscaled, inner_skeleton)
+        center, aortic_wall_contour, i_rcc, i_lcc, seg_rcc_lcc, slice_clipped, inner_skeleton)
     ncc_rcc_mask, ncc_rcc_boundary = functions.create_boundary_mask(
-        center, aortic_wall_contour, i_ncc, i_rcc, seg_ncc_rcc, upscaled, inner_skeleton)
+        center, aortic_wall_contour, i_ncc, i_rcc, seg_ncc_rcc, slice_clipped, inner_skeleton)
 
     # Check if commissure points from the previous slice are available
     commissure_points = {
@@ -851,7 +840,7 @@ for slice_nr, slice_info in slice_data.items():
     intersections = {}
     if slice_nr != z_min:
         intersections = functions.find_all_boundary_intersections(
-            upscaled,
+            slice_clipped,
             seg_lcc_ncc,
             seg_rcc_lcc,
             seg_ncc_rcc,
@@ -957,16 +946,23 @@ for slice_nr, slice_info in slice_data.items():
         "height": slice_nr
     }
     
+    num_zeros = np.sum(slice_clipped == 0)
+    num_nans = np.sum(np.isnan(slice_clipped))
+    
+    print(f"Number of zero pixels in slice_clipped: {num_zeros}")
+    print(f"Number of NaNs in slice_clipped: {num_nans}")
+    print("Min/max slice_clipped:", slice_clipped.min(), slice_clipped.max())
+    print("Unique values inside mercedes:", np.unique(slice_clipped[init_mercedes == 1]))
     # Optional visualization (COM-to-COM segments + boundaries)
     plt.figure(figsize=(6, 6))
-    plt.imshow(upscaled, cmap='gray', origin='upper')
-    plt.imshow(mercedes_mask, cmap='jet', alpha=0.3)  # Adjust alpha for transparency
-    plt.plot(seg_c2c["LCC"][:, 1], seg_c2c["LCC"][:, 0], color='cyan', lw=3, label='LCC')
-    plt.plot(seg_c2c["RCC"][:, 1], seg_c2c["RCC"][:, 0], color='green', lw=3, label='RCC')
-    plt.plot(seg_c2c["NCC"][:, 1], seg_c2c["NCC"][:, 0], color='magenta', lw=3, label='NCC')
-    plt.plot(cleaned_lcc_ncc_boundary[:, 1], cleaned_lcc_ncc_boundary[:, 0], color='cyan', lw=2)
-    plt.plot(cleaned_rcc_lcc_boundary[:, 1], cleaned_rcc_lcc_boundary[:, 0], color='green', lw=2)
-    plt.plot(cleaned_ncc_rcc_boundary[:, 1], cleaned_ncc_rcc_boundary[:, 0], color='magenta', lw=2)
+    plt.imshow(slice_clipped, cmap='gray', origin='upper')
+    # plt.imshow(mercedes_mask, cmap='jet', alpha=0.3)  # Adjust alpha for transparency
+    # plt.plot(seg_c2c["LCC"][:, 1], seg_c2c["LCC"][:, 0], color='cyan', lw=3, label='LCC')
+    # plt.plot(seg_c2c["RCC"][:, 1], seg_c2c["RCC"][:, 0], color='green', lw=3, label='RCC')
+    # plt.plot(seg_c2c["NCC"][:, 1], seg_c2c["NCC"][:, 0], color='magenta', lw=3, label='NCC')
+    # plt.plot(cleaned_lcc_ncc_boundary[:, 1], cleaned_lcc_ncc_boundary[:, 0], color='cyan', lw=2)
+    # plt.plot(cleaned_rcc_lcc_boundary[:, 1], cleaned_rcc_lcc_boundary[:, 0], color='green', lw=2)
+    # plt.plot(cleaned_ncc_rcc_boundary[:, 1], cleaned_ncc_rcc_boundary[:, 0], color='magenta', lw=2)
     plt.title(f"Leaflet Borders — Slice {slice_nr}")
     plt.axis('off')
     plt.legend()
@@ -1067,7 +1063,7 @@ functions.save_vtk_polydata(ncc_com_to_com_polydata, os.path.join(output_path, "
 
 # %% -------------------------------- SAVING THE CALCIFICATION VOLUME ----------------------
 
-gaussian = 1.5
+gaussian_blur = 1.5
 
 # Define output pathfor the all the segmentations in patient space, make if not existent
 output_path = f"H:/DATA/Afstuderen/3.Data/output_valve_segmentation/{patient_nr}/patient_space"
@@ -1076,7 +1072,7 @@ os.makedirs(output_path, exist_ok=True)
 # Save the previously calculated calcium volume as an STL
 patient_nr = "savi_01"
 file_type = "calc_volume"
-calc_volume_smooth = gaussian_filter(calc_volume.astype(np.float32), sigma=gaussian)  
+calc_volume_smooth = gaussian_filter(calc_volume.astype(np.float32), sigma=gaussian_blur)  
 
 # %% -------------------------------- COVNERTING THE BOUNDARIES IN 3D OBJECT ---------------
 
@@ -1089,19 +1085,19 @@ os.makedirs(output_path, exist_ok=True)
 # --- Process RCC to LCC Boundary ---
 rcc_lcc_boundary_3d = functions.create_3d_mask_from_boundary_points(RCC_data, calc_volume.shape, "rcc_lcc_boundary")
 dilated_mask_3d_rcc_lcc = binary_dilation(rcc_lcc_boundary_3d, cube(3))  # Adjust the cube size as needed
-rcc_lcc_boundary_smooth = gaussian_filter(dilated_mask_3d_rcc_lcc.astype(np.float32), sigma=gaussian)  
+rcc_lcc_boundary_smooth = gaussian_filter(dilated_mask_3d_rcc_lcc.astype(np.float32), sigma=gaussian_blur)  
 file_type_rcc_lcc = "rcc_lcc_boundary"
 
 # --- Process NCC to RCC Boundary ---
 ncc_rcc_boundary_3d = functions.create_3d_mask_from_boundary_points(NCC_data, calc_volume.shape, "ncc_rcc_boundary")
 dilated_mask_3d_ncc_rcc = binary_dilation(ncc_rcc_boundary_3d, cube(3))  # Adjust the cube size as needed
-ncc_rcc_boundary_smooth = gaussian_filter(dilated_mask_3d_ncc_rcc.astype(np.float32), sigma=gaussian)  
+ncc_rcc_boundary_smooth = gaussian_filter(dilated_mask_3d_ncc_rcc.astype(np.float32), sigma=gaussian_blur)  
 file_type_ncc_rcc = "ncc_rcc_boundary"
 
 # --- Process LCC to NCC Boundary ---
 lcc_ncc_boundary_3d = functions.create_3d_mask_from_boundary_points(LCC_data, calc_volume.shape, "lcc_ncc_boundary")
 dilated_mask_3d_lcc_ncc = binary_dilation(lcc_ncc_boundary_3d, cube(3))  # Adjust the cube size as needed
-lcc_ncc_boundary_smooth = gaussian_filter(dilated_mask_3d_lcc_ncc.astype(np.float32), sigma=gaussian)  
+lcc_ncc_boundary_smooth = gaussian_filter(dilated_mask_3d_lcc_ncc.astype(np.float32), sigma=gaussian_blur)  
 file_type_lcc_ncc = "lcc_ncc_boundary"
 
 # %% ----------------------------- AORTIC WALL --------------------------------
@@ -1111,34 +1107,33 @@ from scipy.ndimage import binary_closing, binary_dilation
 # Structuring elements
 closing_structure = cube(5)   # adjust if holes are bigger
 dilation_structure = cube(3)  # optional, remove if you don't want to thicken
-gaussian = 1.5
 
 # --- Process RCC to LCC COM to COM Boundary ---
 rcc_lcc_com_to_com_3d = functions.create_3d_mask_from_boundary_points(RCC_data, calc_volume.shape, "com_to_com")
-rcc_lcc_com_to_com_3d_closed = binary_closing(rcc_lcc_com_to_com_3d, structure=closing_structure)
-dilated_mask_3d_rcc_lcc_com_to_com = binary_dilation(rcc_lcc_com_to_com_3d_closed, cube(3))
-rcc_lcc_smooth = gaussian_filter(dilated_mask_3d_rcc_lcc_com_to_com.astype(np.float32), sigma=gaussian)  
+rcc_lcc_com_to_com_3d = binary_closing(rcc_lcc_com_to_com_3d, structure=closing_structure)
+rcc_lcc_com_to_com_3d = binary_dilation(rcc_lcc_com_to_com_3d, cube(3))
+rcc_lcc_smooth = gaussian_filter(rcc_lcc_com_to_com_3d.astype(np.float32), sigma=gaussian_blur)  
 file_type_rcc_lcc_com_to_com = "rcc_lcc_com_to_com"
 
 # --- Process NCC to RCC COM to COM Boundary ---
 ncc_rcc_com_to_com_3d = functions.create_3d_mask_from_boundary_points(NCC_data, calc_volume.shape, "com_to_com")
-ncc_rcc_com_to_com_3d_closed = binary_closing(ncc_rcc_com_to_com_3d, structure=closing_structure)
-dilated_mask_3d_ncc_rcc_com_to_com = binary_dilation(ncc_rcc_com_to_com_3d_closed, cube(3))
-ncc_rcc_smooth = gaussian_filter(dilated_mask_3d_ncc_rcc_com_to_com.astype(np.float32), sigma=gaussian)  
+ncc_rcc_com_to_com_3d = binary_closing(ncc_rcc_com_to_com_3d, structure=closing_structure)
+ncc_rcc_com_to_com_3d = binary_dilation(ncc_rcc_com_to_com_3d, cube(3))
+ncc_rcc_smooth = gaussian_filter(ncc_rcc_com_to_com_3d.astype(np.float32), sigma=gaussian_blur)  
 file_type_ncc_rcc_com_to_com = "ncc_rcc_com_to_com"
 
 # --- Process LCC to NCC COM to COM Boundary ---
 lcc_ncc_com_to_com_3d = functions.create_3d_mask_from_boundary_points(LCC_data, calc_volume.shape, "com_to_com")
-lcc_ncc_com_to_com_3d_closed = binary_closing(lcc_ncc_com_to_com_3d, structure=closing_structure)
-dilated_mask_3d_lcc_ncc_com_to_com = binary_dilation(lcc_ncc_com_to_com_3d_closed, closing_structure)
-lcc_ncc_smooth = gaussian_filter(dilated_mask_3d_lcc_ncc_com_to_com.astype(np.float32), sigma=gaussian)  
+lcc_ncc_com_to_com_3d = binary_closing(lcc_ncc_com_to_com_3d, structure=closing_structure)
+lcc_ncc_com_to_com_3d = binary_dilation(lcc_ncc_com_to_com_3d, closing_structure)
+lcc_ncc_smooth = gaussian_filter(lcc_ncc_com_to_com_3d.astype(np.float32), sigma=gaussian_blur)  
 file_type_lcc_ncc_com_to_com = "lcc_ncc_com_to_com"
 
 
 # %% ----------------------- REORIENT THE VOLUMES BACK TO THEIR ORIGINAL SPACE ----------------------
 
-del clipped_dicom
-del gradient_volume
+# del clipped_dicom
+# del gradient_volume
 
 ## The objects are made in the reoriented space. Now reorient it back so it is in the patient space
 inverse_zoom = (
@@ -1193,49 +1188,9 @@ file_type_calc_volume = "calc_volume_reoriented"
 # --- Process LVOT ---------------------
 aortic_wall_lvot_3d = functions.create_3d_mask_from_boundary_points(aortic_wall_contours_lvot, calc_volume.shape, "lvot")
 dilated_lvot = binary_dilation(aortic_wall_lvot_3d, cube(3))
-lvot_smooth = gaussian_filter(dilated_lvot.astype(np.float32), sigma=gaussian)  
+lvot_smooth = gaussian_filter(dilated_lvot.astype(np.float32), sigma=gaussian_blur)  
 lvot_patient_space = functions.reorient_volume_back(lvot_smooth, dicom_origin, rotation_matrix_dicom)
 lvot_reoriented = functions.downsample_and_rescale(lvot_patient_space, downsample_factor=downsample_factor, inverse_zoom=inverse_zoom)
-
-
-#%% -------------------------------- CONNECTING THE BOUNDARY AND THE AORTIC WALL ------------
-
-# Combine the aortic wall and do a closign so that the boundary connercting to the aortic wall has no hole in it anymore
-# first try it for the NCC_to_RCC boundary as this one has a lot of distance to the aortic wall
-
-combined_mask = np.logical_or.reduce([
-    ncc_rcc_com_to_com_reoriented,
-    rcc_lcc_com_to_com_reoriented,
-    ncc_rcc_boundary_reoriented
-])
-
-# Loop over slice indices
-for slice_idx in range(z_min, z_max+10):  # or any range you want
-    # Extract the transversal slice
-    transversal_slice = volume[slice_idx, :, :]
-    
-    # Extract mask slice (should be same shape)
-    mask_slice = combined_mask[slice_idx, :, :]
-    
-    # Clear the current figure
-    plt.clf()
-    
-    # Show the base slice
-    plt.imshow(transversal_slice, cmap="gray")
-    
-    # Overlay mask slice (boolean) in a color (e.g., red)
-    # 'alpha' controls transparency
-    plt.imshow(mask_slice, cmap="Reds", alpha=0.4)
-    
-    plt.title(f"Transversal slice at x={slice_idx}")
-    
-    plt.draw()
-    plt.pause(0.1)
-    
-plt.close()
-
-
-
 
 
 #%%%
