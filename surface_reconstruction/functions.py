@@ -1156,9 +1156,13 @@ def clean_boundary_from_mask(mask, aortic_wall_points, min_dist, commissures, ce
     """
     # Create the Mercedes mask
     mercedes_mask = create_mercedes_mask(mask, commissures, center)
-
+    
+    # Print some info
+    print(f"[Debug]  Mercedes mask shape = {mercedes_mask.shape}")
+    print(f"[Debug]  Mercedes mask min = {mercedes_mask.min()}, max = {mercedes_mask.max()}")
+    print(f"[Debug] Non-zero pixels = {np.count_nonzero(mercedes_mask)}")
     # Apply the Mercedes mask to the input mask
-    filtered_mask = mask * mercedes_mask
+    filtered_mask = (mask > 0) & (mercedes_mask > 0)
     
     # Label the connected components
     labeled = label(filtered_mask)
@@ -1170,6 +1174,9 @@ def clean_boundary_from_mask(mask, aortic_wall_points, min_dist, commissures, ce
     regions = regionprops(labeled)
     largest_region = max(regions, key=lambda r: r.area)
     coords = largest_region.coords
+    # Final hard Mercedes filtering (row, col indexing!)
+    coords = coords[mercedes_mask[coords[:, 0], coords[:, 1]] > 0]
+    
     print(f"[Info] Largest component has {len(coords)} points before filtering.")
 
     # # Filter based on distance to aortic wall points
@@ -1327,7 +1334,7 @@ def rotate_segmentation_back(seg_rotated, R, rotation_center, upscaling_factor):
 from skimage.draw import line
 
 
-def create_mercedes_mask(image, commissure_points, center_point, line_thickness=14):
+def create_mercedes_mask(image, commissure_points, center_point, line_thickness=8):
     """
     Creates a mask of lines connecting the commissures to the center with specified thickness.
     
@@ -1557,6 +1564,148 @@ def save_volume_as_stl_patient_space(volume, output_path, patient_nr, file_type,
     mesh.export(output_filename)
     
     print(f"[OK] {file_type} volume saved as STL in patient space: {output_filename}")
+
+
+import numpy as np
+from scipy.ndimage import binary_dilation, gaussian_filter
+from scipy.spatial import cKDTree
+
+def bresenham_line_2d(p0, p1):
+    """
+    Bresenham line in 2D between points p0=(y0,x0) and p1=(y1,x1)
+    Returns list of (y,x) coordinates along the line
+    """
+    y0, x0 = p0
+    y1, x1 = p1
+    points = []
+
+    dy = abs(y1 - y0)
+    dx = abs(x1 - x0)
+    sy = 1 if y0 < y1 else -1
+    sx = 1 if x0 < x1 else -1
+    err = dx - dy
+
+    while True:
+        points.append((y0, x0))
+        if y0 == y1 and x0 == x1:
+            break
+        e2 = 2 * err
+        if e2 > -dy:
+            err -= dy
+            x0 += sx
+        if e2 < dx:
+            err += dx
+            y0 += sy
+    return points
+
+def grow_boundary_until_wall(
+    boundary_mask,
+    wall_mask,
+    z_center,
+    line_dilate=2,
+    keep_below_center=True
+):
+    """
+    Slice-wise boundary growth toward wall.
+
+    - Growth only happens for z <= z_center
+    - Boundary preservation below z_center is optional
+    """
+    assert boundary_mask.shape == wall_mask.shape
+    Z, Y, X = boundary_mask.shape
+
+    expanded_full = np.zeros_like(boundary_mask, dtype=bool)
+    selem = np.ones((3, 3), dtype=bool)
+
+    for z in range(Z):
+
+        #No growth below center plane
+        if z > z_center:
+            continue
+
+        wall_slice = wall_mask[z]
+        boundary_slice = boundary_mask[z]
+
+        if not np.any(boundary_slice) or not np.any(wall_slice):
+            continue
+
+        boundary_coords = np.array(np.where(boundary_slice)).T
+        wall_coords = np.array(np.where(wall_slice)).T
+
+        tree = cKDTree(wall_coords)
+        distances, indices = tree.query(boundary_coords)
+
+        min_idx = np.argmin(distances)
+        closest_boundary = boundary_coords[min_idx]
+        closest_wall = wall_coords[indices[min_idx]]
+
+        line_voxels = bresenham_line_2d(
+            tuple(closest_boundary),
+            tuple(closest_wall)
+        )
+
+        for y, x in line_voxels:
+            expanded_full[z, y, x] = True
+
+        if line_dilate > 0:
+            expanded_full[z] = binary_dilation(
+                expanded_full[z],
+                structure=selem,
+                iterations=line_dilate
+            )
+
+    # ---------------- Boundary preservation ----------------
+
+    if keep_below_center:
+        # Keep boundary everywhere above AND below center
+        expanded_full |= boundary_mask
+    else:
+        # Keep boundary only above center plane
+        expanded_full[:z_center + 1] |= boundary_mask[:z_center + 1]
+
+    return expanded_full
+
+
+
+def grow_boundary(boundary_mask, wall_mask, center_height,
+                  line_dilate=2, gaussian_blur=0, keep_below_center = True):
+    """
+    Grow boundary toward wall only for slices z >= center_height.
+
+    Returns:
+        expanded_full : 3D bool array
+    """
+    combined_union = boundary_mask | wall_mask
+    coords = np.array(np.where(combined_union))
+    z_min, y_min, x_min = coords.min(axis=1)
+    z_max, y_max, x_max = coords.max(axis=1)
+
+    boundary_crop = boundary_mask[z_min:z_max+1, y_min:y_max+1, x_min:x_max+1]
+    wall_crop = wall_mask[z_min:z_max+1, y_min:y_max+1, x_min:x_max+1]
+
+    center_height_crop = center_height - z_min
+    center_height_crop = np.clip(
+        center_height_crop, 0, boundary_crop.shape[0] - 1
+    )
+
+    expanded_crop = grow_boundary_until_wall(
+        boundary_crop,
+        wall_crop,
+        z_center=center_height_crop,
+        line_dilate=line_dilate,
+        keep_below_center=keep_below_center
+    )
+
+    expanded_full = np.zeros_like(boundary_mask, dtype=bool)
+    expanded_full[z_min:z_max+1, y_min:y_max+1, x_min:x_max+1] = expanded_crop
+
+    if gaussian_blur > 0:
+        expanded_full = gaussian_filter(
+            expanded_full.astype(np.float32),
+            sigma=gaussian_blur
+        )
+
+    return expanded_full
 
 
 

@@ -223,59 +223,59 @@ print(f"Maximum z-coordinate across all cusps: {z_max}")
 
 # %%% ------------------------------------------ PLOTTING SINGLE SLICE ---------------------------
 
-from skimage import exposure
+# from skimage import exposure
 
-# Slice index (X)
-slice_idx = 50
+# # Slice index (X)
+# slice_idx = 50
 
-# Extract the transversal slice
-transversal_slice = reoriented_non_clipped[slice_idx, :, :]
+# # Extract the transversal slice
+# transversal_slice = reoriented_non_clipped[slice_idx, :, :]
 
-# Plot the slice
-plt.figure(figsize=(6,6))
-plt.imshow(transversal_slice, cmap="gray")
-plt.title(f"Transversal slice at x={slice_idx}")
-plt.axis("off")
+# # Plot the slice
+# plt.figure(figsize=(6,6))
+# plt.imshow(transversal_slice, cmap="gray")
+# plt.title(f"Transversal slice at x={slice_idx}")
+# plt.axis("off")
 
-count = 0
-# Overlay landmarks that lie on this slice
-for z, y, x in circle_points:
-    if z == slice_idx:  # Only plot landmarks on this slice
-        plt.scatter(x, y, c='r', alpha=0.7,s=2)  # z → horizontal, y → vertical
-        count+=1
+# count = 0
+# # Overlay landmarks that lie on this slice
+# for z, y, x in circle_points:
+#     if z == slice_idx:  # Only plot landmarks on this slice
+#         plt.scatter(x, y, c='r', alpha=0.7,s=2)  # z → horizontal, y → vertical
+#         count+=1
 
     
-print(count)
-plt.show()
+# print(count)
+# plt.show()
 
 
 
 #%%  ------------------------------------------- PLOTTING ENTIRE FIGURE  ------------------------------
 
-# Loop over slice indices
-for slice_idx in range(z_min,z_max+10):  # or any range you want
-    # Extract the transversal slice
-    transversal_slice = reoriented_non_clipped[slice_idx, :, :]
+# # Loop over slice indices
+# for slice_idx in range(z_min,z_max+10):  # or any range you want
+#     # Extract the transversal slice
+#     transversal_slice = reoriented_non_clipped[slice_idx, :, :]
     
-    # Clear the current figure
-    plt.clf()
+#     # Clear the current figure
+#     plt.clf()
     
-    # Show the slice
-    plt.imshow(transversal_slice, cmap="gray")
-    plt.title(f"Transversal slice at x={slice_idx}")
-    # plt.axis("off")
+#     # Show the slice
+#     plt.imshow(transversal_slice, cmap="gray")
+#     plt.title(f"Transversal slice at x={slice_idx}")
+#     # plt.axis("off")
     
-    # Overlay landmarks that lie on this slice
-    for z, y, x in all_rotated:
-        if z == slice_idx:  # Only plot landmarks on this slice
-            plt.scatter(x, y, c='r', s=1)  
+#     # Overlay landmarks that lie on this slice
+#     for z, y, x in all_rotated:
+#         if z == slice_idx:  # Only plot landmarks on this slice
+#             plt.scatter(x, y, c='r', s=1)  
             
     
-    # Draw and pause
-    plt.draw()
-    plt.pause(0.1)  # pause 2 seconds
+#     # Draw and pause
+#     plt.draw()
+#     plt.pause(0.1)  # pause 2 seconds
     
-plt.close()
+# plt.close()
 
 # %% ------------------------------------------- FIND THE WHOLE AORTIC WALL ------------------------
 
@@ -515,7 +515,7 @@ for slice_nr in range(num_slices):
             print(f"Patient {patient_nr}: Threshold for calcification  = {calc_threshold:.2f}")
         
         # Print a histogram - necessary for seperating the calcification from the aortic valve
-        print_histo = True
+        print_histo = False
         if print_histo == True:
             plt.clf()
             plt.hist(roi_values.flatten(), bins=40, color='skyblue', edgecolor='black')
@@ -576,30 +576,30 @@ plt.show()
 
 #%% --------------------------------  PLOTTING ENTIRE FIGURE  --------------------------------------
 
-# Loop over slice indices
-for slice_idx in range(z_min,z_max):  # or any range you want
-    # Extract the transversal slice
-    transversal_slice = calc_volume[slice_idx, :, :]
+# # Loop over slice indices
+# for slice_idx in range(z_min,z_max):  # or any range you want
+#     # Extract the transversal slice
+#     transversal_slice = calc_volume[slice_idx, :, :]
     
-    # Clear the current figure
-    plt.clf()
+#     # Clear the current figure
+#     plt.clf()
     
-    # Show the slice
-    plt.imshow(transversal_slice, cmap="gray")
-    plt.title(f"Transversal slice at x={slice_idx}")
-    # plt.axis("off")
+#     # Show the slice
+#     plt.imshow(transversal_slice, cmap="gray")
+#     plt.title(f"Transversal slice at x={slice_idx}")
+#     # plt.axis("off")
     
-    # Overlay landmarks that lie on this slice
-    for z, y, x in commissures:
-        if z == slice_idx:  # Only plot landmarks on this slice
-            plt.scatter(x, y, c='r', s=1)  
-            # print("Gevonden")
+#     # Overlay landmarks that lie on this slice
+#     for z, y, x in commissures:
+#         if z == slice_idx:  # Only plot landmarks on this slice
+#             plt.scatter(x, y, c='r', s=1)  
+#             # print("Gevonden")
     
-    # Draw and pause
-    plt.draw()
-    plt.pause(0.1)  # pause 2 seconds
+#     # Draw and pause
+#     plt.draw()
+#     plt.pause(0.1)  # pause 2 seconds
     
-plt.close()
+# plt.close()
 
 
 
@@ -750,6 +750,7 @@ for slice_nr, slice_info in slice_data.items():
     plt.figure(figsize=(6, 6))
     plt.imshow(blurred_slice, cmap='gray')
     plt.imshow(thicker_skeleton, cmap='Reds', alpha=0.5)
+    # Mercedes star overlay
     plt.title(f"Skeletonization with Percentile Threshold — Slice {slice_nr}")
     plt.axis("off")
     plt.show()
@@ -932,7 +933,6 @@ for slice_nr, slice_info in slice_data.items():
         "ncc_rcc_boundary": cleaned_ncc_rcc_boundary.copy(),
         "com_to_com": seg_c2c["RCC"].copy(),
         "height": slice_nr
-        
     }
     NCC_data[slice_nr] = {
         "mask": ncc_rcc_mask.copy(),
@@ -952,13 +952,13 @@ for slice_nr, slice_info in slice_data.items():
     # Optional visualization (COM-to-COM segments + boundaries)
     plt.figure(figsize=(6, 6))
     plt.imshow(slice_clipped, cmap='gray', origin='upper')
-    # plt.imshow(mercedes_mask, cmap='jet', alpha=0.3)  # Adjust alpha for transparency
+    plt.imshow(mercedes_mask, cmap='jet', alpha=0.3)  # Adjust alpha for transparency
     # plt.plot(seg_c2c["LCC"][:, 1], seg_c2c["LCC"][:, 0], color='cyan', lw=3, label='LCC')
     # plt.plot(seg_c2c["RCC"][:, 1], seg_c2c["RCC"][:, 0], color='green', lw=3, label='RCC')
     # plt.plot(seg_c2c["NCC"][:, 1], seg_c2c["NCC"][:, 0], color='magenta', lw=3, label='NCC')
-    # plt.plot(cleaned_lcc_ncc_boundary[:, 1], cleaned_lcc_ncc_boundary[:, 0], color='cyan', lw=2)
-    # plt.plot(cleaned_rcc_lcc_boundary[:, 1], cleaned_rcc_lcc_boundary[:, 0], color='green', lw=2)
-    # plt.plot(cleaned_ncc_rcc_boundary[:, 1], cleaned_ncc_rcc_boundary[:, 0], color='magenta', lw=2)
+    plt.plot(cleaned_lcc_ncc_boundary[:, 1], cleaned_lcc_ncc_boundary[:, 0], color='cyan', lw=2)
+    plt.plot(cleaned_rcc_lcc_boundary[:, 1], cleaned_rcc_lcc_boundary[:, 0], color='green', lw=2)
+    plt.plot(cleaned_ncc_rcc_boundary[:, 1], cleaned_ncc_rcc_boundary[:, 0], color='magenta', lw=2)
     plt.title(f"Leaflet Borders — Slice {slice_nr}")
     plt.axis('off')
     plt.legend()
@@ -1005,10 +1005,7 @@ ncc_combined_polydata = functions.combine_boundaries_to_polydata(ncc_boundaries,
 output_path = f"H:/DATA/Afstuderen/3.Data/output_valve_segmentation/{patient_nr}/vtk"
 os.makedirs(output_path, exist_ok=True)
 
-# Save the combined boundaries
-# functions.save_vtk_polydata(lcc_combined_polydata, os.path.join(output_path, "LCC_combined_boundaries.vtk"))
-# functions.save_vtk_polydata(rcc_combined_polydata, os.path.join(output_path, "RCC_combined_boundaries.vtk"))
-# functions.save_vtk_polydata(ncc_combined_polydata, os.path.join(output_path, "NCC_combined_boundaries.vtk"))
+
 
 # %% ------------------------ COM-TO-COM SEGMENTS ----------------------------
 
@@ -1045,10 +1042,6 @@ ncc_com_to_com_polydata = functions.combine_boundaries_to_polydata(ncc_com_to_co
 output_path = f"H:/DATA/Afstuderen/3.Data/output_valve_segmentation/{patient_nr},vtk"
 os.makedirs(output_path, exist_ok=True)
 
-# Save the combined com_to_com segments
-functions.save_vtk_polydata(lcc_com_to_com_polydata, os.path.join(output_path, "LCC_combined_com_to_com.vtk"))
-functions.save_vtk_polydata(rcc_com_to_com_polydata, os.path.join(output_path, "RCC_combined_com_to_com.vtk"))
-functions.save_vtk_polydata(ncc_com_to_com_polydata, os.path.join(output_path, "NCC_combined_com_to_com.vtk"))
 
 # %% -------------------------------- SAVING THE CALCIFICATION VOLUME ----------------------
 gaussian_blur = 1.5
@@ -1063,6 +1056,8 @@ file_type = "calc_volume"
 calc_volume_smooth = gaussian_filter(calc_volume.astype(np.float32), sigma=gaussian_blur)  
 
 # %% -------------------------------- COVNERTING THE BOUNDARIES IN 3D OBJECT ---------------
+
+print("Post-processing the found boundaries so that they can be converted into 3D objects..")
 
 # --- Process RCC to LCC Boundary ---
 rcc_lcc_boundary_3d = functions.create_3d_mask_from_boundary_points(RCC_data, calc_volume.shape, "rcc_lcc_boundary")
@@ -1084,36 +1079,95 @@ file_type_lcc_ncc = "lcc_ncc_boundary"
 
 # %% ----------------------------- AORTIC WALL --------------------------------
 
+print("Post-processing the aortic wall so that it can be converted into 3D objects..")
+
+from scipy.ndimage import binary_closing
+import functions
+
 # Structuring elements
 closing_structure = cube(5)   # adjust if holes are bigger
 dilation_structure = cube(3)  # optional, remove if you don't want to thicken
 
 # --- Process RCC to LCC COM to COM Boundary ---
-rcc_lcc_com_to_com_3d = functions.create_3d_mask_from_boundary_points(RCC_data, calc_volume.shape, "com_to_com")
-rcc_lcc_com_to_com_3d = binary_closing(rcc_lcc_com_to_com_3d, structure=closing_structure)
-rcc_lcc_com_to_com_3d = binary_dilation(rcc_lcc_com_to_com_3d, cube(3))
-rcc_lcc_smooth = gaussian_filter(rcc_lcc_com_to_com_3d.astype(np.float32), sigma=gaussian_blur)  
+rcc_wall_3d = functions.create_3d_mask_from_boundary_points(RCC_data, calc_volume.shape, "com_to_com")
+rcc_wall_3d = binary_closing(rcc_wall_3d, structure=closing_structure)
+rcc_wall_3d = binary_dilation(rcc_wall_3d, cube(3))
+rcc_wall_smooth = gaussian_filter(rcc_wall_3d.astype(np.float32), sigma=gaussian_blur)  
 file_type_rcc_lcc_com_to_com = "rcc_lcc_com_to_com"
 
 # --- Process NCC to RCC COM to COM Boundary ---
-ncc_rcc_com_to_com_3d = functions.create_3d_mask_from_boundary_points(NCC_data, calc_volume.shape, "com_to_com")
-ncc_rcc_com_to_com_3d = binary_closing(ncc_rcc_com_to_com_3d, structure=closing_structure)
-ncc_rcc_com_to_com_3d = binary_dilation(ncc_rcc_com_to_com_3d, cube(3))
-ncc_rcc_smooth = gaussian_filter(ncc_rcc_com_to_com_3d.astype(np.float32), sigma=gaussian_blur)  
+ncc_wall_3d = functions.create_3d_mask_from_boundary_points(NCC_data, calc_volume.shape, "com_to_com")
+ncc_wall_3d = binary_closing(ncc_wall_3d, structure=closing_structure)
+ncc_wall_3d = binary_dilation(ncc_wall_3d, cube(3))
+ncc_wall_smooth = gaussian_filter(ncc_wall_3d.astype(np.float32), sigma=gaussian_blur)  
 file_type_ncc_rcc_com_to_com = "ncc_rcc_com_to_com"
 
 # --- Process LCC to NCC COM to COM Boundary ---
-lcc_ncc_com_to_com_3d = functions.create_3d_mask_from_boundary_points(LCC_data, calc_volume.shape, "com_to_com")
-lcc_ncc_com_to_com_3d = binary_closing(lcc_ncc_com_to_com_3d, structure=closing_structure)
-lcc_ncc_com_to_com_3d = binary_dilation(lcc_ncc_com_to_com_3d, closing_structure)
-lcc_ncc_smooth = gaussian_filter(lcc_ncc_com_to_com_3d.astype(np.float32), sigma=gaussian_blur)  
+lcc_wall_3d = functions.create_3d_mask_from_boundary_points(LCC_data, calc_volume.shape, "com_to_com")
+lcc_wall_3d = binary_closing(lcc_wall_3d, structure=closing_structure)
+lcc_wall_3d = binary_dilation(lcc_wall_3d, closing_structure)
+lcc_wall_smooth = gaussian_filter(lcc_wall_3d.astype(np.float32), sigma=gaussian_blur)  
 file_type_lcc_ncc_com_to_com = "lcc_ncc_com_to_com"
 
 
-# %% ----------------------- REORIENT THE VOLUMES BACK TO THEIR ORIGINAL SPACE ----------------------
+# %%%  --------------------- CONNECTING THE BOUNDARIES TO THE AORTIC WALL --------------------------
+import functions
+
+print("Connecting the aortic leaflets to the aortic wall...")
+
+hinge_z_values = [
+    lcc_rotated[2][0],
+    rcc_rotated[2][0],
+    ncc_rotated[2][0]
+]
+
+min_hinge_z = min(hinge_z_values)
+
+center_height = int((lcc_rotated[3][0] + min_hinge_z)/2)
+print("The z-index which is the cutoff for the boundary is now: ", center_height)
+keep_below_center=False
+
+# Expand the RCC-LCC leaflet towards the aortic wall
+combined_rcc_lcc = rcc_wall_3d | lcc_wall_3d
+rcc_lcc_grown= functions.grow_boundary(
+    dilated_mask_3d_rcc_lcc,
+    combined_rcc_lcc,
+    center_height=center_height,
+    line_dilate=2,
+    gaussian_blur=gaussian_blur,
+    keep_below_center=keep_below_center
+)
+
+# Expand the NCC-RCC leaflet towards the aortic wall
+combined_ncc_rcc = ncc_wall_3d | rcc_wall_3d
+ncc_rcc_grown= functions.grow_boundary(
+    dilated_mask_3d_ncc_rcc,
+    combined_ncc_rcc,
+    center_height=center_height,
+    line_dilate=2,
+    gaussian_blur=gaussian_blur,
+    keep_below_center=keep_below_center
+)
+
+# Expand the RCC-LCC leaflet towards the aortic wall
+combined_lcc_ncc = lcc_wall_3d | ncc_wall_3d
+lcc_ncc_grown= functions.grow_boundary(
+    dilated_mask_3d_lcc_ncc,
+    combined_lcc_ncc,
+    center_height=center_height,
+    line_dilate=2,
+    gaussian_blur=gaussian_blur,
+    keep_below_center=keep_below_center
+)
+
+
+# %% ----------------------- REORIENT THE LEAFLET BOUDNARIES BACK TO THEIR ORIGINAL SPACE ----------------------
+
+print("Reorienting the leaflet boundaries from the python space to patient space...")
 
 # del clipped_dicom
 # del gradient_volume
+# del calc_volume
 
 ## The objects are made in the reoriented space. Now reorient it back so it is in the patient space
 inverse_zoom = (
@@ -1129,32 +1183,39 @@ os.makedirs(output_path, exist_ok=True)
 
 # Visual check whether the reoriented object has been done right
 # --- Process RCC to LCC Boundary ---
-rcc_lcc_boundary_reoriented = functions.reorient_volume_back(rcc_lcc_boundary_smooth, dicom_origin, rotation_matrix_dicom)
+rcc_lcc_boundary_reoriented = functions.reorient_volume_back(rcc_lcc_grown, dicom_origin, rotation_matrix_dicom)
 rcc_lcc_boundary_reoriented = functions.downsample_and_rescale(rcc_lcc_boundary_reoriented, downsample_factor=downsample_factor, inverse_zoom=inverse_zoom)
 file_type_rcc_lcc = "rcc_lcc_boundary_reoriented"
 
 # --- Process NCC to RCC Boundary ---
-ncc_rcc_boundary_reoriented = functions.reorient_volume_back(ncc_rcc_boundary_smooth, dicom_origin, rotation_matrix_dicom)
+ncc_rcc_boundary_reoriented = functions.reorient_volume_back(ncc_rcc_grown, dicom_origin, rotation_matrix_dicom)
 ncc_rcc_boundary_reoriented = functions.downsample_and_rescale(ncc_rcc_boundary_reoriented, downsample_factor=downsample_factor, inverse_zoom=inverse_zoom)
 file_type_ncc_rcc = "ncc_rcc_boundary"
 
 # --- Process LCC to NCC Boundary ---
-lcc_ncc_boundary_reoriented = functions.reorient_volume_back(lcc_ncc_boundary_smooth, dicom_origin, rotation_matrix_dicom)
+lcc_ncc_boundary_reoriented = functions.reorient_volume_back(lcc_ncc_grown, dicom_origin, rotation_matrix_dicom)
 lcc_ncc_boundary_reoriented = functions.downsample_and_rescale(lcc_ncc_boundary_reoriented, downsample_factor=downsample_factor, inverse_zoom=inverse_zoom)
 file_type_lcc_ncc = "lcc_ncc_boundary"
 
+
+
+# %%  ------------------------- REORIENT THE AORTIC WALL BACK TO THEIR OR IGINAL SPACE ----------------
+
+print("Reorienting the aortic wall from the python space to patient space...")
+
+
 # --- Process RCC to LCC COM to COM Boundary ---
-rcc_lcc_com_to_com_reoriented = functions.reorient_volume_back(rcc_lcc_smooth, dicom_origin, rotation_matrix_dicom)
+rcc_lcc_com_to_com_reoriented = functions.reorient_volume_back(rcc_wall_smooth, dicom_origin, rotation_matrix_dicom)
 rcc_lcc_com_to_com_reoriented = functions.downsample_and_rescale(rcc_lcc_com_to_com_reoriented, downsample_factor=downsample_factor, inverse_zoom=inverse_zoom)
 file_type_rcc_lcc_com_to_com = "rcc_lcc_com_to_com"
 
 # --- Process NCC to RCC COM to COM Boundary ---
-ncc_rcc_com_to_com_reoriented = functions.reorient_volume_back(ncc_rcc_smooth, dicom_origin, rotation_matrix_dicom)
+ncc_rcc_com_to_com_reoriented = functions.reorient_volume_back(ncc_wall_smooth, dicom_origin, rotation_matrix_dicom)
 ncc_rcc_com_to_com_reoriented = functions.downsample_and_rescale(ncc_rcc_com_to_com_reoriented, downsample_factor=downsample_factor, inverse_zoom=inverse_zoom)
 file_type_ncc_rcc_com_to_com = "ncc_rcc_com_to_com"
 
 # --- Process LCC to NCC COM to COM Boundary ---
-lcc_ncc_com_to_com_reoriented = functions.reorient_volume_back(lcc_ncc_smooth, dicom_origin, rotation_matrix_dicom)
+lcc_ncc_com_to_com_reoriented = functions.reorient_volume_back(lcc_wall_smooth, dicom_origin, rotation_matrix_dicom)
 lcc_ncc_com_to_com_reoriented = functions.downsample_and_rescale(lcc_ncc_com_to_com_reoriented, downsample_factor=downsample_factor, inverse_zoom=inverse_zoom)
 file_type_lcc_ncc_com_to_com = "lcc_ncc_com_to_com"
 
@@ -1164,7 +1225,16 @@ calcification_mask_reoriented = functions.downsample_and_rescale(calcification_m
 file_type_calc_volume = "calc_volume_reoriented"
 
 
+
+
 #%% ------------------------------------------- SAVE THE LVOT ----------------------------
+
+# del calc_volume_smooth
+# del dilated_mask_3d_lcc_ncc
+# del dilated_mask_3d_ncc_rcc
+# del dilated_mask_3d_rcc_lcc
+
+print("Connecting the LVOT to the aortic valve...")
 
 # --- Process LVOT ---------------------
 lvot_resampled = {}
@@ -1179,14 +1249,18 @@ aortic_wall_lvot_3d = functions.create_3d_mask_from_boundary_points(
     lvot_resampled, calc_volume.shape, "lvot"
 )
 
-
 dilated_lvot = binary_dilation(aortic_wall_lvot_3d, cube(3))
 lvot_smooth = gaussian_filter(dilated_lvot.astype(np.float32), sigma=gaussian_blur)  
 lvot_patient_space = functions.reorient_volume_back(lvot_smooth, dicom_origin, rotation_matrix_dicom)
 lvot_reoriented = functions.downsample_and_rescale(lvot_patient_space, downsample_factor=downsample_factor, inverse_zoom=inverse_zoom)
 
 
+
+
 #%%%
+
+print("Saving the segmentations into usable STL objects...")
+
 
 # The "to-be-overlaid" objects with underscores
 masks = {
@@ -1214,3 +1288,5 @@ for name, volume in masks.items():
         zoom_z=pixel_spacing[0],
         dicom_origin=dicom_origin
     )
+    
+    
