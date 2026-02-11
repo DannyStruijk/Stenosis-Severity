@@ -229,26 +229,35 @@ def interpolate_surface(interp_points):
 
 
 
-def save_surface_evalpts(surface, save_path):
+def save_surface_evalpts(surface, save_dir = r"H:\DATA\Afstuderen\2.Code\Stenosis-Severity\temp", filename="lcc"):
     """
-    Saves the evaluated points (evalpts) of a NURBS surface to a .npy file.
+    Saves the evaluated points (evalpts) of a NURBS surface to both .npy and .txt files.
 
     Parameters:
         surface : geomdl.NURBS.Surface
             The surface object after evaluation.
-        save_path : str
-            Path to save the .npy file.
+        filename : str
+            Base filename (without extension). Files will be saved in the temp folder.
     """
     if not surface.evalpts:
         raise ValueError("Surface has not been evaluated. Run surface.evaluate() first.")
 
+    # Convert evalpts to NumPy array
     evalpts_array = np.array(surface.evalpts)
-    
-    # Ensure the output directory exists
-    os.makedirs(os.path.dirname(save_path), exist_ok=True)
 
-    np.savetxt(save_path, evalpts_array)
-    print(f"Surface evalpts saved to {save_path}")
+    # Define save path
+    os.makedirs(save_dir, exist_ok=True)
+
+    # Full paths
+    npy_path = os.path.join(save_dir, filename + ".npy")
+    txt_path = os.path.join(save_dir, filename + ".txt")
+
+    # Save
+    np.save(npy_path, evalpts_array)
+    np.savetxt(txt_path, evalpts_array)
+
+    print(f"Surface evalpts saved as:\n- {npy_path}\n- {txt_path}")
+
     
 
 def save_ordered_landmarks(cusp_landmarks, center, base_folder):
@@ -795,44 +804,6 @@ def find_closest_point(points, reference_point):
     closest_idx = np.argmin(distances)
     closest_point = points[closest_idx]
     return closest_idx, closest_point
-
-
-# THIS HAS TO BE ENABLES TO MAKE THE SNAKE WORK
-# TEMPORARILY DISABLE FOR THE DISPPLAY OF HOW SLICER WORKS
-# import networkx as nx
-from scipy.spatial import distance_matrix
-
-# def mst_backbone_path(point_cloud, start_idx, end_idx):
-#     """
-#     Extract the backbone from a 2D point cloud as the unique path in MST
-#     between start and end nodes.
-    
-#     Parameters:
-#         point_cloud (np.ndarray): N x 2 array of points
-#         start_idx (int): index of start point
-#         end_idx (int): index of end point
-    
-#     Returns:
-#         ordered_points (np.ndarray): points along the backbone from start to end
-#     """
-#     N = point_cloud.shape[0]
-    
-#     # Build fully connected graph
-#     dist_mat = distance_matrix(point_cloud, point_cloud)
-#     G = nx.Graph()
-#     for i in range(N):
-#         for j in range(i+1, N):
-#             G.add_edge(i, j, weight=dist_mat[i, j])
-    
-#     # Compute MST
-#     mst = nx.minimum_spanning_tree(G)
-    
-#     # Get the unique path between start and end in the MST
-#     path_indices = nx.shortest_path(mst, source=start_idx, target=end_idx, weight='weight')
-    
-#     # Extract points
-#     ordered_points = point_cloud[path_indices]
-#     return ordered_points
 
 
 def circle_through_commissures(points, n_points=40):
@@ -1705,7 +1676,128 @@ def grow_boundary(boundary_mask, wall_mask, center_height,
             sigma=gaussian_blur
         )
 
-    return expanded_full
+
+    # Also export the lowest slice, this is needed to close the aortic leaflet
+    return expanded_full, expanded_full[center_height] 
+
+def load_stl_points(stl_path):
+    """
+    Load an STL file using VTK and return its surface points as a NumPy array.
+    """
+    reader = vtk.vtkSTLReader()
+    reader.SetFileName(stl_path)
+    reader.Update()
+
+    polydata = reader.GetOutput()
+    vtk_points = polydata.GetPoints()
+
+    points = np.array([
+        vtk_points.GetPoint(i)
+        for i in range(vtk_points.GetNumberOfPoints())
+    ])
+
+    return points
+
+def extract_lower_boundary(points, band_thickness=0.4):
+    """
+    Extract a thin band of points near the lowest Z-value.
+    This represents the base of the leaflet.
+    """
+    z_vals = points[:, 2]
+    z_min = z_vals.min()
+
+    boundary_points = points[z_vals < z_min + band_thickness]
+
+    return boundary_points
+
+def mask_to_pointcloud(mask, height):
+    """
+    Convert a 2D binary mask (512x512) into a 3D point cloud
+    with fixed height (z-coordinate).
+    
+    Parameters
+    ----------
+    mask : (H, W) ndarray
+        Binary mask (0/1)
+    height : int or float
+        Slice height (z value)
+
+    Returns
+    -------
+    points : (N, 3) ndarray
+        3D coordinates [z, y, x]
+    """
+    # Get indices where mask is 1
+    y_idx, x_idx = np.where(mask > 0)
+
+    # Create z coordinate
+    z_idx = np.full_like(y_idx, height)
+
+    # Stack into (N,3)
+    points = np.column_stack((z_idx, y_idx, x_idx))
+
+    return points
+
+def fit_spline(points, n_samples=20, smoothing=2):
+    """
+    Fit a smooth 3D spline through points and return sampled points.
+    
+    Parameters
+    ----------
+    points : (N,3) array-like
+        3D points to fit the spline through. Should be ordered along the curve.
+    n_samples : int
+        Number of points to sample along the spline.
+    smoothing : float
+        Smoothing factor. Larger = smoother, smaller = closer to original points.
+        
+    Returns
+    -------
+    sampled_points : (n_samples,3) ndarray
+        Points sampled along the fitted spline.
+    """
+    points = np.asarray(points)
+    if points.shape[1] != 3:
+        raise ValueError("Input points must have shape (N,3)")
+    
+    # Fit spline
+    tck, u = splprep(points.T, s=smoothing)
+    
+    # Sample along spline
+    u_new = np.linspace(0, 1, n_samples)
+    sampled_points = np.array(splev(u_new, tck)).T
+    
+    return sampled_points
 
 
+def create_3d_mask_from_points(points, volume_shape, thickness_voxels=1):
+    """
+    Create a 3D binary mask from a point cloud and optionally give it some thickness.
 
+    Parameters
+    ----------
+    points : np.ndarray, shape (N,3)
+        Points in (z, y, x) voxel coordinates
+    volume_shape : tuple of int
+        Shape of the target 3D volume (z, y, x)
+    thickness_voxels : int
+        Number of voxels to dilate the points for thickness
+    """
+    mask = np.zeros(volume_shape, dtype=bool)
+
+    # Round to nearest voxel
+    indices = np.round(points).astype(int)
+
+    # Clip to volume boundaries
+    indices[:,0] = np.clip(indices[:,0], 0, volume_shape[0]-1)
+    indices[:,1] = np.clip(indices[:,1], 0, volume_shape[1]-1)
+    indices[:,2] = np.clip(indices[:,2], 0, volume_shape[2]-1)
+
+    # Fill mask
+    mask[indices[:,0], indices[:,1], indices[:,2]] = True
+
+    # Add thickness
+    if thickness_voxels > 0:
+        mask = binary_dilation(mask, iterations=thickness_voxels)
+
+    return mask

@@ -1057,22 +1057,35 @@ calc_volume_smooth = gaussian_filter(calc_volume.astype(np.float32), sigma=gauss
 
 # %% -------------------------------- COVNERTING THE BOUNDARIES IN 3D OBJECT ---------------
 
+hinge_z_values = [
+    lcc_rotated[2][0],
+    rcc_rotated[2][0],
+    ncc_rotated[2][0]
+]
+
+min_hinge_z = min(hinge_z_values)
+
+center_height = int((lcc_rotated[3][0] + min_hinge_z)/2)
+
 print("Post-processing the found boundaries so that they can be converted into 3D objects..")
 
 # --- Process RCC to LCC Boundary ---
 rcc_lcc_boundary_3d = functions.create_3d_mask_from_boundary_points(RCC_data, calc_volume.shape, "rcc_lcc_boundary")
+rcc_lcc_center_slice = rcc_lcc_boundary_3d[center_height]
 dilated_mask_3d_rcc_lcc = binary_dilation(rcc_lcc_boundary_3d, cube(3))  # Adjust the cube size as needed
 rcc_lcc_boundary_smooth = gaussian_filter(dilated_mask_3d_rcc_lcc.astype(np.float32), sigma=gaussian_blur)  
 file_type_rcc_lcc = "rcc_lcc_boundary"
 
 # --- Process NCC to RCC Boundary ---
 ncc_rcc_boundary_3d = functions.create_3d_mask_from_boundary_points(NCC_data, calc_volume.shape, "ncc_rcc_boundary")
+ncc_rcc_center_slice = ncc_rcc_boundary_3d[center_height]
 dilated_mask_3d_ncc_rcc = binary_dilation(ncc_rcc_boundary_3d, cube(3))  # Adjust the cube size as needed
 ncc_rcc_boundary_smooth = gaussian_filter(dilated_mask_3d_ncc_rcc.astype(np.float32), sigma=gaussian_blur)  
 file_type_ncc_rcc = "ncc_rcc_boundary"
 
 # --- Process LCC to NCC Boundary ---
 lcc_ncc_boundary_3d = functions.create_3d_mask_from_boundary_points(LCC_data, calc_volume.shape, "lcc_ncc_boundary")
+lcc_ncc_center_slice = lcc_ncc_boundary_3d[center_height]
 dilated_mask_3d_lcc_ncc = binary_dilation(lcc_ncc_boundary_3d, cube(3))  # Adjust the cube size as needed
 lcc_ncc_boundary_smooth = gaussian_filter(dilated_mask_3d_lcc_ncc.astype(np.float32), sigma=gaussian_blur)  
 file_type_lcc_ncc = "lcc_ncc_boundary"
@@ -1115,21 +1128,13 @@ import functions
 
 print("Connecting the aortic leaflets to the aortic wall...")
 
-hinge_z_values = [
-    lcc_rotated[2][0],
-    rcc_rotated[2][0],
-    ncc_rotated[2][0]
-]
 
-min_hinge_z = min(hinge_z_values)
-
-center_height = int((lcc_rotated[3][0] + min_hinge_z)/2)
 print("The z-index which is the cutoff for the boundary is now: ", center_height)
 keep_below_center=False
 
 # Expand the RCC-LCC leaflet towards the aortic wall
 combined_rcc_lcc = rcc_wall_3d | lcc_wall_3d
-rcc_lcc_grown= functions.grow_boundary(
+rcc_lcc_grown, rcc_lcc_center_slice= functions.grow_boundary(
     dilated_mask_3d_rcc_lcc,
     combined_rcc_lcc,
     center_height=center_height,
@@ -1140,7 +1145,7 @@ rcc_lcc_grown= functions.grow_boundary(
 
 # Expand the NCC-RCC leaflet towards the aortic wall
 combined_ncc_rcc = ncc_wall_3d | rcc_wall_3d
-ncc_rcc_grown= functions.grow_boundary(
+ncc_rcc_grown, ncc_rcc_center_slice = functions.grow_boundary(
     dilated_mask_3d_ncc_rcc,
     combined_ncc_rcc,
     center_height=center_height,
@@ -1151,7 +1156,7 @@ ncc_rcc_grown= functions.grow_boundary(
 
 # Expand the RCC-LCC leaflet towards the aortic wall
 combined_lcc_ncc = lcc_wall_3d | ncc_wall_3d
-lcc_ncc_grown= functions.grow_boundary(
+lcc_ncc_grown, lcc_ncc_center_slice= functions.grow_boundary(
     dilated_mask_3d_lcc_ncc,
     combined_lcc_ncc,
     center_height=center_height,
@@ -1290,3 +1295,34 @@ for name, volume in masks.items():
     )
     
     
+# %% --------------------------- EXPORTING THE NUMPY ARRAYS TO CREATE A MASK -----------------
+
+# Define what is to be exported. This is for testing goals only, later everything has to be exported
+# we will first do evertyhing in native python space, as this gives us the most information regarding
+# the leaflet boundaries.
+
+
+
+out_dir = r"H:\DATA\Afstuderen\2.Code\Stenosis-Severity\temp"
+
+# Export the coordinates which define the the lowest part of the boundaries
+np.save(os.path.join(out_dir, "lcc_ncc_boundary_slice.npy"), lcc_ncc_center_slice)
+np.save(os.path.join(out_dir, "rcc_lcc_boundary_slice.npy"), rcc_lcc_center_slice)
+
+# Export the 3d mask of the aortic wall
+np.save(os.path.join(out_dir, "lcc_wall.npy"), lcc_wall_3d)
+
+# Export the commissures of this specific leaflet and hinge point
+np.save(os.path.join(out_dir, "lcc_landmarks.npy"), lcc_rotated)
+
+
+
+
+
+
+
+
+
+
+
+
