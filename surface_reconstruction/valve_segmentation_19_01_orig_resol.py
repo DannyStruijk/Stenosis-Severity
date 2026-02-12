@@ -1090,7 +1090,7 @@ dilated_mask_3d_lcc_ncc = binary_dilation(lcc_ncc_boundary_3d, cube(3))  # Adjus
 lcc_ncc_boundary_smooth = gaussian_filter(dilated_mask_3d_lcc_ncc.astype(np.float32), sigma=gaussian_blur)  
 file_type_lcc_ncc = "lcc_ncc_boundary"
 
-# %% ----------------------------- AORTIC WALL --------------------------------
+# %% ----------------------------- AORTIC WALL ----------------------------
 
 print("Post-processing the aortic wall so that it can be converted into 3D objects..")
 
@@ -1301,8 +1301,6 @@ for name, volume in masks.items():
 # we will first do evertyhing in native python space, as this gives us the most information regarding
 # the leaflet boundaries.
 
-
-
 out_dir = r"H:\DATA\Afstuderen\2.Code\Stenosis-Severity\temp"
 
 # Export the coordinates which define the the lowest part of the boundaries
@@ -1315,8 +1313,47 @@ np.save(os.path.join(out_dir, "lcc_wall.npy"), lcc_wall_3d)
 # Export the commissures of this specific leaflet and hinge point
 np.save(os.path.join(out_dir, "lcc_landmarks.npy"), lcc_rotated)
 
+# %%  LOADING THE DATA
 
+# For testing purposes, the LCC cusp is first calculated.
+lcc_landmarks = np.load(r"H:\DATA\Afstuderen\2.Code\Stenosis-Severity\temp\lcc_landmarks.npy")
+lcc_wall = np.load(r"H:\DATA\Afstuderen\2.Code\Stenosis-Severity\temp\lcc_wall.npy")
+rcc_lcc_slice = np.load(r"H:\DATA\Afstuderen\2.Code\Stenosis-Severity\temp\rcc_lcc_boundary_slice.npy")
+lcc_ncc_slice = np.load(r"H:\DATA\Afstuderen\2.Code\Stenosis-Severity\temp\lcc_ncc_boundary_slice.npy")
 
+lcc_com1 = lcc_landmarks[0]
+lcc_com2 = lcc_landmarks[1]
+lcc_hinge = lcc_landmarks[2]
+
+# Now we are going to use the center height hard coded. Should be extracted from the main script.
+center_height = 117
+lcc_com1[0] = center_height
+lcc_com2[0] = center_height
+
+# Convert both masks
+lcc_ncc_points = functions.mask_to_pointcloud(lcc_ncc_slice, center_height)
+rcc_lcc_points = functions.mask_to_pointcloud(rcc_lcc_slice, center_height)
+
+# Fit a spline through the points so that is less jagged and more smooth object
+lcc_ncc_points = functions.fit_spline(lcc_ncc_points, smoothing = 20)
+rcc_lcc_points = functions.fit_spline(rcc_lcc_points, smoothing = 20)
+
+# % --------------------------- CREATING THE CAP OF THE LEAFLET ---------------------------------
+
+surf, eval_pts, mask = functions.build_leaflet_surface(
+    aortic_wall_mask=lcc_wall,
+    commissure1=lcc_landmarks[0],
+    hinge=lcc_landmarks[2],
+    commissure2=lcc_landmarks[1],
+    boundary_curve_1=lcc_ncc_points,
+    boundary_curve_2=rcc_lcc_points,
+    volume_shape=(340,512,512),
+    pixel_spacing=pixel_spacing,
+    dicom_origin=dicom_origin,
+    output_path=r"H:\DATA\Afstuderen\2.Code\Stenosis-Severity\temp",
+    patient_nr=patient_nr,  # dynamic as you prefer
+    file_type="lcc_leaflet_surface"
+)
 
 
 

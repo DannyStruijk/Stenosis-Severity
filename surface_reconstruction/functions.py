@@ -1801,3 +1801,176 @@ def create_3d_mask_from_points(points, volume_shape, thickness_voxels=1):
         mask = binary_dilation(mask, iterations=thickness_voxels)
 
     return mask
+
+
+import numpy as np
+from scipy.ndimage import binary_erosion
+from scipy.spatial import cKDTree
+from scipy.interpolate import splprep, splev
+
+
+def get_leaflet_attachment_curve(
+        aortic_wall_mask,
+        commissure1,
+        hinge,
+        commissure2,
+        n_points=20,
+        snap_to_wall=True):
+    """
+    Computes smooth attachment curve between commissure1 → hinge → commissure2.
+    """
+
+    # Extract wall surface voxels
+    wall_surface = aortic_wall_mask & ~binary_erosion(aortic_wall_mask)
+    wall_coords = np.array(np.where(wall_surface)).T
+
+    tree = cKDTree(wall_coords)
+
+    # Snap landmarks to wall
+    snapped = []
+    for lm in [commissure1, hinge, commissure2]:
+        _, idx = tree.query(lm)
+        snapped.append(wall_coords[idx])
+
+    comm1, hinge, comm2 = snapped
+
+    # Fit spline through 3 landmarks
+    landmarks_array = np.array([comm1, hinge, comm2])
+    coords = landmarks_array.T
+
+    tck, _ = splprep(coords, s=0, k=2)
+    u_new = np.linspace(0, 1, n_points)
+    smooth_curve = np.array(splev(u_new, tck)).T
+
+    if snap_to_wall:
+        _, idx = tree.query(smooth_curve)
+        curve_on_wall = wall_coords[idx]
+    else:
+        curve_on_wall = smooth_curve.copy()
+
+    return smooth_curve, curve_on_wall
+
+
+def create_leaflet_surface_from_curves(curves,
+                                       degree_u=2,
+                                       degree_v=3,
+                                       delta=0.01):
+    """
+    Creates interpolated NURBS surface from a list of curves.
+    curves: list of arrays [curve1, curve2, curve3]
+            each shape (N,3)
+    """
+
+    curves = np.array(curves)
+    num_curves = len(curves)
+    num_pts = curves[0].shape[0]
+
+    surf_flat = curves.reshape(-1, 3)
+
+    surf = fitting.interpolate_surface(
+        surf_flat,
+        size_u=num_curves,
+        size_v=num_pts,
+        degree_u=degree_u,
+        degree_v=degree_v
+    )
+
+    surf.delta = delta
+    surf.evaluate()
+
+    eval_pts = np.array(surf.evalpts)
+
+    return surf, eval_pts
+
+from scipy.ndimage import gaussian_filter, binary_closing
+from skimage.morphology import cube
+
+
+def surface_points_to_stl(
+        eval_pts,
+        volume_shape,
+        pixel_spacing,
+        dicom_origin,
+        output_path,
+        patient_nr,
+        file_type,
+        thickness_voxels=1,
+        smooth_sigma=1.5):
+
+    closing_structure = cube(3)
+
+    mask_3d = create_3d_mask_from_points(
+        eval_pts,
+        volume_shape,
+        thickness_voxels=thickness_voxels
+    )
+
+    mask_3d = binary_closing(mask_3d, structure=closing_structure)
+    mask_3d = binary_dilation(mask_3d, closing_structure)
+    mask_3d = gaussian_filter(mask_3d.astype(np.float32),
+                              sigma=smooth_sigma)
+
+    save_volume_as_stl_patient_space(
+        volume=mask_3d,
+        output_path=output_path,
+        patient_nr=patient_nr,
+        file_type=file_type,
+        zoom_x=pixel_spacing[2],
+        zoom_y=pixel_spacing[1],
+        zoom_z=pixel_spacing[0],
+        dicom_origin=dicom_origin
+    )
+
+    return mask_3d
+
+def build_leaflet_surface(
+        aortic_wall_mask,
+        commissure1,
+        hinge,
+        commissure2,
+        boundary_curve_1,
+        boundary_curve_2,
+        volume_shape,
+        pixel_spacing,
+        dicom_origin,
+        output_path,
+        patient_nr,
+        file_type,
+        n_attachment_pts=20):
+    """
+    Full pipeline:
+    wall → attachment curve → surface → STL
+    """
+
+    # 1. Attachment curve
+    _, curve_on_wall = get_leaflet_attachment_curve(
+        aortic_wall_mask,
+        commissure1,
+        hinge,
+        commissure2,
+        n_points=n_attachment_pts,
+        snap_to_wall=True
+    )
+
+    # 2. Surface interpolation
+    curves = [boundary_curve_1,
+              boundary_curve_2,
+              curve_on_wall]
+
+    surf, eval_pts = create_leaflet_surface_from_curves(curves)
+    
+    # Also make a volume version so that i can transform it to patient space
+
+    # 3. STL creation
+    mask_3d = surface_points_to_stl(
+        eval_pts,
+        volume_shape,
+        pixel_spacing,
+        dicom_origin,
+        output_path,
+        patient_nr,
+        file_type
+    )
+
+    return surf, eval_pts, mask_3d
+

@@ -134,7 +134,7 @@ ax.scatter(curve_on_wall[:,2], curve_on_wall[:,1], curve_on_wall[:,0],
            color='green', s=20, label='Curve on wall')
 
 # Also try to display the lower side of the boundaries
-ax.scatter(lcc_ncc_points[:,2], lcc_ncc_points[:,1], lcc_ncc_points[:,0])
+# ax.scatter(lcc_ncc_points[:,2], lcc_ncc_points[:,1], lcc_ncc_points[:,0])
 ax.scatter(rcc_lcc_points[:,2], rcc_lcc_points[:,1], rcc_lcc_points[:,0])
 
 
@@ -196,6 +196,8 @@ mask_3d = binary_dilation(mask_3d, closing_structure)
 mask_3d_smooth = gaussian_filter(mask_3d.astype(np.float32), sigma = 1.5)
 
 pixel_spacing = (0.4, 0.35, 0.35)
+
+dicom_origin = (-61, -248, 1126.8)
 
 # Step 3: save as STL in patient space
 functions.save_volume_as_stl_patient_space(
