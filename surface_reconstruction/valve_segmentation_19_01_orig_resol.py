@@ -1134,7 +1134,7 @@ keep_below_center=False
 
 # Expand the RCC-LCC leaflet towards the aortic wall
 combined_rcc_lcc = rcc_wall_3d | lcc_wall_3d
-rcc_lcc_grown, rcc_lcc_center_slice= functions.grow_boundary(
+rcc_lcc_grown, _= functions.grow_boundary(
     dilated_mask_3d_rcc_lcc,
     combined_rcc_lcc,
     center_height=center_height,
@@ -1145,7 +1145,7 @@ rcc_lcc_grown, rcc_lcc_center_slice= functions.grow_boundary(
 
 # Expand the NCC-RCC leaflet towards the aortic wall
 combined_ncc_rcc = ncc_wall_3d | rcc_wall_3d
-ncc_rcc_grown, ncc_rcc_center_slice = functions.grow_boundary(
+ncc_rcc_grown, _ = functions.grow_boundary(
     dilated_mask_3d_ncc_rcc,
     combined_ncc_rcc,
     center_height=center_height,
@@ -1156,7 +1156,7 @@ ncc_rcc_grown, ncc_rcc_center_slice = functions.grow_boundary(
 
 # Expand the RCC-LCC leaflet towards the aortic wall
 combined_lcc_ncc = lcc_wall_3d | ncc_wall_3d
-lcc_ncc_grown, lcc_ncc_center_slice= functions.grow_boundary(
+lcc_ncc_grown, _ = functions.grow_boundary(
     dilated_mask_3d_lcc_ncc,
     combined_lcc_ncc,
     center_height=center_height,
@@ -1355,7 +1355,23 @@ surf, eval_pts, mask = functions.build_leaflet_surface(
     file_type="lcc_leaflet_surface"
 )
 
+# %% -------------------- VOXELIZATION OF THE LEAFLET CAP -------------------------------
 
+# Reorienting the leaflet cap so that it is in patient space 
+
+lcc_cap_mask = functions.create_3d_mask_from_points(eval_pts, calc_volume.shape)
+lcc_cap_mask_reoriented = functions.reorient_volume_back(lcc_cap_mask, dicom_origin, rotation_matrix_dicom)
+lcc_cap_mask_reoriented= functions.downsample_and_rescale(lcc_cap_mask_reoriented, downsample_factor=downsample_factor, inverse_zoom=inverse_zoom)
+functions.save_volume_as_stl_patient_space(
+    volume=lcc_cap_mask_reoriented,
+    output_path=output_path,
+    patient_nr=patient_nr,
+    file_type="lcc_cap_mask", 
+    zoom_x=pixel_spacing[2],
+    zoom_y=pixel_spacing[1],
+    zoom_z=pixel_spacing[0],
+    dicom_origin=dicom_origin
+)
 
 
 

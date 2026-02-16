@@ -18,7 +18,7 @@ lcc_com2 = lcc_landmarks[1]
 lcc_hinge = lcc_landmarks[2]
 
 # Now we are going to use the center height hard coded. Should be extracted from the main script.
-center_height = 117
+center_height = 120
 lcc_com1[0] = center_height
 lcc_com2[0] = center_height
 
@@ -123,7 +123,7 @@ ax.scatter(wall_coords[:,2], wall_coords[:,1], wall_coords[:,0],
 # 2️⃣ Landmarks (blue)
 # landmarks_array = np.array([lcc_landmarks[0], lcc_landmarks[2], lcc_landmarks[1]])  # comm1, hinge, comm2
 # ax.scatter(landmarks_array[:,2], landmarks_array[:,1], landmarks_array[:,0],
-#            color='blue', s=50, label='Landmarks')
+#             color='blue', s=50, label='Landmarks')
 
 # 3️⃣ Smooth attachment curve (red line)
 ax.plot(smooth_curve[:,2], smooth_curve[:,1], smooth_curve[:,0],
@@ -134,7 +134,7 @@ ax.scatter(curve_on_wall[:,2], curve_on_wall[:,1], curve_on_wall[:,0],
            color='green', s=20, label='Curve on wall')
 
 # Also try to display the lower side of the boundaries
-# ax.scatter(lcc_ncc_points[:,2], lcc_ncc_points[:,1], lcc_ncc_points[:,0])
+ax.scatter(lcc_ncc_points[:,2], lcc_ncc_points[:,1], lcc_ncc_points[:,0])
 ax.scatter(rcc_lcc_points[:,2], rcc_lcc_points[:,1], rcc_lcc_points[:,0])
 
 

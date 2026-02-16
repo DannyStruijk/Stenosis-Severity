@@ -1803,10 +1803,13 @@ def create_3d_mask_from_points(points, volume_shape, thickness_voxels=1):
     return mask
 
 
+from scipy.ndimage import gaussian_filter, binary_closing, binary_dilation
+from skimage.morphology import cube
+
+
 import numpy as np
 from scipy.ndimage import binary_erosion
-from scipy.spatial import cKDTree
-from scipy.interpolate import splprep, splev
+
 
 
 def get_leaflet_attachment_curve(
@@ -1850,7 +1853,6 @@ def get_leaflet_attachment_curve(
 
     return smooth_curve, curve_on_wall
 
-
 def create_leaflet_surface_from_curves(curves,
                                        degree_u=2,
                                        degree_v=3,
@@ -1881,9 +1883,6 @@ def create_leaflet_surface_from_curves(curves,
     eval_pts = np.array(surf.evalpts)
 
     return surf, eval_pts
-
-from scipy.ndimage import gaussian_filter, binary_closing
-from skimage.morphology import cube
 
 
 def surface_points_to_stl(
@@ -1923,6 +1922,7 @@ def surface_points_to_stl(
 
     return mask_3d
 
+
 def build_leaflet_surface(
         aortic_wall_mask,
         commissure1,
@@ -1958,8 +1958,6 @@ def build_leaflet_surface(
               curve_on_wall]
 
     surf, eval_pts = create_leaflet_surface_from_curves(curves)
-    
-    # Also make a volume version so that i can transform it to patient space
 
     # 3. STL creation
     mask_3d = surface_points_to_stl(
