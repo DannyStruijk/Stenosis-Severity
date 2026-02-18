@@ -1858,14 +1858,86 @@ def create_leaflet_surface_from_curves(curves,
                                        degree_v=3,
                                        delta=0.01):
     """
-    Creates interpolated NURBS surface from a list of curves.
-    curves: list of arrays [curve1, curve2, curve3]
-            each shape (N,3)
+    Creates interpolated NURBS surface from 3 boundary curves:
+    [free_edge_1, wall_curve, free_edge_2]
+
+    The function automatically reorders the free edge curves such that
+    their LAST point is closest to the wall curve.
+
+    Parameters
+    ----------
+    curves : list of (N,3) arrays
+        [boundary_curve_1, boundary_curve_2, boundary_curve_3]
+        Each curve must have the same number of points.
+    degree_u : int
+    degree_v : int
+    delta : float
+        Surface evaluation density.
+
+    Returns
+    -------
+    surf : geomdl surface object
+    eval_pts : (M,3) evaluated surface points
     """
 
-    curves = np.array(curves)
-    num_curves = len(curves)
+    import numpy as np
+    from geomdl import fitting
+
+    # --- Convert safely to numpy arrays ---
+    curves = [np.array(c) for c in curves]
+
+    # --- Basic safety check ---
     num_pts = curves[0].shape[0]
+    for c in curves:
+        if c.shape[0] != num_pts:
+            raise ValueError("All curves must have same number of points")
+
+    # -------------------------------------------------
+    # Reorder logic:
+    # Make sure free edge curves end at wall curve
+    # -------------------------------------------------
+
+    # Assume middle curve is the wall curve
+    free_1, wall_curve, free_2 = curves
+
+    wall_start = wall_curve[0]
+    wall_end = wall_curve[-1]
+
+    def reorder_curve(curve):
+        """
+        Ensures last point of curve is closest to wall.
+        If first point is closer to wall than last point,
+        reverse the curve.
+        """
+
+        # Distance of first point to wall
+        d_first = min(
+            np.linalg.norm(curve[0] - wall_start),
+            np.linalg.norm(curve[0] - wall_end)
+        )
+
+        # Distance of last point to wall
+        d_last = min(
+            np.linalg.norm(curve[-1] - wall_start),
+            np.linalg.norm(curve[-1] - wall_end)
+        )
+
+        # If first point is closer → reverse curve
+        if d_first < d_last:
+            return curve[::-1]
+
+        return curve
+
+    free_1 = reorder_curve(free_1)
+    free_2 = reorder_curve(free_2)
+
+    curves = np.array([free_1, wall_curve, free_2])
+
+    # -------------------------------------------------
+    # Surface fitting
+    # -------------------------------------------------
+
+    num_curves = curves.shape[0]
 
     surf_flat = curves.reshape(-1, 3)
 
@@ -1877,12 +1949,15 @@ def create_leaflet_surface_from_curves(curves,
         degree_v=degree_v
     )
 
+    # --- Evaluate surface ---
     surf.delta = delta
     surf.evaluate()
 
     eval_pts = np.array(surf.evalpts)
 
     return surf, eval_pts
+
+
 
 
 def surface_points_to_stl(
@@ -1905,7 +1980,7 @@ def surface_points_to_stl(
     )
 
     mask_3d = binary_closing(mask_3d, structure=closing_structure)
-    mask_3d = binary_dilation(mask_3d, closing_structure)
+    # mask_3d = binary_dilation(mask_3d, closing_structure)
     mask_3d = gaussian_filter(mask_3d.astype(np.float32),
                               sigma=smooth_sigma)
 
@@ -1921,6 +1996,61 @@ def surface_points_to_stl(
     )
 
     return mask_3d
+
+
+
+def debug_plot_curves_2d(curves,
+                         labels=None,
+                         title="2D Projection of Curves (XY plane)",
+                         show_order=True):
+    """
+    Debug visualization of boundary curves in XY plane.
+
+    Parameters
+    ----------
+    curves : list of (N,3) arrays
+        Curves to visualize.
+    labels : list of str, optional
+        Labels for legend.
+    title : str
+        Plot title.
+    show_order : bool
+        If True, shows start (circle) and end (cross) markers.
+    """
+
+    if labels is None:
+        labels = [f"curve_{i}" for i in range(len(curves))]
+
+    colors = ["blue", "red", "green", "orange", "purple"]
+
+    plt.figure(figsize=(6, 6))
+
+    for i, curve in enumerate(curves):
+        curve = np.array(curve)
+
+        x = curve[:, 2]  # X
+        y = curve[:, 1]  # Y
+
+        color = colors[i % len(colors)]
+
+        plt.plot(x, y, color=color, linewidth=2, label=labels[i])
+
+        if show_order:
+            # Start point
+            plt.scatter(x[0], y[0],
+                        color=color, marker='o', s=80)
+
+            # End point
+            plt.scatter(x[-1], y[-1],
+                        color=color, marker='x', s=80)
+
+    plt.gca().set_aspect('equal', adjustable='box')
+    plt.title(title)
+    plt.xlabel("X")
+    plt.ylabel("Y")
+    plt.legend()
+    plt.grid(True)
+    plt.show()
 
 
 def build_leaflet_surface(
@@ -1956,7 +2086,12 @@ def build_leaflet_surface(
     curves = [boundary_curve_1,
               boundary_curve_2,
               curve_on_wall]
-
+    
+    # Look at how the curves go to determine the fualt
+    debug_plot_curves_2d(
+    curves,
+    labels=["curve1", "curve2", "attachment"]
+    )
     surf, eval_pts = create_leaflet_surface_from_curves(curves)
 
     # 3. STL creation

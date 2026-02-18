@@ -47,6 +47,7 @@ lcc_ncc_points = functions.fit_spline(lcc_ncc_points, smoothing = 10)
 rcc_lcc_points = functions.fit_spline(rcc_lcc_points, smoothing = 10)
 ncc_rcc_points = functions.fit_spline(ncc_rcc_points, smoothing = 10)
 
+rcc_lcc_points = rcc_lcc_points[::-1]
 
 
 # %% EXTRACTING THE CURVE OF COMMISSURES TO HINGE, ATTACHMENT REGION OF LEAFLET TO THE AORTIC WALL
