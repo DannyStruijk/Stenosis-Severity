@@ -3,7 +3,7 @@
 # Importing the necessary packages
 
 import sys
-sys.path.append(r"H:\\DATA\Afstuderen\\2.Code\\Stenosis-Severity\\gui")
+sys.path.append(r"H:\\DATA\Afstuderen\\2.Code\\Stenosis-Severity-backup\\gui")
 import gui_functions as gf
 import functions
 import numpy as np
@@ -917,28 +917,42 @@ for slice_nr, slice_info in slice_data.items():
         "RCC": functions.contour_segment(aortic_wall_contour, commissure_indices["ncc_rcc"], commissure_indices["rcc_lcc"]),
         "NCC": functions.contour_segment(aortic_wall_contour, commissure_indices["lcc_ncc"], commissure_indices["ncc_rcc"])
     }
-
-    # Store results
+    # Helper function
+    def safe_copy(point, fallback=None):
+        if point is None:
+            return fallback
+        else:
+            return np.array(point)  # copy as array
+    
+    # Store results with flat keys safely
     LCC_data[slice_nr] = {
         "mask": lcc_ncc_mask.copy(),
         "lcc_ncc_boundary": cleaned_lcc_ncc_boundary.copy(),
         "rcc_lcc_boundary": cleaned_rcc_lcc_boundary.copy(),
         "com_to_com": seg_c2c["LCC"].copy(),
         "aortic_wall_contour": aortic_wall_contour.copy(),
+        "lcc_ncc_com": safe_copy(intersections.get("lcc_ncc"), prev_intersections.get("lcc_ncc")),
+        "rcc_lcc_com": safe_copy(intersections.get("rcc_lcc"), prev_intersections.get("rcc_lcc")),
         "height": slice_nr
     }
+    
     RCC_data[slice_nr] = {
         "mask": rcc_lcc_mask.copy(),
         "rcc_lcc_boundary": cleaned_rcc_lcc_boundary.copy(),
         "ncc_rcc_boundary": cleaned_ncc_rcc_boundary.copy(),
         "com_to_com": seg_c2c["RCC"].copy(),
+        "rcc_lcc_com": safe_copy(intersections.get("rcc_lcc"), prev_intersections.get("rcc_lcc")),
+        "ncc_rcc_com": safe_copy(intersections.get("ncc_rcc"), prev_intersections.get("ncc_rcc")),
         "height": slice_nr
     }
+    
     NCC_data[slice_nr] = {
         "mask": ncc_rcc_mask.copy(),
         "ncc_rcc_boundary": cleaned_ncc_rcc_boundary.copy(),
         "lcc_ncc_boundary": cleaned_lcc_ncc_boundary.copy(),
         "com_to_com": seg_c2c["NCC"].copy(),
+        "ncc_rcc_com": safe_copy(intersections.get("ncc_rcc"), prev_intersections.get("ncc_rcc")),
+        "lcc_ncc_com": safe_copy(intersections.get("lcc_ncc"), prev_intersections.get("lcc_ncc")),
         "height": slice_nr
     }
     
@@ -1065,7 +1079,7 @@ hinge_z_values = [
 
 min_hinge_z = min(hinge_z_values)
 
-center_height = int((lcc_rotated[3][0] + min_hinge_z)/2)
+center_height = int((lcc_rotated[3][0] + min_hinge_z)/2) - 5
 
 print("Post-processing the found boundaries so that they can be converted into 3D objects..")
 
@@ -1089,6 +1103,38 @@ lcc_ncc_center_slice = lcc_ncc_boundary_3d[center_height]
 dilated_mask_3d_lcc_ncc = binary_dilation(lcc_ncc_boundary_3d, cube(3))  # Adjust the cube size as needed
 lcc_ncc_boundary_smooth = gaussian_filter(dilated_mask_3d_lcc_ncc.astype(np.float32), sigma=gaussian_blur)  
 file_type_lcc_ncc = "lcc_ncc_boundary"
+
+# %% showcasing the found boundaries
+
+import numpy as np
+import matplotlib.pyplot as plt
+from skimage.morphology import cube
+
+# Assuming your 3D boundary masks exist:
+# lcc_ncc_boundary_3d, rcc_lcc_boundary_3d, ncc_rcc_boundary_3d
+
+boundaries = [
+    ("LCC→NCC", lcc_ncc_boundary_3d, "red"),
+    ("RCC→LCC", rcc_lcc_boundary_3d, "blue"),
+    ("NCC→RCC", ncc_rcc_boundary_3d, "green")
+]
+
+plt.figure(figsize=(8,8))
+
+for name, mask, color in boundaries:
+    coords = np.array(np.where(mask))  # Z,Y,X
+    x, y, z = coords[2], coords[1], coords[0]
+    plt.scatter(x, y, s=1, c=color, label=name)
+
+plt.xlabel('X')
+plt.ylabel('Y')
+plt.title('Top-Down View of All Leaflet Boundaries')
+plt.gca().invert_yaxis()  # match image coordinates
+plt.axis('equal')
+plt.legend()
+plt.show()
+
+
 
 # %% ----------------------------- AORTIC WALL ----------------------------
 
@@ -1301,32 +1347,66 @@ for name, volume in masks.items():
 # we will first do evertyhing in native python space, as this gives us the most information regarding
 # the leaflet boundaries.
 
-out_dir = r"H:\DATA\Afstuderen\2.Code\Stenosis-Severity\temp"
+out_dir = r"H:\DATA\Afstuderen\2.Code\Stenosis-Severity-backup\temp"
+output_dir =  r"H:\DATA\Afstuderen\3.Data\output_valve_segmentation"
+
 
 # Export the coordinates which define the the lowest part of the boundaries
 np.save(os.path.join(out_dir, "lcc_ncc_boundary_slice.npy"), lcc_ncc_center_slice)
 np.save(os.path.join(out_dir, "rcc_lcc_boundary_slice.npy"), rcc_lcc_center_slice)
+np.save(os.path.join(out_dir, "ncc_rcc_boundary_slice.npy"), ncc_rcc_center_slice)
+print(np.sum(lcc_ncc_center_slice))
+print(np.sum(rcc_lcc_center_slice))
+print(np.sum(ncc_rcc_center_slice))
+
 
 # Export the 3d mask of the aortic wall
-np.save(os.path.join(out_dir, "lcc_wall.npy"), lcc_wall_3d)
+np.save(os.path.join(output_dir, "lcc_wall.npy"), lcc_wall_3d)
+np.save(os.path.join(output_dir, "ncc_wall.npy"), ncc_wall_3d)
+np.save(os.path.join(output_dir, "rcc_wall.npy"), rcc_wall_3d)
 
-# Export the commissures of this specific leaflet and hinge point
-np.save(os.path.join(out_dir, "lcc_landmarks.npy"), lcc_rotated)
+slice_to_save = center_height  # or min(LCC_data.keys()), etc.
+
+# Make sure all commissures include the z-coordinate
+lcc_landmarks_to_save = np.array([
+    [center_height, *LCC_data[slice_to_save]["lcc_ncc_com"]],   # commissure1
+    [center_height, *LCC_data[slice_to_save]["rcc_lcc_com"]],   # commissure2
+    lcc_rotated[2]                                  # hinge point (already z,y,x)
+])
+
+rcc_landmarks_to_save = np.array([
+    [center_height, *RCC_data[slice_to_save]["rcc_lcc_com"]],
+    [center_height, *RCC_data[slice_to_save]["ncc_rcc_com"]],
+    rcc_rotated[2]
+])
+
+ncc_landmarks_to_save = np.array([
+    [center_height, *NCC_data[slice_to_save]["ncc_rcc_com"]],
+    [center_height, *NCC_data[slice_to_save]["lcc_ncc_com"]],
+    ncc_rotated[2]
+])
+
+# Save updated landmarks
+np.save(os.path.join(out_dir, "lcc_landmarks.npy"), lcc_landmarks_to_save)
+np.save(os.path.join(out_dir, "rcc_landmarks.npy"), rcc_landmarks_to_save)
+np.save(os.path.join(out_dir, "ncc_landmarks.npy"), ncc_landmarks_to_save)
+
+print("Saved commissure-based landmarks for LCC, RCC, NCC.")
+
 
 # %%  LOADING THE DATA
 
 # For testing purposes, the LCC cusp is first calculated.
-lcc_landmarks = np.load(r"H:\DATA\Afstuderen\2.Code\Stenosis-Severity\temp\lcc_landmarks.npy")
-lcc_wall = np.load(r"H:\DATA\Afstuderen\2.Code\Stenosis-Severity\temp\lcc_wall.npy")
-rcc_lcc_slice = np.load(r"H:\DATA\Afstuderen\2.Code\Stenosis-Severity\temp\rcc_lcc_boundary_slice.npy")
-lcc_ncc_slice = np.load(r"H:\DATA\Afstuderen\2.Code\Stenosis-Severity\temp\lcc_ncc_boundary_slice.npy")
+lcc_landmarks = np.load(r"H:\DATA\Afstuderen\2.Code\Stenosis-Severity-backup\temp\lcc_landmarks.npy")
+lcc_wall = np.load(r"H:\DATA\Afstuderen\2.Code\Stenosis-Severity-backup\temp\lcc_wall.npy")
+rcc_lcc_slice = np.load(r"H:\DATA\Afstuderen\2.Code\Stenosis-Severity-backup\temp\rcc_lcc_boundary_slice.npy")
+lcc_ncc_slice = np.load(r"H:\DATA\Afstuderen\2.Code\Stenosis-Severity-backup\temp\lcc_ncc_boundary_slice.npy")
 
 lcc_com1 = lcc_landmarks[0]
 lcc_com2 = lcc_landmarks[1]
 lcc_hinge = lcc_landmarks[2]
 
 # Now we are going to use the center height hard coded. Should be extracted from the main script.
-center_height = 117
 lcc_com1[0] = center_height
 lcc_com2[0] = center_height
 
@@ -1350,7 +1430,7 @@ surf, eval_pts, mask = functions.build_leaflet_surface(
     volume_shape=(340,512,512),
     pixel_spacing=pixel_spacing,
     dicom_origin=dicom_origin,
-    output_path=r"H:\DATA\Afstuderen\2.Code\Stenosis-Severity\temp",
+    output_path=r"H:\DATA\Afstuderen\2.Code\Stenosis-Severity-backup\temp",
     patient_nr=patient_nr,  # dynamic as you prefer
     file_type="lcc_leaflet_surface"
 )
@@ -1360,6 +1440,7 @@ surf, eval_pts, mask = functions.build_leaflet_surface(
 # Reorienting the leaflet cap so that it is in patient space 
 
 lcc_cap_mask = functions.create_3d_mask_from_points(eval_pts, calc_volume.shape)
+lcc_cap_mask= gaussian_filter(lcc_cap_mask.astype(np.float32), sigma=gaussian_blur)  
 lcc_cap_mask_reoriented = functions.reorient_volume_back(lcc_cap_mask, dicom_origin, rotation_matrix_dicom)
 lcc_cap_mask_reoriented= functions.downsample_and_rescale(lcc_cap_mask_reoriented, downsample_factor=downsample_factor, inverse_zoom=inverse_zoom)
 functions.save_volume_as_stl_patient_space(
@@ -1374,6 +1455,117 @@ functions.save_volume_as_stl_patient_space(
 )
 
 
+
+# %%% ALL THE LEAFLETS
+
+print("Creating the leaflet caps for all leaflets...")
+
+# -------------------- SETTINGS --------------------
+out_dir = r"H:\DATA\Afstuderen\2.Code\Stenosis-Severity-backup\temp"
+output_dir = rf"H:\DATA\Afstuderen\3.Data\output_valve_segmentation"
+
+leaflets = ["lcc", "ncc", "rcc"]
+
+# -------------------- FUNCTIONAL EXPORT LOOP --------------------
+for leaflet in leaflets:
+    print(f"\n--- Processing leaflet: {leaflet.upper()} ---")
+    
+    # ---------------- Load landmarks and wall ----------------
+    landmarks_path = os.path.join(out_dir, f"{leaflet}_landmarks.npy")
+    wall_path = os.path.join(output_dir, f"{leaflet}_wall.npy")
+    
+    print(f"Loading landmarks from: {landmarks_path}")
+    print(f"Loading wall mask from: {wall_path}")
+    
+    landmarks = np.load(landmarks_path)
+    wall_mask = np.load(wall_path)
+    
+    print("Landmarks loaded:", landmarks)
+    print("Wall mask shape:", wall_mask.shape)
+    
+    com1, com2, hinge = landmarks[0], landmarks[1], landmarks[2]
+    
+    # Center height
+    com1[0] = center_height
+    com2[0] = center_height
+    print(f"Adjusted commissure heights to {center_height}")
+    
+    # ---------------- Load boundary slices ----------------
+    if leaflet == "lcc":
+        boundary_pairs = [("ncc", "lcc_ncc_boundary_slice.npy"),
+                          ("rcc", "rcc_lcc_boundary_slice.npy")]
+    elif leaflet == "ncc":
+        boundary_pairs = [("rcc", "ncc_rcc_boundary_slice.npy"),
+                          ("lcc", "lcc_ncc_boundary_slice.npy")]
+    else:  # rcc
+        boundary_pairs = [("lcc", "rcc_lcc_boundary_slice.npy"),
+                          ("ncc", "ncc_rcc_boundary_slice.npy")]
+
+    # Convert masks to point clouds & smooth
+    point_clouds = []
+    for pair_name, slice_file in boundary_pairs:
+        slice_path = os.path.join(out_dir, slice_file)
+        print(f"Loading boundary slice ({pair_name}) from: {slice_path}")
+        mask_slice = np.load(slice_path)
+        pts = functions.mask_to_pointcloud(mask_slice, center_height)
+        print(f"Point cloud size for {pair_name}: {pts.shape[0]}")
+        
+        if pts.shape[0] <= 1:
+            print(f"[WARNING] Not enough points to fit spline for {pair_name}, using raw points")
+            pts_smooth = pts
+        else:
+            pts_smooth = functions.fit_spline(pts, smoothing=20)
+            
+        point_clouds.append(pts_smooth)
+
+    boundary_curve_1, boundary_curve_2 = point_clouds
+
+    # ---------------- Build leaflet surface ----------------
+    print("Building leaflet surface...")
+    surf, eval_pts, mask = functions.build_leaflet_surface(
+        aortic_wall_mask=wall_mask,
+        commissure1=com1,
+        hinge=hinge,
+        commissure2=com2,
+        boundary_curve_1=boundary_curve_1,
+        boundary_curve_2=boundary_curve_2,
+        volume_shape=(340,512,512),
+        pixel_spacing=pixel_spacing,
+        dicom_origin=dicom_origin,
+        output_path=output_path,
+        patient_nr=patient_nr,
+        file_type=f"{leaflet}_leaflet_surface"
+    )
+    print("Leaflet surface built, number of evaluated points:", eval_pts.shape[0])
+
+    # ---------------- Voxelization & STL export ----------------
+    print("Creating 3D mask and exporting STL...")
+    cap_mask = functions.create_3d_mask_from_points(eval_pts, calc_volume.shape)
+    cap_mask = binary_closing(cap_mask, structure=closing_structure)
+    cap_mask = binary_dilation(cap_mask, cube(3))
+    cap_mask = gaussian_filter(cap_mask.astype(np.float32), sigma=gaussian_blur)
+    cap_mask_reoriented = functions.reorient_volume_back(cap_mask, dicom_origin, rotation_matrix_dicom)
+    cap_mask_reoriented = functions.downsample_and_rescale(cap_mask_reoriented,
+                                                           downsample_factor=downsample_factor,
+                                                           inverse_zoom=inverse_zoom)
+    print("Mask reoriented and rescaled, shape:", cap_mask_reoriented.shape)
+
+    functions.save_volume_as_stl_patient_space(
+        volume=cap_mask_reoriented,
+        output_path=output_dir,
+        patient_nr=patient_nr,
+        file_type=f"{leaflet}_cap_mask",
+        zoom_x=pixel_spacing[2],
+        zoom_y=pixel_spacing[1],
+        zoom_z=pixel_spacing[0],
+        dicom_origin=dicom_origin
+    )
+    print(f"STL exported for {leaflet.upper()}")
+
+    # ---------------- Save landmarks & wall masks ----------------
+    np.save(os.path.join(output_dir, f"{leaflet}_wall.npy"), wall_mask)
+    np.save(os.path.join(out_dir, f"{leaflet}_landmarks.npy"), landmarks)
+    print(f"Wall and landmarks saved for {leaflet.upper()}")
 
 
 

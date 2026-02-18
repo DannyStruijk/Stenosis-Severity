@@ -229,7 +229,7 @@ def interpolate_surface(interp_points):
 
 
 
-def save_surface_evalpts(surface, save_dir = r"H:\DATA\Afstuderen\2.Code\Stenosis-Severity\temp", filename="lcc"):
+def save_surface_evalpts(surface, save_dir = r"H:\DATA\Afstuderen\2.Code\Stenosis-Severity-backup\temp", filename="lcc"):
     """
     Saves the evaluated points (evalpts) of a NURBS surface to both .npy and .txt files.
 
