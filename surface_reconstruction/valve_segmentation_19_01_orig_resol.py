@@ -1079,27 +1079,24 @@ hinge_z_values = [
 
 min_hinge_z = min(hinge_z_values)
 
-center_height = int((lcc_rotated[3][0] + min_hinge_z)/2) - 5
+center_height = int((lcc_rotated[3][0] + min_hinge_z)/2) 
 
 print("Post-processing the found boundaries so that they can be converted into 3D objects..")
 
 # --- Process RCC to LCC Boundary ---
 rcc_lcc_boundary_3d = functions.create_3d_mask_from_boundary_points(RCC_data, calc_volume.shape, "rcc_lcc_boundary")
-rcc_lcc_center_slice = rcc_lcc_boundary_3d[center_height]
 dilated_mask_3d_rcc_lcc = binary_dilation(rcc_lcc_boundary_3d, cube(3))  # Adjust the cube size as needed
 rcc_lcc_boundary_smooth = gaussian_filter(dilated_mask_3d_rcc_lcc.astype(np.float32), sigma=gaussian_blur)  
 file_type_rcc_lcc = "rcc_lcc_boundary"
 
 # --- Process NCC to RCC Boundary ---
 ncc_rcc_boundary_3d = functions.create_3d_mask_from_boundary_points(NCC_data, calc_volume.shape, "ncc_rcc_boundary")
-ncc_rcc_center_slice = ncc_rcc_boundary_3d[center_height]
 dilated_mask_3d_ncc_rcc = binary_dilation(ncc_rcc_boundary_3d, cube(3))  # Adjust the cube size as needed
 ncc_rcc_boundary_smooth = gaussian_filter(dilated_mask_3d_ncc_rcc.astype(np.float32), sigma=gaussian_blur)  
 file_type_ncc_rcc = "ncc_rcc_boundary"
 
 # --- Process LCC to NCC Boundary ---
 lcc_ncc_boundary_3d = functions.create_3d_mask_from_boundary_points(LCC_data, calc_volume.shape, "lcc_ncc_boundary")
-lcc_ncc_center_slice = lcc_ncc_boundary_3d[center_height]
 dilated_mask_3d_lcc_ncc = binary_dilation(lcc_ncc_boundary_3d, cube(3))  # Adjust the cube size as needed
 lcc_ncc_boundary_smooth = gaussian_filter(dilated_mask_3d_lcc_ncc.astype(np.float32), sigma=gaussian_blur)  
 file_type_lcc_ncc = "lcc_ncc_boundary"
@@ -1212,6 +1209,49 @@ lcc_ncc_grown, _ = functions.grow_boundary(
 )
 
 
+# %% EXTRACT THE CENTER BOUNDARY FROM THE GROWN SLICES
+
+# Previously it was done with the raw boundaries, but we need more point for the spline fitting
+# This is more robust 
+from scipy.ndimage import binary_erosion
+import numpy as np
+
+# Grab the center slice first
+rcc_lcc_center_slice = rcc_lcc_boundary_3d[center_height]
+ncc_rcc_center_slice = ncc_rcc_boundary_3d[center_height]
+lcc_ncc_center_slice = lcc_ncc_boundary_3d[center_height]
+
+# Boundaries at center slice
+boundaries = [
+    ("LCC→NCC", lcc_ncc_center_slice, "red"),
+    ("RCC→LCC", rcc_lcc_center_slice, "blue"),
+    ("NCC→RCC", ncc_rcc_center_slice, "green")
+]
+
+plt.figure(figsize=(8,8))
+
+for name, mask_slice, color in boundaries:
+
+    # mask_slice is 2D (Y,X)
+    coords = np.array(np.where(mask_slice))
+
+    y = coords[1]
+    x = coords[1]
+
+    plt.scatter(x, y, s=2, c=color, label=name)
+
+plt.xlabel("X")
+plt.ylabel("Y")
+plt.title(f"Leaflet boundaries at slice z = {center_height}")
+
+plt.gca().invert_yaxis()
+plt.axis("equal")
+plt.legend()
+plt.grid(True)
+
+plt.show()
+
+
 # %% ----------------------- REORIENT THE LEAFLET BOUDNARIES BACK TO THEIR ORIGINAL SPACE ----------------------
 
 print("Reorienting the leaflet boundaries from the python space to patient space...")
@@ -1274,7 +1314,6 @@ file_type_lcc_ncc_com_to_com = "lcc_ncc_com_to_com"
 calcification_mask_reoriented = functions.reorient_volume_back(calc_volume_smooth, dicom_origin, rotation_matrix_dicom)
 calcification_mask_reoriented = functions.downsample_and_rescale(calcification_mask_reoriented, downsample_factor=downsample_factor, inverse_zoom=inverse_zoom)
 file_type_calc_volume = "calc_volume_reoriented"
-
 
 
 
@@ -1457,6 +1496,10 @@ functions.save_volume_as_stl_patient_space(
 
 
 # %%% ALL THE LEAFLETS
+
+
+# del calc_volume_smooth
+# del calcification_mask_reoriented
 
 print("Creating the leaflet caps for all leaflets...")
 

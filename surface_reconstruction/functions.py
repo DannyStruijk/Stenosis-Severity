@@ -1761,7 +1761,7 @@ def fit_spline(points, n_samples=20, smoothing=2):
         raise ValueError("Input points must have shape (N,3)")
     
     # Fit spline
-    tck, u = splprep(points.T, s=smoothing)
+    tck, u = splprep(points.T, s=smoothing,k=2)
     
     # Sample along spline
     u_new = np.linspace(0, 1, n_samples)
@@ -2033,16 +2033,17 @@ def debug_plot_curves_2d(curves,
 
         color = colors[i % len(colors)]
 
-        plt.plot(x, y, color=color, linewidth=2, label=labels[i])
+        # ✅ Plot points instead of line
+        plt.scatter(x, y, color=color, s=20, label=labels[i])
 
-        if show_order:
+        if show_order and len(x) > 1:
             # Start point
             plt.scatter(x[0], y[0],
-                        color=color, marker='o', s=80)
+                        color=color, marker='o', s=100)
 
             # End point
             plt.scatter(x[-1], y[-1],
-                        color=color, marker='x', s=80)
+                        color=color, marker='x', s=100)
 
     plt.gca().set_aspect('equal', adjustable='box')
     plt.title(title)
@@ -2071,6 +2072,7 @@ def build_leaflet_surface(
     Full pipeline:
     wall → attachment curve → surface → STL
     """
+
 
     # 1. Attachment curve
     _, curve_on_wall = get_leaflet_attachment_curve(
