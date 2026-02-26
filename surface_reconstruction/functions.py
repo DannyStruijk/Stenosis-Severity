@@ -806,7 +806,7 @@ def find_closest_point(points, reference_point):
     return closest_idx, closest_point
 
 
-def circle_through_commissures(points, n_points=40):
+def circle_through_commissures(points, n_points=25):
     """
     Fit a circle through 3 commissure landmarks in 3D and return points on the circle.
 
@@ -1031,8 +1031,7 @@ def find_all_boundary_intersections(
         if len(boundary_points) < 4:
             total_length = 0
         else:
-            dists = np.linalg.norm(np.diff(boundary_points, axis=0), axis=1)
-            total_length = np.sum(dists)  # total length along boundary
+            total_length = compute_max_pairwise_distance(boundary)  
             # print(total_length)
             print(f"{name} total length: {total_length}")
 
@@ -1060,7 +1059,7 @@ def find_all_boundary_intersections(
             # Check if the intersection is inside the Mercedes mask
             if mercedes_mask is not None:
                 if not mercedes_mask[int(intersection[0]), int(intersection[1])]:  # Check if the point is inside the mask
-                    print(f"Intersection for {name} is outside the mercedes mask. Using previous intersection.")
+                    # print(f"Intersection for {name} is outside the mercedes mask. Using previous intersection.")
                     intersections[name] = None
                 else:
                     intersections[name] = tuple(intersection)
@@ -1097,6 +1096,62 @@ def find_all_boundary_intersections(
     return intersections
 
 
+def compute_max_pairwise_distance(points):
+    """
+    Compute distance between the two points that are furthest apart.
+
+    This is the diameter of the point set.
+
+    Parameters
+    ----------
+    points : (N,3) or (N,2) array-like
+
+    Returns
+    -------
+    float
+        Maximum Euclidean distance between any two points.
+    """
+
+    if points is None:
+        return 0
+
+    points = np.asarray(points)
+
+    if len(points) < 2:
+        return 0
+
+    # Pairwise distance matrix
+    dist_matrix = cdist(points, points)
+
+    # Maximum distance (diameter of point cloud)
+    max_distance = np.max(dist_matrix)
+
+    return float(max_distance)
+
+def compute_boundary_to_com_distance(boundary_curve, com_point):
+    """
+    Compute minimum Euclidean distance from boundary curve to commissure point.
+    Safe against empty arrays.
+    """
+
+    if boundary_curve is None or com_point is None:
+        return None
+
+    boundary_curve = np.asarray(boundary_curve)
+
+    if boundary_curve.size == 0:
+        return None
+
+    com_point = np.asarray(com_point)
+
+    distances = np.linalg.norm(boundary_curve - com_point, axis=1)
+
+    if distances.size == 0:
+        return None
+
+    return float(np.min(distances))
+
+
 from scipy.spatial import cKDTree
 import numpy as np
 from skimage.measure import label, regionprops
@@ -1129,16 +1184,16 @@ def clean_boundary_from_mask(mask, aortic_wall_points, min_dist, commissures, ce
     mercedes_mask = create_mercedes_mask(mask, commissures, center)
     
     # Print some info
-    print(f"[Debug]  Mercedes mask shape = {mercedes_mask.shape}")
-    print(f"[Debug]  Mercedes mask min = {mercedes_mask.min()}, max = {mercedes_mask.max()}")
-    print(f"[Debug] Non-zero pixels = {np.count_nonzero(mercedes_mask)}")
+    # print(f"[Debug]  Mercedes mask shape = {mercedes_mask.shape}")
+    # print(f"[Debug]  Mercedes mask min = {mercedes_mask.min()}, max = {mercedes_mask.max()}")
+    # print(f"[Debug] Non-zero pixels = {np.count_nonzero(mercedes_mask)}")
     # Apply the Mercedes mask to the input mask
     filtered_mask = (mask > 0) & (mercedes_mask > 0)
     
     # Label the connected components
     labeled = label(filtered_mask)
     if labeled.max() == 0:
-        print("[Info] Mask is empty after applying the Mercedes mask, returning empty array.")
+        # print("[Info] Mask is empty after applying the Mercedes mask, returning empty array.")
         return np.zeros((0, 2), dtype=int), mask
 
     # Largest connected component
@@ -1148,7 +1203,7 @@ def clean_boundary_from_mask(mask, aortic_wall_points, min_dist, commissures, ce
     # Final hard Mercedes filtering (row, col indexing!)
     coords = coords[mercedes_mask[coords[:, 0], coords[:, 1]] > 0]
     
-    print(f"[Info] Largest component has {len(coords)} points before filtering.")
+    # print(f"[Info] Largest component has {len(coords)} points before filtering.")
 
     # # Filter based on distance to aortic wall points
     if aortic_wall_points is not None and len(aortic_wall_points) > 0:
@@ -1157,8 +1212,8 @@ def clean_boundary_from_mask(mask, aortic_wall_points, min_dist, commissures, ce
         mask_indices = dists < min_dist
         removed_count = np.sum(mask_indices)
         coords = coords[~mask_indices]
-        print(f"[Info] Removed {removed_count} points too close to aortic wall.")
-        print(f"[Info] Remaining points after filtering: {len(coords)}")
+        # print(f"[Info] Removed {removed_count} points too close to aortic wall.")
+        # print(f"[Info] Remaining points after filtering: {len(coords)}")
 
     return coords, mercedes_mask
 
@@ -1323,7 +1378,7 @@ def create_mercedes_mask(image, commissure_points, center_point, line_thickness=
 
     # Loop through each commissure and draw a thick line
     for commissure_coords in commissure_points:
-        print(commissure_coords)
+        # print(commissure_coords)
         x1, y1 = commissure_coords  # Swap x and y
         x2, y2 = center_point  # Swap x and y
         
@@ -2109,3 +2164,28 @@ def build_leaflet_surface(
 
     return surf, eval_pts, mask_3d
 
+def update_boundary_shrink_state(boundary, state_dict, name, slice_idx, threshold=20):
+    """
+    Detect first transition from > threshold to < threshold.
+    Updates state_dict in place.
+    """
+
+    if boundary is None or len(boundary) < 2:
+        return None
+
+    length = compute_max_pairwise_distance(boundary)
+
+    # If already detected → stop
+    if state_dict[name]["event_slice"] is not None:
+        return length
+
+    # Mark that we have seen it open
+    if length > threshold:
+        state_dict[name]["was_above"] = True
+
+    # Detect crossing
+    if length < threshold and state_dict[name]["was_above"]:
+        state_dict[name]["event_slice"] = slice_idx
+        print(f"[EVENT] {name} shrank below {threshold} at slice {slice_idx}")
+
+    return length

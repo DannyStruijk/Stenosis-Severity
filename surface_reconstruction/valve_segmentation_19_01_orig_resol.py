@@ -295,7 +295,7 @@ from skimage.filters import gaussian
 # ------------------------------------- INITIALIZING VARIABLES FOR ACTIVE CONTOURS ------------------
 
 alpha = 0.01   # elasticity (snake tension)
-beta = 0.5     # rigidity (smoothness)
+beta = 0.1     # rigidity (smoothness)
 gamma = 0.01   # step size
 total_iterations = 20
 scale_factor = 4
@@ -318,10 +318,11 @@ for slice_nr in range(z_min_int, z_max_int + 1):
     
     image_pre = reoriented_volume[slice_nr, :, :]
     dicom_slice = reoriented_non_clipped[slice_nr, :, :]
+
  
     img = image_pre
     img = img / img.max()
-    new_image= img
+    new_image= gaussian(img, sigma = 3)
 
     # Initialize snake
     if slice_nr == z_min_int:
@@ -338,7 +339,7 @@ for slice_nr in range(z_min_int, z_max_int + 1):
             beta=beta,
             gamma=gamma,
             w_edge=1,
-            w_line=10,
+            w_line=20,
             max_num_iter=1,
             boundary_condition="periodic"
         )
@@ -394,6 +395,7 @@ for slice_nr in range(z_max + 1, z_max + 12):  # Process slices from z_max + 1 t
 
     img = image_pre
     img = img / img.max()
+    img = gaussian(img, sigma = 2)
 
     # Initialize snake for the new slices
     if slice_nr == z_max + 1:
@@ -616,6 +618,7 @@ import functions
 # Parameters
 alpha, beta, gamma = 0.1, 0.1, 0.01
 total_iterations = 20
+BOUNDARY_THRESHOLD = 22  # can change later
 
 # Leaflet-specific storage
 LCC_data, RCC_data, NCC_data = {}, {}, {}
@@ -646,12 +649,21 @@ base_commissure = {
     "ncc_rcc": ncc_rcc_com
 }
 
+# Boundary shrink detection state
+boundary_event_state = {
+    "lcc_ncc": {"was_above": False, "event_slice": None},
+    "rcc_lcc": {"was_above": False, "event_slice": None},
+    "ncc_rcc": {"was_above": False, "event_slice": None},
+}
+
+
 commissure_points = [rcc_lcc_com, lcc_ncc_com, ncc_rcc_com]
 
 mercedes_star = False
 
 # Loop over slices
 for slice_nr, slice_info in slice_data.items():
+    print("----------------------------------------")
     print(f"Processing slice {slice_nr}...")
 
     # --- Upscale slice for visualization / mask ---
@@ -681,6 +693,7 @@ for slice_nr, slice_info in slice_data.items():
         commissure_points['rcc_lcc'],
         commissure_points['ncc_rcc']
     ]
+    
     init_mercedes = functions.create_mercedes_mask(reoriented_slice, init_coms, center, line_thickness = 8)
     print(init_mercedes.shape)
     slice_clipped = reoriented_slice.copy()
@@ -714,7 +727,7 @@ for slice_nr, slice_info in slice_data.items():
         # Calculate the threshold for the first slice based on the 10th percentile
         roi_pixels_blurred = roi_image_blurred[roi_mask]  # Use blurred ROI pixels
         percentile_10th = np.percentile(roi_pixels_blurred, 15)  # 10th percentile as threshold
-        print(f"Calculated 10th Percentile Threshold for Slice {slice_nr}: {percentile_10th:.2f}")
+        # print(f"Calculated 10th Percentile Threshold for Slice {slice_nr}: {percentile_10th:.2f}")
     else:
         # Use the previously calculated threshold for all other slices
         percentile_10th = globals().get("percentile_10th", 0)
@@ -846,7 +859,7 @@ for slice_nr, slice_info in slice_data.items():
             cleaned_ncc_rcc_boundary,
             slice_nr,
             mercedes_mask,
-            plot=True
+            plot=False
             )
     
     commissure_names = ["lcc_ncc", "rcc_lcc", "ncc_rcc"]
@@ -864,9 +877,9 @@ for slice_nr, slice_info in slice_data.items():
         
     # Case A — All 3 found this slice → use them & update prev_intersections
     if all(found_this_slice.values()):
-        print(f"Slice {slice_nr}: All 3 intersections found. Using them and updating previous intersections.")
+        # print(f"Slice {slice_nr}: All 3 intersections found. Using them and updating previous intersections.")
         for name in commissure_names:
-            print(f"  Using intersection for {name} from this slice.")
+            # print(f"  Using intersection for {name} from this slice.")
             prev_intersections[name] = intersections[name]
             commissure_indices[name] = functions.closest_contour_point(
                 intersections[name],
@@ -875,7 +888,7 @@ for slice_nr, slice_info in slice_data.items():
     
     # Case B — Some intersections missing, use available ones and previous for missing ones
     elif have_full_prev:
-        print(f"Slice {slice_nr}: Missing intersections, but previous intersections are available. Using previous intersections.")
+        # print(f"Slice {slice_nr}: Missing intersections, but previous intersections are available. Using previous intersections.")
         for name in commissure_names:
             if intersections.get(name) is not None:  # If intersection is found, use it
                 print(f"  Using intersection for {name} from this slice.")
@@ -884,7 +897,7 @@ for slice_nr, slice_info in slice_data.items():
                     aortic_wall_contour
                 )
             else:  # Otherwise, use previous intersection
-                print(f"  Using previous intersection for {name}.")
+                # print(f"  Using previous intersection for {name}.")
                 commissure_indices[name] = functions.closest_contour_point(
                     prev_intersections[name],
                     aortic_wall_contour
@@ -893,7 +906,7 @@ for slice_nr, slice_info in slice_data.items():
     # Case C — Early slices where we do NOT have all 3 prev intersections yet
     # → fall back per-intersection to base commissures
     else:
-        print(f"Slice {slice_nr}: Not all intersections found and no full previous set. Falling back to base commissures for missing intersections.")
+        # print(f"Slice {slice_nr}: Not all intersections found and no full previous set. Falling back to base commissures for missing intersections.")
         for name in commissure_names:
             # Print the fallback logic for each commissure
             fallback = intersections.get(name) or prev_intersections.get(name) or base_commissure[name]
@@ -909,7 +922,7 @@ for slice_nr, slice_info in slice_data.items():
                 aortic_wall_contour
             )
 
-    print(f"{slice_nr} intersections: ", intersections)
+    # print(f"{slice_nr} intersections: ", intersections)
 
     # Create COM-to-COM segments
     seg_c2c = {
@@ -924,6 +937,33 @@ for slice_nr, slice_info in slice_data.items():
         else:
             return np.array(point)  # copy as array
     
+    # ----------------- EVENT DETECTION ------------------
+    # This segment calculates when the boundary becomes smaller than the set threshold, but was once larger than this threshold
+    length_lcc = functions.update_boundary_shrink_state(
+    cleaned_lcc_ncc_boundary,
+    boundary_event_state,
+    "lcc_ncc",
+    slice_nr,
+    threshold=BOUNDARY_THRESHOLD
+    )
+    
+    length_rcc = functions.update_boundary_shrink_state(
+        cleaned_rcc_lcc_boundary,
+        boundary_event_state,
+        "rcc_lcc",
+        slice_nr,
+        threshold=BOUNDARY_THRESHOLD
+    )
+    
+    length_ncc = functions.update_boundary_shrink_state(
+        cleaned_ncc_rcc_boundary,
+        boundary_event_state,
+        "ncc_rcc",
+        slice_nr,
+        threshold=BOUNDARY_THRESHOLD
+    )
+    
+    
     # Store results with flat keys safely
     LCC_data[slice_nr] = {
         "mask": lcc_ncc_mask.copy(),
@@ -933,7 +973,9 @@ for slice_nr, slice_info in slice_data.items():
         "aortic_wall_contour": aortic_wall_contour.copy(),
         "lcc_ncc_com": safe_copy(intersections.get("lcc_ncc"), prev_intersections.get("lcc_ncc")),
         "rcc_lcc_com": safe_copy(intersections.get("rcc_lcc"), prev_intersections.get("rcc_lcc")),
-        "height": slice_nr
+        "height": slice_nr,
+        "boundary_length": length_lcc,
+        "shrink_event_slice": boundary_event_state["lcc_ncc"]["event_slice"],
     }
     
     RCC_data[slice_nr] = {
@@ -943,7 +985,9 @@ for slice_nr, slice_info in slice_data.items():
         "com_to_com": seg_c2c["RCC"].copy(),
         "rcc_lcc_com": safe_copy(intersections.get("rcc_lcc"), prev_intersections.get("rcc_lcc")),
         "ncc_rcc_com": safe_copy(intersections.get("ncc_rcc"), prev_intersections.get("ncc_rcc")),
-        "height": slice_nr
+        "height": slice_nr,
+        "boundary_length": length_rcc,
+        "shrink_event_slice": boundary_event_state["rcc_lcc"]["event_slice"],
     }
     
     NCC_data[slice_nr] = {
@@ -953,16 +997,22 @@ for slice_nr, slice_info in slice_data.items():
         "com_to_com": seg_c2c["NCC"].copy(),
         "ncc_rcc_com": safe_copy(intersections.get("ncc_rcc"), prev_intersections.get("ncc_rcc")),
         "lcc_ncc_com": safe_copy(intersections.get("lcc_ncc"), prev_intersections.get("lcc_ncc")),
-        "height": slice_nr
+        "height": slice_nr,
+        "boundary_length": length_ncc,
+        "shrink_event_slice": boundary_event_state["ncc_rcc"]["event_slice"],
     }
     
     num_zeros = np.sum(slice_clipped == 0)
-    num_nans = np.sum(np.isnan(slice_clipped))
+    num_nans = np.sum(np.isnan(slice_clipped))   
     
-    print(f"Number of zero pixels in slice_clipped: {num_zeros}")
-    print(f"Number of NaNs in slice_clipped: {num_nans}")
-    print("Min/max slice_clipped:", slice_clipped.min(), slice_clipped.max())
-    print("Unique values inside mercedes:", np.unique(slice_clipped[init_mercedes == 1]))
+  
+    #optionalchecks
+    # print(f"Number of zero pixels in slice_clipped: {num_zeros}")
+    # print(f"Number of NaNs in slice_clipped: {num_nans}")
+    # print("Min/max slice_clipped:", slice_clipped.min(), slice_clipped.max())
+    # print("Unique values inside mercedes:", np.unique(slice_clipped[init_mercedes == 1]))
+    
+    
     # Optional visualization (COM-to-COM segments + boundaries)
     plt.figure(figsize=(6, 6))
     plt.imshow(slice_clipped, cmap='gray', origin='upper')
@@ -978,10 +1028,15 @@ for slice_nr, slice_info in slice_data.items():
     plt.legend()
     plt.show()
     # Print the size of the boundaries
-    print(f"Size of LCC-NCC Boundary (Slice {slice_nr}):", cleaned_lcc_ncc_boundary.shape)
-    print(f"Size of RCC-LCC Boundary (Slice {slice_nr}):", cleaned_rcc_lcc_boundary.shape)
-    print(f"Size of NCC-RCC Boundary (Slice {slice_nr}):", cleaned_ncc_rcc_boundary.shape)
+    # print(f"Size of LCC-NCC Boundary (Slice {slice_nr}):", cleaned_lcc_ncc_boundary.shape)
+    # print(f"Size of RCC-LCC Boundary (Slice {slice_nr}):", cleaned_rcc_lcc_boundary.shape)
+    # print(f"Size of NCC-RCC Boundary (Slice {slice_nr}):", cleaned_ncc_rcc_boundary.shape)
     
+# %% ----------------EXTRACT LEAFLET-SPECIFIC CENTER HEIGHTS ---------------
+
+lcc_ncc_height = LCC_data[max(LCC_data.keys())]["shrink_event_slice"]
+rcc_lcc_height = RCC_data[max(RCC_data.keys())]["shrink_event_slice"]
+ncc_rcc_height = NCC_data[max(NCC_data.keys())]["shrink_event_slice"]
 
 
 
@@ -994,6 +1049,7 @@ ncc_boundaries = []
 heights = []  # Corresponding heights for each boundary
 
 for slice_nr in slice_data:
+
     print(f"Processing slice {slice_nr}...")
 
     # Get the boundary data from your existing dictionary (RCC_data, LCC_data, NCC_data)
@@ -1079,25 +1135,25 @@ hinge_z_values = [
 
 min_hinge_z = min(hinge_z_values)
 
-center_height = int((lcc_rotated[3][0] + min_hinge_z)/2) 
+# center_height = int((lcc_rotated[3][0] + min_hinge_z)/2) 
 
 print("Post-processing the found boundaries so that they can be converted into 3D objects..")
 
 # --- Process RCC to LCC Boundary ---
 rcc_lcc_boundary_3d = functions.create_3d_mask_from_boundary_points(RCC_data, calc_volume.shape, "rcc_lcc_boundary")
-dilated_mask_3d_rcc_lcc = binary_dilation(rcc_lcc_boundary_3d, cube(3))  # Adjust the cube size as needed
+dilated_mask_3d_rcc_lcc = binary_dilation(rcc_lcc_boundary_3d, cube(5))  # Adjust the cube size as needed
 rcc_lcc_boundary_smooth = gaussian_filter(dilated_mask_3d_rcc_lcc.astype(np.float32), sigma=gaussian_blur)  
 file_type_rcc_lcc = "rcc_lcc_boundary"
 
 # --- Process NCC to RCC Boundary ---
 ncc_rcc_boundary_3d = functions.create_3d_mask_from_boundary_points(NCC_data, calc_volume.shape, "ncc_rcc_boundary")
-dilated_mask_3d_ncc_rcc = binary_dilation(ncc_rcc_boundary_3d, cube(3))  # Adjust the cube size as needed
+dilated_mask_3d_ncc_rcc = binary_dilation(ncc_rcc_boundary_3d, cube(5))  # Adjust the cube size as needed
 ncc_rcc_boundary_smooth = gaussian_filter(dilated_mask_3d_ncc_rcc.astype(np.float32), sigma=gaussian_blur)  
 file_type_ncc_rcc = "ncc_rcc_boundary"
 
 # --- Process LCC to NCC Boundary ---
 lcc_ncc_boundary_3d = functions.create_3d_mask_from_boundary_points(LCC_data, calc_volume.shape, "lcc_ncc_boundary")
-dilated_mask_3d_lcc_ncc = binary_dilation(lcc_ncc_boundary_3d, cube(3))  # Adjust the cube size as needed
+dilated_mask_3d_lcc_ncc = binary_dilation(lcc_ncc_boundary_3d, cube(5))  # Adjust the cube size as needed
 lcc_ncc_boundary_smooth = gaussian_filter(dilated_mask_3d_lcc_ncc.astype(np.float32), sigma=gaussian_blur)  
 file_type_lcc_ncc = "lcc_ncc_boundary"
 
@@ -1147,14 +1203,14 @@ dilation_structure = cube(3)  # optional, remove if you don't want to thicken
 # --- Process RCC to LCC COM to COM Boundary ---
 rcc_wall_3d = functions.create_3d_mask_from_boundary_points(RCC_data, calc_volume.shape, "com_to_com")
 rcc_wall_3d = binary_closing(rcc_wall_3d, structure=closing_structure)
-rcc_wall_3d = binary_dilation(rcc_wall_3d, cube(3))
+rcc_wall_3d = binary_dilation(rcc_wall_3d, closing_structure)
 rcc_wall_smooth = gaussian_filter(rcc_wall_3d.astype(np.float32), sigma=gaussian_blur)  
 file_type_rcc_lcc_com_to_com = "rcc_lcc_com_to_com"
 
 # --- Process NCC to RCC COM to COM Boundary ---
 ncc_wall_3d = functions.create_3d_mask_from_boundary_points(NCC_data, calc_volume.shape, "com_to_com")
 ncc_wall_3d = binary_closing(ncc_wall_3d, structure=closing_structure)
-ncc_wall_3d = binary_dilation(ncc_wall_3d, cube(3))
+ncc_wall_3d = binary_dilation(ncc_wall_3d, closing_structure)
 ncc_wall_smooth = gaussian_filter(ncc_wall_3d.astype(np.float32), sigma=gaussian_blur)  
 file_type_ncc_rcc_com_to_com = "ncc_rcc_com_to_com"
 
@@ -1172,7 +1228,7 @@ import functions
 print("Connecting the aortic leaflets to the aortic wall...")
 
 
-print("The z-index which is the cutoff for the boundary is now: ", center_height)
+# print("The z-index which is the cutoff for the boundary is now: ", center_height)
 keep_below_center=False
 
 # Expand the RCC-LCC leaflet towards the aortic wall
@@ -1180,7 +1236,7 @@ combined_rcc_lcc = rcc_wall_3d | lcc_wall_3d
 rcc_lcc_grown, _= functions.grow_boundary(
     dilated_mask_3d_rcc_lcc,
     combined_rcc_lcc,
-    center_height=center_height,
+    center_height=rcc_lcc_height,
     line_dilate=2,
     gaussian_blur=gaussian_blur,
     keep_below_center=keep_below_center
@@ -1191,7 +1247,7 @@ combined_ncc_rcc = ncc_wall_3d | rcc_wall_3d
 ncc_rcc_grown, _ = functions.grow_boundary(
     dilated_mask_3d_ncc_rcc,
     combined_ncc_rcc,
-    center_height=center_height,
+    center_height=ncc_rcc_height,
     line_dilate=2,
     gaussian_blur=gaussian_blur,
     keep_below_center=keep_below_center
@@ -1202,7 +1258,7 @@ combined_lcc_ncc = lcc_wall_3d | ncc_wall_3d
 lcc_ncc_grown, _ = functions.grow_boundary(
     dilated_mask_3d_lcc_ncc,
     combined_lcc_ncc,
-    center_height=center_height,
+    center_height=lcc_ncc_height,
     line_dilate=2,
     gaussian_blur=gaussian_blur,
     keep_below_center=keep_below_center
@@ -1217,9 +1273,9 @@ from scipy.ndimage import binary_erosion
 import numpy as np
 
 # Grab the center slice first
-rcc_lcc_center_slice = rcc_lcc_boundary_3d[center_height]
-ncc_rcc_center_slice = ncc_rcc_boundary_3d[center_height]
-lcc_ncc_center_slice = lcc_ncc_boundary_3d[center_height]
+rcc_lcc_center_slice = rcc_lcc_boundary_3d[rcc_lcc_height]
+ncc_rcc_center_slice = ncc_rcc_boundary_3d[ncc_rcc_height]
+lcc_ncc_center_slice = lcc_ncc_boundary_3d[lcc_ncc_height]
 
 # Boundaries at center slice
 boundaries = [
@@ -1242,7 +1298,7 @@ for name, mask_slice, color in boundaries:
 
 plt.xlabel("X")
 plt.ylabel("Y")
-plt.title(f"Leaflet boundaries at slice z = {center_height}")
+# plt.title(f"Leaflet boundaries at slice z = {center_height}")
 
 plt.gca().invert_yaxis()
 plt.axis("equal")
@@ -1404,24 +1460,24 @@ np.save(os.path.join(output_dir, "lcc_wall.npy"), lcc_wall_3d)
 np.save(os.path.join(output_dir, "ncc_wall.npy"), ncc_wall_3d)
 np.save(os.path.join(output_dir, "rcc_wall.npy"), rcc_wall_3d)
 
-slice_to_save = center_height  # or min(LCC_data.keys()), etc.
+# slice_to_save = center_height  # or min(LCC_data.keys()), etc.
 
 # Make sure all commissures include the z-coordinate
 lcc_landmarks_to_save = np.array([
-    [center_height, *LCC_data[slice_to_save]["lcc_ncc_com"]],   # commissure1
-    [center_height, *LCC_data[slice_to_save]["rcc_lcc_com"]],   # commissure2
+    [lcc_ncc_height, *LCC_data[lcc_ncc_height]["lcc_ncc_com"]],   # commissure1
+    [rcc_lcc_height, *LCC_data[rcc_lcc_height]["rcc_lcc_com"]],   # commissure2
     lcc_rotated[2]                                  # hinge point (already z,y,x)
 ])
 
 rcc_landmarks_to_save = np.array([
-    [center_height, *RCC_data[slice_to_save]["rcc_lcc_com"]],
-    [center_height, *RCC_data[slice_to_save]["ncc_rcc_com"]],
+    [rcc_lcc_height, *RCC_data[rcc_lcc_height]["rcc_lcc_com"]],
+    [ncc_rcc_height, *RCC_data[ncc_rcc_height]["ncc_rcc_com"]],
     rcc_rotated[2]
 ])
 
 ncc_landmarks_to_save = np.array([
-    [center_height, *NCC_data[slice_to_save]["ncc_rcc_com"]],
-    [center_height, *NCC_data[slice_to_save]["lcc_ncc_com"]],
+    [ncc_rcc_height, *NCC_data[ncc_rcc_height]["ncc_rcc_com"]],
+    [lcc_ncc_height, *NCC_data[lcc_ncc_height]["lcc_ncc_com"]],
     ncc_rotated[2]
 ])
 
@@ -1445,13 +1501,13 @@ lcc_com1 = lcc_landmarks[0]
 lcc_com2 = lcc_landmarks[1]
 lcc_hinge = lcc_landmarks[2]
 
-# Now we are going to use the center height hard coded. Should be extracted from the main script.
-lcc_com1[0] = center_height
-lcc_com2[0] = center_height
+# # Now we are going to use the center height hard coded. Should be extracted from the main script.
+# lcc_com1[0] = lcc
+# lcc_com2[0] = center_height
 
 # Convert both masks
-lcc_ncc_points = functions.mask_to_pointcloud(lcc_ncc_slice, center_height)
-rcc_lcc_points = functions.mask_to_pointcloud(rcc_lcc_slice, center_height)
+lcc_ncc_points = functions.mask_to_pointcloud(lcc_ncc_slice, lcc_ncc_height)
+rcc_lcc_points = functions.mask_to_pointcloud(rcc_lcc_slice, rcc_lcc_height)
 
 # Fit a spline through the points so that is less jagged and more smooth object
 lcc_ncc_points = functions.fit_spline(lcc_ncc_points, smoothing = 20)
@@ -1508,6 +1564,11 @@ out_dir = r"H:\DATA\Afstuderen\2.Code\Stenosis-Severity-backup\temp"
 output_dir = rf"H:\DATA\Afstuderen\3.Data\output_valve_segmentation"
 
 leaflets = ["lcc", "ncc", "rcc"]
+leaflet_height_map = {
+    "lcc": lcc_ncc_height,
+    "ncc": ncc_rcc_height,
+    "rcc": rcc_lcc_height
+}
 
 # -------------------- FUNCTIONAL EXPORT LOOP --------------------
 for leaflet in leaflets:
@@ -1529,9 +1590,12 @@ for leaflet in leaflets:
     com1, com2, hinge = landmarks[0], landmarks[1], landmarks[2]
     
     # Center height
-    com1[0] = center_height
-    com2[0] = center_height
-    print(f"Adjusted commissure heights to {center_height}")
+    leaflet_height = leaflet_height_map[leaflet]
+    
+    com1[0] = leaflet_height
+    com2[0] = leaflet_height
+    
+    print(f"Adjusted commissure heights to {leaflet_height}")
     
     # ---------------- Load boundary slices ----------------
     if leaflet == "lcc":
@@ -1550,14 +1614,14 @@ for leaflet in leaflets:
         slice_path = os.path.join(out_dir, slice_file)
         print(f"Loading boundary slice ({pair_name}) from: {slice_path}")
         mask_slice = np.load(slice_path)
-        pts = functions.mask_to_pointcloud(mask_slice, center_height)
+        pts = functions.mask_to_pointcloud(mask_slice, leaflet_height)
         print(f"Point cloud size for {pair_name}: {pts.shape[0]}")
         
         if pts.shape[0] <= 1:
             print(f"[WARNING] Not enough points to fit spline for {pair_name}, using raw points")
             pts_smooth = pts
         else:
-            pts_smooth = functions.fit_spline(pts, smoothing=20)
+            pts_smooth = functions.fit_spline(pts, smoothing=40)
             
         point_clouds.append(pts_smooth)
 
@@ -1609,7 +1673,7 @@ for leaflet in leaflets:
     np.save(os.path.join(output_dir, f"{leaflet}_wall.npy"), wall_mask)
     np.save(os.path.join(out_dir, f"{leaflet}_landmarks.npy"), landmarks)
     print(f"Wall and landmarks saved for {leaflet.upper()}")
-
+, 
 
 
 

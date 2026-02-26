@@ -43,9 +43,9 @@ ncc_rcc_points = functions.mask_to_pointcloud(ncc_rcc_slice, center_height)
 
 
 # Fit a spline through the points so that is less jagged and more smooth object
-lcc_ncc_points = functions.fit_spline(lcc_ncc_points, smoothing = 10)
-rcc_lcc_points = functions.fit_spline(rcc_lcc_points, smoothing = 10)
-ncc_rcc_points = functions.fit_spline(ncc_rcc_points, smoothing = 10)
+lcc_ncc_points = functions.fit_spline(lcc_ncc_points, smoothing = 50)
+rcc_lcc_points = functions.fit_spline(rcc_lcc_points, smoothing = 50)
+ncc_rcc_points = functions.fit_spline(ncc_rcc_points, smoothing = 50)
 
 rcc_lcc_points = rcc_lcc_points[::-1]
 
@@ -230,7 +230,7 @@ mask_3d = functions.create_3d_mask_from_points(eval_pts, volume_shape, thickness
 num_true = np.sum(mask_3d)
 print(num_true)
 mask_3d = binary_closing(mask_3d, structure=closing_structure)
-# mask_3d = binary_dilation(mask_3d, closing_structure)
+mask_3d = binary_dilation(mask_3d, closing_structure)
 mask_3d_smooth = gaussian_filter(mask_3d.astype(np.float32), sigma = 1.5)
 
 pixel_spacing = (0.4, 0.35, 0.35)
