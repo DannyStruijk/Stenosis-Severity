@@ -9,11 +9,15 @@ import functions
 import numpy as np
 import pydicom
 import matplotlib.pyplot as plt
-from skimage import exposure
-from scipy.ndimage import binary_erosion
 import os
 from scipy.ndimage import gaussian_filter
 from skimage.morphology import binary_dilation, cube, binary_closing
+from skimage.segmentation import active_contour
+from skimage.morphology import disk, dilation, skeletonize
+from skimage.draw import polygon2mask
+from skimage.filters import gaussian
+from scipy.ndimage import binary_erosion
+
 
 # %% ----------------------------------------PATIENT PATHS & SELECTION OF PATIENT -----------------------------
 
@@ -113,6 +117,7 @@ del raw_volume_hu
 del raw_volume
 
 # %%------------------------------------------REORIENTATION ---------------------------------------
+
 from skimage.transform import rescale
 
 # in this code the the anisotropic vxel is first concerted to isotropic voxel with the pixel spacing
@@ -120,8 +125,8 @@ from skimage.transform import rescale
 
 # Calculating the vector perpendicualr to the annulus
 annular_normal = functions.get_annular_normal(patient_nr)
-old_spacing = np.array([0.4, 0.35, 0.35])
-target_spacing = 0.35
+old_spacing = np.array(pixel_spacing)
+target_spacing = pixel_spacing_x
 
 zoom_factors = old_spacing / target_spacing
 
@@ -220,10 +225,7 @@ print(f"Minimum z-coordinate across all cusps: {z_min}")
 print(f"Maximum z-coordinate across all cusps: {z_max}")
 
 
-
 # %%% ------------------------------------------ PLOTTING SINGLE SLICE ---------------------------
-
-# from skimage import exposure
 
 # # Slice index (X)
 # slice_idx = 50
@@ -250,7 +252,7 @@ print(f"Maximum z-coordinate across all cusps: {z_max}")
 
 
 
-#%%  ------------------------------------------- PLOTTING ENTIRE FIGURE  ------------------------------
+# #%%  ------------------------------------------- PLOTTING ENTIRE FIGURE  ------------------------------
 
 # # Loop over slice indices
 # for slice_idx in range(z_min,z_max+10):  # or any range you want
@@ -270,7 +272,6 @@ print(f"Maximum z-coordinate across all cusps: {z_max}")
 #         if z == slice_idx:  # Only plot landmarks on this slice
 #             plt.scatter(x, y, c='r', s=1)  
             
-    
 #     # Draw and pause
 #     plt.draw()
 #     plt.pause(0.1)  # pause 2 seconds
@@ -288,7 +289,6 @@ from skimage.filters import threshold_otsu
 from skimage.draw import polygon2mask
 from skimage.filters import gaussian
 
-
 # To find the whole aortic wall the active contours method is applied to each slice
 # Then, each found wall is accumulated with the previous one to create an aortic valve
 
@@ -298,7 +298,6 @@ alpha = 0.01   # elasticity (snake tension)
 beta = 0.1     # rigidity (smoothness)
 gamma = 0.01   # step size
 total_iterations = 20
-scale_factor = 4
 
 z_min_int = int(np.floor(z_min))
 z_max_int = int(np.ceil(z_max))
@@ -441,9 +440,7 @@ for slice_nr in range(z_max + 1, z_max + 12):  # Process slices from z_max + 1 t
 
 # %% ------------------------------------------ IDENTIFICATION OF CALCIFICATION -------------------------
 
-
 from skimage.morphology import binary_erosion, disk
-
 
 # Create an empty mask with the same dimensions as the original image
 masked_valve = np.zeros(
@@ -483,9 +480,7 @@ for slice_nr in range(num_slices):
         plt.subplot(1, 2, 1)
         plt.imshow(roi_mask, cmap='gray')
         plt.title("ROI Mask Before Erosion")
-        plt.axis('off')
-        
-       
+        plt.axis('off')    
         plt.tight_layout()
         plt.show()
                 
@@ -499,19 +494,7 @@ for slice_nr in range(num_slices):
         
         print(f"Slice {slice_nr}: median intensity inside ROI = {median_intensity:.2f}")
         
-        # Compute lower and upper percentiles
-        lower = np.percentile(roi_values, 25)   # remove bottom 5%
-        upper = np.percentile(roi_values, 95)  # remove top 5%
-        
-        # Keep only values within 5th–95th percentile
-        soft_tissue_values = roi_values[(roi_values >= lower) & (roi_values <= upper)]
-        
-        
-        if slice_nr==z_min:
-            # Compute mean and std of soft tissue - this was done previously this way, now percentile is used
-            # mean_val = soft_tissue_values.mean()
-            # std_val = soft_tissue_values.std()
-        
+        if slice_nr==z_min: 
             # Threshold for calcification: e.g., mean + 3*std
             calc_threshold =  np.percentile(roi_values, 99)  # upper bound used as threshold   
             print(f"Patient {patient_nr}: Threshold for calcification  = {calc_threshold:.2f}")
@@ -553,7 +536,6 @@ for slice_nr in range(num_slices):
         masked_valve[slice_nr] = 0
 
 # # (optional) Visualization fo the ROI
-
 for z in range(z_min, z_max + 1):
     if slice_nr not in slice_data:
         print(f"Warning: Slice {slice_nr} not found in slice_data")
@@ -604,21 +586,16 @@ plt.show()
 # plt.close()
 
 
-
 # %%-------------------------------  EXTRACTION OF THE LEAFET BOUNDARIES ---------------------------
 
 from skimage.morphology import binary_erosion
 from scipy.ndimage import gaussian_filter
-from skimage.transform import rescale
-from skimage.draw import polygon2mask
-import matplotlib.pyplot as plt
-import numpy as np
-import functions
+
 
 # Parameters
 alpha, beta, gamma = 0.1, 0.1, 0.01
 total_iterations = 20
-BOUNDARY_THRESHOLD = 22  # can change later
+BOUNDARY_THRESHOLD = 25  # can change later
 
 # Leaflet-specific storage
 LCC_data, RCC_data, NCC_data = {}, {}, {}
@@ -1159,10 +1136,6 @@ file_type_lcc_ncc = "lcc_ncc_boundary"
 
 # %% showcasing the found boundaries
 
-import numpy as np
-import matplotlib.pyplot as plt
-from skimage.morphology import cube
-
 # Assuming your 3D boundary masks exist:
 # lcc_ncc_boundary_3d, rcc_lcc_boundary_3d, ncc_rcc_boundary_3d
 
@@ -1191,10 +1164,9 @@ plt.show()
 
 # %% ----------------------------- AORTIC WALL ----------------------------
 
-print("Post-processing the aortic wall so that it can be converted into 3D objects..")
-
 from scipy.ndimage import binary_closing
-import functions
+
+print("Post-processing the aortic wall so that it can be converted into 3D objects..")
 
 # Structuring elements
 closing_structure = cube(5)   # adjust if holes are bigger
@@ -1223,10 +1195,8 @@ file_type_lcc_ncc_com_to_com = "lcc_ncc_com_to_com"
 
 
 # %%%  --------------------- CONNECTING THE BOUNDARIES TO THE AORTIC WALL --------------------------
-import functions
 
 print("Connecting the aortic leaflets to the aortic wall...")
-
 
 # print("The z-index which is the cutoff for the boundary is now: ", center_height)
 keep_below_center=False
@@ -1269,8 +1239,8 @@ lcc_ncc_grown, _ = functions.grow_boundary(
 
 # Previously it was done with the raw boundaries, but we need more point for the spline fitting
 # This is more robust 
+
 from scipy.ndimage import binary_erosion
-import numpy as np
 
 # Grab the center slice first
 rcc_lcc_center_slice = rcc_lcc_boundary_3d[rcc_lcc_height]
@@ -1312,8 +1282,8 @@ plt.show()
 
 print("Reorienting the leaflet boundaries from the python space to patient space...")
 
-# del clipped_dicom
-# del gradient_volume
+del clipped_dicom
+del gradient_volume
 # del calc_volume
 
 ## The objects are made in the reoriented space. Now reorient it back so it is in the patient space
@@ -1561,13 +1531,14 @@ print("Creating the leaflet caps for all leaflets...")
 
 # -------------------- SETTINGS --------------------
 out_dir = r"H:\DATA\Afstuderen\2.Code\Stenosis-Severity-backup\temp"
-output_dir = rf"H:\DATA\Afstuderen\3.Data\output_valve_segmentation"
+data_path = r"H:\DATA\Afstuderen\3.Data\output_valve_segmentation"
+output_path = rf"H:\DATA\Afstuderen\3.Data\output_valve_segmentation\{patient_nr}\patient_space"
 
 leaflets = ["lcc", "ncc", "rcc"]
-leaflet_height_map = {
-    "lcc": lcc_ncc_height,
-    "ncc": ncc_rcc_height,
-    "rcc": rcc_lcc_height
+boundary_height_map = {
+    "lcc_ncc_boundary_slice.npy": lcc_ncc_height,
+    "rcc_lcc_boundary_slice.npy": rcc_lcc_height,
+    "ncc_rcc_boundary_slice.npy": ncc_rcc_height
 }
 
 # -------------------- FUNCTIONAL EXPORT LOOP --------------------
@@ -1576,7 +1547,7 @@ for leaflet in leaflets:
     
     # ---------------- Load landmarks and wall ----------------
     landmarks_path = os.path.join(out_dir, f"{leaflet}_landmarks.npy")
-    wall_path = os.path.join(output_dir, f"{leaflet}_wall.npy")
+    wall_path = os.path.join(data_path, f"{leaflet}_wall.npy")
     
     print(f"Loading landmarks from: {landmarks_path}")
     print(f"Loading wall mask from: {wall_path}")
@@ -1588,15 +1559,7 @@ for leaflet in leaflets:
     print("Wall mask shape:", wall_mask.shape)
     
     com1, com2, hinge = landmarks[0], landmarks[1], landmarks[2]
-    
-    # Center height
-    leaflet_height = leaflet_height_map[leaflet]
-    
-    com1[0] = leaflet_height
-    com2[0] = leaflet_height
-    
-    print(f"Adjusted commissure heights to {leaflet_height}")
-    
+
     # ---------------- Load boundary slices ----------------
     if leaflet == "lcc":
         boundary_pairs = [("ncc", "lcc_ncc_boundary_slice.npy"),
@@ -1614,7 +1577,8 @@ for leaflet in leaflets:
         slice_path = os.path.join(out_dir, slice_file)
         print(f"Loading boundary slice ({pair_name}) from: {slice_path}")
         mask_slice = np.load(slice_path)
-        pts = functions.mask_to_pointcloud(mask_slice, leaflet_height)
+        z_height = boundary_height_map[slice_file]
+        pts = functions.mask_to_pointcloud(mask_slice, z_height)
         print(f"Point cloud size for {pair_name}: {pts.shape[0]}")
         
         if pts.shape[0] <= 1:
@@ -1673,7 +1637,6 @@ for leaflet in leaflets:
     np.save(os.path.join(output_dir, f"{leaflet}_wall.npy"), wall_mask)
     np.save(os.path.join(out_dir, f"{leaflet}_landmarks.npy"), landmarks)
     print(f"Wall and landmarks saved for {leaflet.upper()}")
-, 
 
 
 
