@@ -47,7 +47,7 @@ PATIENT_PATHS = {
 }
 
 # Choose which patient to work with
-patient_nr = "savi_01"   # e.g. "aos_14" or "savi_07"
+patient_nr = "savi_03"   # e.g. "aos_14" or "savi_07"
 
 # Automatically load directory
 dicom_dir = PATIENT_PATHS[patient_nr]
@@ -595,7 +595,7 @@ from scipy.ndimage import gaussian_filter
 # Parameters
 alpha, beta, gamma = 0.1, 0.1, 0.01
 total_iterations = 20
-BOUNDARY_THRESHOLD = 25  # can change later
+BOUNDARY_THRESHOLD = 10  # can change later
 
 # Leaflet-specific storage
 LCC_data, RCC_data, NCC_data = {}, {}, {}
@@ -690,7 +690,7 @@ for slice_nr, slice_info in slice_data.items():
 
      # ----------------------------------------- SKELETONIZATION  ----------------------------------------
     # Apply Gaussian blur to the reoriented slice (sigma controls the blur intensity)
-    sigma = 3  # Adjust this value based on how much blur you want
+    sigma = 2  # Adjust this value based on how much blur you want
     blurred_slice = gaussian(slice_clipped, sigma=sigma)
     
     # Multiply the blurred image with the ROI mask
@@ -703,7 +703,7 @@ for slice_nr, slice_info in slice_data.items():
     if slice_nr == z_min:
         # Calculate the threshold for the first slice based on the 10th percentile
         roi_pixels_blurred = roi_image_blurred[roi_mask]  # Use blurred ROI pixels
-        percentile_10th = np.percentile(roi_pixels_blurred, 15)  # 10th percentile as threshold
+        percentile_10th = np.percentile(roi_pixels_blurred, 15)  # 15th percentile as threshold
         # print(f"Calculated 10th Percentile Threshold for Slice {slice_nr}: {percentile_10th:.2f}")
     else:
         # Use the previously calculated threshold for all other slices
@@ -1019,38 +1019,38 @@ ncc_rcc_height = NCC_data[max(NCC_data.keys())]["shrink_event_slice"]
 
 # %% --- Save each contour segment as VTK ---
 
-# Collect all boundaries (list of NumPy arrays) and corresponding heights (z-values)
-lcc_boundaries = []
-rcc_boundaries = []
-ncc_boundaries = []
-heights = []  # Corresponding heights for each boundary
+# # Collect all boundaries (list of NumPy arrays) and corresponding heights (z-values)
+# lcc_boundaries = []
+# rcc_boundaries = []
+# ncc_boundaries = []
+# heights = []  # Corresponding heights for each boundary
 
-for slice_nr in slice_data:
+# for slice_nr in slice_data:
 
-    print(f"Processing slice {slice_nr}...")
+#     print(f"Processing slice {slice_nr}...")
 
-    # Get the boundary data from your existing dictionary (RCC_data, LCC_data, NCC_data)
-    lcc_boundary = LCC_data[slice_nr]["lcc_ncc_boundary"]
-    rcc_boundary = RCC_data[slice_nr]["rcc_lcc_boundary"]
-    ncc_boundary = NCC_data[slice_nr]["ncc_rcc_boundary"]
+#     # Get the boundary data from your existing dictionary (RCC_data, LCC_data, NCC_data)
+#     lcc_boundary = LCC_data[slice_nr]["lcc_ncc_boundary"]
+#     rcc_boundary = RCC_data[slice_nr]["rcc_lcc_boundary"]
+#     ncc_boundary = NCC_data[slice_nr]["ncc_rcc_boundary"]
     
-    # Get the height (z-coordinate) for the current slice, which might be a value in your dataset
-    slice_height = LCC_data[slice_nr]["height"]  # Ensure this field exists in your data
+#     # Get the height (z-coordinate) for the current slice, which might be a value in your dataset
+#     slice_height = LCC_data[slice_nr]["height"]  # Ensure this field exists in your data
 
-    # Store the boundaries and corresponding height
-    lcc_boundaries.append(np.array(lcc_boundary))
-    rcc_boundaries.append(np.array(rcc_boundary))
-    ncc_boundaries.append(np.array(ncc_boundary))
-    heights.append(slice_height)  # Store the z-coordinate (height)
+#     # Store the boundaries and corresponding height
+#     lcc_boundaries.append(np.array(lcc_boundary))
+#     rcc_boundaries.append(np.array(rcc_boundary))
+#     ncc_boundaries.append(np.array(ncc_boundary))
+#     heights.append(slice_height)  # Store the z-coordinate (height)
 
-# Combine boundaries for LCC, RCC, NCC into vtkPolyData objects with z-coordinate consideration
-lcc_combined_polydata = functions.combine_boundaries_to_polydata(lcc_boundaries, heights)
-rcc_combined_polydata = functions.combine_boundaries_to_polydata(rcc_boundaries, heights)
-ncc_combined_polydata = functions.combine_boundaries_to_polydata(ncc_boundaries, heights)
+# # Combine boundaries for LCC, RCC, NCC into vtkPolyData objects with z-coordinate consideration
+# lcc_combined_polydata = functions.combine_boundaries_to_polydata(lcc_boundaries, heights)
+# rcc_combined_polydata = functions.combine_boundaries_to_polydata(rcc_boundaries, heights)
+# ncc_combined_polydata = functions.combine_boundaries_to_polydata(ncc_boundaries, heights)
 
-# Save each combined polydata to a VTK file
-output_path = f"H:/DATA/Afstuderen/3.Data/output_valve_segmentation/{patient_nr}/vtk"
-os.makedirs(output_path, exist_ok=True)
+# # Save each combined polydata to a VTK file
+# output_path = f"H:/DATA/Afstuderen/3.Data/output_valve_segmentation/{patient_nr}/vtk"
+# os.makedirs(output_path, exist_ok=True)
 
 
 
@@ -1098,7 +1098,6 @@ output_path = f"H:/DATA/Afstuderen/3.Data/output_valve_segmentation/{patient_nr}
 os.makedirs(output_path, exist_ok=True)
 
 # Save the previously calculated calcium volume as an STL
-patient_nr = "savi_01"
 file_type = "calc_volume"
 calc_volume_smooth = gaussian_filter(calc_volume.astype(np.float32), sigma=gaussian_blur)  
 
@@ -1282,8 +1281,8 @@ plt.show()
 
 print("Reorienting the leaflet boundaries from the python space to patient space...")
 
-del clipped_dicom
-del gradient_volume
+# del clipped_dicom
+# del gradient_volume
 # del calc_volume
 
 ## The objects are made in the reoriented space. Now reorient it back so it is in the patient space
