@@ -1202,7 +1202,7 @@ def clean_boundary_from_mask(mask, aortic_wall_points, min_dist, commissures, ce
     coords = largest_region.coords
     # Final hard Mercedes filtering (row, col indexing!)
     coords = coords[mercedes_mask[coords[:, 0], coords[:, 1]] > 0]
-    
+
     # print(f"[Info] Largest component has {len(coords)} points before filtering.")
 
     # # Filter based on distance to aortic wall points
@@ -1396,72 +1396,6 @@ def create_mercedes_mask(image, commissure_points, center_point, line_thickness=
 
     return mask
 
-def numpy_to_vtk_points(np_array, z_value=0):
-    """Converts a numpy array of shape (N, 2) to vtk points, using z_value for the z-coordinate."""
-    vtk_points = vtk.vtkPoints()
-    for pt in np_array:
-        vtk_points.InsertNextPoint(pt[1], pt[0], z_value)  # x and y coordinates from numpy, z is from the slice's height
-    return vtk_points
-
-def create_vtk_polydata(np_array, z_value=0):
-    """Creates a VTK polydata object from a numpy array of boundary points with z_value as the height."""
-    vtk_points = numpy_to_vtk_points(np_array, z_value)
-    
-    # Create a polyline cell
-    polyline = vtk.vtkCellArray()
-    num_points = len(np_array)
-    polyline.InsertNextCell(num_points)
-    
-    for i in range(num_points):
-        polyline.InsertCellPoint(i)  # Insert each point into the polyline
-
-    # Create a polydata object and set the points and cells
-    polydata = vtk.vtkPolyData()
-    polydata.SetPoints(vtk_points)
-    polydata.SetLines(polyline)
-    
-    return polydata
-
-def combine_boundaries_to_polydata(boundaries, heights):
-    """Combine all the slice boundaries into a single vtkPolyData object with corresponding heights (z)."""
-    append_filter = vtk.vtkAppendPolyData()
-
-    for boundary, height in zip(boundaries, heights):
-        polydata = create_vtk_polydata(boundary, height)
-        append_filter.AddInputData(polydata)
-
-    append_filter.Update()
-    return append_filter.GetOutput()
-
-def save_vtk_polydata(polydata, filename):
-    """Saves the VTK polydata to a .vtk file."""
-    writer = vtk.vtkPolyDataWriter()
-    writer.SetFileName(filename)
-    writer.SetInputData(polydata)
-    writer.Write()
-
-# Function to create VTK PolyData from a boolean mask (like calc_volume)
-def create_vtk_polydata_from_mask(mask, spacing=(1.0, 1.0, 1.0)):
-    """Creates vtkImageData from a 3D boolean mask (e.g., calc_volume)."""
-    # Get dimensions
-    print("yhello")
-    dims = mask.shape
-
-    # Create a vtkImageData to hold the mask
-    vtk_image = vtk.vtkImageData()
-    vtk_image.SetDimensions(dims[2], dims[1], dims[0])  # (x, y, z) for VTK image data
-    vtk_image.SetSpacing(spacing)  # Adjust spacing if necessary
-
-    # Convert the mask to uint8 (0 or 1) for VTK
-    mask_int = np.asarray(mask, dtype=np.uint8)
-
-    # Convert numpy array to vtk array using vtk.numpy_interface
-    vtk_array = vtk.numpy_interface.array_to_vtk(mask_int.flatten(), deep=True, array_type=vtk.VTK_UNSIGNED_CHAR)
-
-    # Set the scalar array to the VTK image
-    vtk_image.GetPointData().SetScalars(vtk_array)
-    
-    return vtk_image
 
 from skimage import measure
 
@@ -2189,3 +2123,88 @@ def update_boundary_shrink_state(boundary, state_dict, name, slice_idx, threshol
         print(f"[EVENT] {name} shrank below {threshold} at slice {slice_idx}")
 
     return length
+
+def find_shrink_slice_consecutive(data_dict, shrink_ratio=0.7, consecutive=2):
+    """
+    Finds first slice AFTER the maximum length slice where boundary length
+    drops below shrink_ratio * max_length for N consecutive slices.
+
+    Returns
+    -------
+    event_slice : int or None
+        First slice of the consecutive shrink event
+    threshold : float
+    max_slice : int
+        Slice where maximum occurred
+    """
+
+    sorted_slices = sorted(data_dict.keys())
+
+    # Extract valid (slice, length) pairs
+    slice_length_pairs = [
+        (s, data_dict[s]["boundary_length"])
+        for s in sorted_slices
+        if data_dict[s]["boundary_length"] is not None
+    ]
+
+    if not slice_length_pairs:
+        return None, None, None
+
+    # Determine maximum
+    max_slice, max_length = max(slice_length_pairs, key=lambda x: x[1])
+    threshold = shrink_ratio * max_length
+
+    counter = 0
+    start_slice = None
+
+    for s, length in slice_length_pairs:
+
+        # Only evaluate AFTER maximum slice
+        if s <= max_slice:
+            continue
+
+        if length <= threshold:
+            if counter == 0:
+                start_slice = s
+            counter += 1
+
+            if counter >= consecutive:
+                return start_slice, threshold, max_slice
+        else:
+            counter = 0
+            start_slice = None
+
+    return None, threshold, max_slice
+
+
+def keep_largest_component_3d(volume_mask):
+    """
+    Keeps only the largest 3D connected component in a binary volume.
+    
+    Parameters
+    ----------
+    volume_mask : 3D numpy array (Z, Y, X)
+        Binary mask.
+        
+    Returns
+    -------
+    largest_component_mask : 3D numpy array
+        Binary mask with only the largest component kept.
+    """
+
+    labeled = label(volume_mask, connectivity=3)  # full 3D connectivity
+
+    if labeled.max() == 0:
+        print("[Info] No connected components found.")
+        return np.zeros_like(volume_mask)
+
+    regions = regionprops(labeled)
+    largest_region = max(regions, key=lambda r: r.area)
+
+    largest_label = largest_region.label
+
+    largest_component_mask = (labeled == largest_label)
+
+    print(f"[Info] Largest 3D component size: {largest_region.area} voxels")
+
+    return largest_component_mask

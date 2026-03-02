@@ -47,7 +47,7 @@ PATIENT_PATHS = {
 }
 
 # Choose which patient to work with
-patient_nr = "savi_03"   # e.g. "aos_14" or "savi_07"
+patient_nr = "savi_01"   # e.g. "aos_14" or "savi_07"
 
 # Automatically load directory
 dicom_dir = PATIENT_PATHS[patient_nr]
@@ -557,35 +557,6 @@ for z in range(z_min, z_max + 1):
 
 plt.show()
 
-
-#%% --------------------------------  PLOTTING ENTIRE FIGURE  --------------------------------------
-
-# # Loop over slice indices
-# for slice_idx in range(z_min,z_max):  # or any range you want
-#     # Extract the transversal slice
-#     transversal_slice = calc_volume[slice_idx, :, :]
-    
-#     # Clear the current figure
-#     plt.clf()
-    
-#     # Show the slice
-#     plt.imshow(transversal_slice, cmap="gray")
-#     plt.title(f"Transversal slice at x={slice_idx}")
-#     # plt.axis("off")
-    
-#     # Overlay landmarks that lie on this slice
-#     for z, y, x in commissures:
-#         if z == slice_idx:  # Only plot landmarks on this slice
-#             plt.scatter(x, y, c='r', s=1)  
-#             # print("Gevonden")
-    
-#     # Draw and pause
-#     plt.draw()
-#     plt.pause(0.1)  # pause 2 seconds
-    
-# plt.close()
-
-
 # %%-------------------------------  EXTRACTION OF THE LEAFET BOUNDARIES ---------------------------
 
 from skimage.morphology import binary_erosion
@@ -595,7 +566,7 @@ from scipy.ndimage import gaussian_filter
 # Parameters
 alpha, beta, gamma = 0.1, 0.1, 0.01
 total_iterations = 20
-BOUNDARY_THRESHOLD = 10  # can change later
+BOUNDARY_THRESHOLD = 25  # can change later
 
 # Leaflet-specific storage
 LCC_data, RCC_data, NCC_data = {}, {}, {}
@@ -672,7 +643,6 @@ for slice_nr, slice_info in slice_data.items():
     ]
     
     init_mercedes = functions.create_mercedes_mask(reoriented_slice, init_coms, center, line_thickness = 8)
-    print(init_mercedes.shape)
     slice_clipped = reoriented_slice.copy()
         
     # 1) Low clipping only inside ROI
@@ -690,7 +660,7 @@ for slice_nr, slice_info in slice_data.items():
 
      # ----------------------------------------- SKELETONIZATION  ----------------------------------------
     # Apply Gaussian blur to the reoriented slice (sigma controls the blur intensity)
-    sigma = 2  # Adjust this value based on how much blur you want
+    sigma = 2.5  # Adjust this value based on how much blur you want
     blurred_slice = gaussian(slice_clipped, sigma=sigma)
     
     # Multiply the blurred image with the ROI mask
@@ -940,7 +910,6 @@ for slice_nr, slice_info in slice_data.items():
         threshold=BOUNDARY_THRESHOLD
     )
     
-    
     # Store results with flat keys safely
     LCC_data[slice_nr] = {
         "mask": lcc_ncc_mask.copy(),
@@ -979,17 +948,6 @@ for slice_nr, slice_info in slice_data.items():
         "shrink_event_slice": boundary_event_state["ncc_rcc"]["event_slice"],
     }
     
-    num_zeros = np.sum(slice_clipped == 0)
-    num_nans = np.sum(np.isnan(slice_clipped))   
-    
-  
-    #optionalchecks
-    # print(f"Number of zero pixels in slice_clipped: {num_zeros}")
-    # print(f"Number of NaNs in slice_clipped: {num_nans}")
-    # print("Min/max slice_clipped:", slice_clipped.min(), slice_clipped.max())
-    # print("Unique values inside mercedes:", np.unique(slice_clipped[init_mercedes == 1]))
-    
-    
     # Optional visualization (COM-to-COM segments + boundaries)
     plt.figure(figsize=(6, 6))
     plt.imshow(slice_clipped, cmap='gray', origin='upper')
@@ -1004,90 +962,25 @@ for slice_nr, slice_info in slice_data.items():
     plt.axis('off')
     plt.legend()
     plt.show()
-    # Print the size of the boundaries
-    # print(f"Size of LCC-NCC Boundary (Slice {slice_nr}):", cleaned_lcc_ncc_boundary.shape)
-    # print(f"Size of RCC-LCC Boundary (Slice {slice_nr}):", cleaned_rcc_lcc_boundary.shape)
-    # print(f"Size of NCC-RCC Boundary (Slice {slice_nr}):", cleaned_ncc_rcc_boundary.shape)
+
     
 # %% ----------------EXTRACT LEAFLET-SPECIFIC CENTER HEIGHTS ---------------
 
-lcc_ncc_height = LCC_data[max(LCC_data.keys())]["shrink_event_slice"]
-rcc_lcc_height = RCC_data[max(RCC_data.keys())]["shrink_event_slice"]
-ncc_rcc_height = NCC_data[max(NCC_data.keys())]["shrink_event_slice"]
+# The shrink ratio is where we say that the boundary has shrunk this much that we will argument that the mercedes star is there.
+# this is the height on which the leaflet cap latches on
+shrink_ratio = 0.9
 
+lcc_event, lcc_thresh, lcc_max_slice = functions.find_shrink_slice_consecutive(LCC_data, shrink_ratio = shrink_ratio)
+rcc_event, rcc_thresh, rcc_max_slice = functions.find_shrink_slice_consecutive(RCC_data, shrink_ratio = shrink_ratio)
+ncc_event, ncc_thresh, ncc_max_slice = functions.find_shrink_slice_consecutive(NCC_data, shrink_ratio = shrink_ratio)
 
+print("LCC_NCC max at:", lcc_max_slice, "shrink at:", lcc_event)
+print("RCC_LCC max at:", rcc_max_slice, "shrink at:", rcc_event)
+print("NCC_RCC max at:", ncc_max_slice, "shrink at:", ncc_event)
 
-# %% --- Save each contour segment as VTK ---
-
-# # Collect all boundaries (list of NumPy arrays) and corresponding heights (z-values)
-# lcc_boundaries = []
-# rcc_boundaries = []
-# ncc_boundaries = []
-# heights = []  # Corresponding heights for each boundary
-
-# for slice_nr in slice_data:
-
-#     print(f"Processing slice {slice_nr}...")
-
-#     # Get the boundary data from your existing dictionary (RCC_data, LCC_data, NCC_data)
-#     lcc_boundary = LCC_data[slice_nr]["lcc_ncc_boundary"]
-#     rcc_boundary = RCC_data[slice_nr]["rcc_lcc_boundary"]
-#     ncc_boundary = NCC_data[slice_nr]["ncc_rcc_boundary"]
-    
-#     # Get the height (z-coordinate) for the current slice, which might be a value in your dataset
-#     slice_height = LCC_data[slice_nr]["height"]  # Ensure this field exists in your data
-
-#     # Store the boundaries and corresponding height
-#     lcc_boundaries.append(np.array(lcc_boundary))
-#     rcc_boundaries.append(np.array(rcc_boundary))
-#     ncc_boundaries.append(np.array(ncc_boundary))
-#     heights.append(slice_height)  # Store the z-coordinate (height)
-
-# # Combine boundaries for LCC, RCC, NCC into vtkPolyData objects with z-coordinate consideration
-# lcc_combined_polydata = functions.combine_boundaries_to_polydata(lcc_boundaries, heights)
-# rcc_combined_polydata = functions.combine_boundaries_to_polydata(rcc_boundaries, heights)
-# ncc_combined_polydata = functions.combine_boundaries_to_polydata(ncc_boundaries, heights)
-
-# # Save each combined polydata to a VTK file
-# output_path = f"H:/DATA/Afstuderen/3.Data/output_valve_segmentation/{patient_nr}/vtk"
-# os.makedirs(output_path, exist_ok=True)
-
-
-
-# %% ------------------------ COM-TO-COM SEGMENTS ----------------------------
-
-# Collect all com_to_com segments (list of NumPy arrays) and corresponding heights (z-values)
-lcc_com_to_com = []
-rcc_com_to_com = []
-ncc_com_to_com = []
-heights_com_to_com = []  # Corresponding heights for each com_to_com segment
-
-for slice_nr in slice_data:
-    print(f"Processing slice {slice_nr} for com_to_com segments...")
-
-    # Get the com_to_com data from your existing dictionary (RCC_data, LCC_data, NCC_data)
-    lcc_com_to_com_segment = LCC_data[slice_nr]["com_to_com"]
-    rcc_com_to_com_segment = RCC_data[slice_nr]["com_to_com"]
-    ncc_com_to_com_segment = NCC_data[slice_nr]["com_to_com"]
-    
-    # Get the height (z-coordinate) for the current slice, which might be a value in your dataset
-    slice_height = LCC_data[slice_nr]["height"]  # Ensure this field exists in your data
-
-    # Store the com_to_com segments and corresponding height
-    lcc_com_to_com.append(np.array(lcc_com_to_com_segment))
-    rcc_com_to_com.append(np.array(rcc_com_to_com_segment))
-    ncc_com_to_com.append(np.array(ncc_com_to_com_segment))
-    
-    heights_com_to_com.append(slice_height)  # Store the z-coordinate (height)
-
-# Combine com_to_com segments for LCC, RCC, NCC into vtkPolyData objects with z-coordinate consideration
-lcc_com_to_com_polydata = functions.combine_boundaries_to_polydata(lcc_com_to_com, heights_com_to_com)
-rcc_com_to_com_polydata = functions.combine_boundaries_to_polydata(rcc_com_to_com, heights_com_to_com)
-ncc_com_to_com_polydata = functions.combine_boundaries_to_polydata(ncc_com_to_com, heights_com_to_com)
-
-# Save each combined polydata to a VTK file for com_to_com segments
-output_path = f"H:/DATA/Afstuderen/3.Data/output_valve_segmentation/{patient_nr},vtk"
-os.makedirs(output_path, exist_ok=True)
+lcc_ncc_height = lcc_event
+rcc_lcc_height = rcc_event
+ncc_rcc_height = ncc_event
 
 
 # %% -------------------------------- SAVING THE CALCIFICATION VOLUME ----------------------
@@ -1118,18 +1011,21 @@ print("Post-processing the found boundaries so that they can be converted into 3
 # --- Process RCC to LCC Boundary ---
 rcc_lcc_boundary_3d = functions.create_3d_mask_from_boundary_points(RCC_data, calc_volume.shape, "rcc_lcc_boundary")
 dilated_mask_3d_rcc_lcc = binary_dilation(rcc_lcc_boundary_3d, cube(5))  # Adjust the cube size as needed
+dilated_mask_3d_rcc_lcc = functions.keep_largest_component_3d(dilated_mask_3d_rcc_lcc)
 rcc_lcc_boundary_smooth = gaussian_filter(dilated_mask_3d_rcc_lcc.astype(np.float32), sigma=gaussian_blur)  
 file_type_rcc_lcc = "rcc_lcc_boundary"
 
 # --- Process NCC to RCC Boundary ---
 ncc_rcc_boundary_3d = functions.create_3d_mask_from_boundary_points(NCC_data, calc_volume.shape, "ncc_rcc_boundary")
 dilated_mask_3d_ncc_rcc = binary_dilation(ncc_rcc_boundary_3d, cube(5))  # Adjust the cube size as needed
+dilated_mask_3d_ncc_rcc = functions.keep_largest_component_3d(dilated_mask_3d_ncc_rcc)
 ncc_rcc_boundary_smooth = gaussian_filter(dilated_mask_3d_ncc_rcc.astype(np.float32), sigma=gaussian_blur)  
 file_type_ncc_rcc = "ncc_rcc_boundary"
 
 # --- Process LCC to NCC Boundary ---
 lcc_ncc_boundary_3d = functions.create_3d_mask_from_boundary_points(LCC_data, calc_volume.shape, "lcc_ncc_boundary")
 dilated_mask_3d_lcc_ncc = binary_dilation(lcc_ncc_boundary_3d, cube(5))  # Adjust the cube size as needed
+dilated_mask_3d_lcc_ncc = functions.keep_largest_component_3d(dilated_mask_3d_lcc_ncc)
 lcc_ncc_boundary_smooth = gaussian_filter(dilated_mask_3d_lcc_ncc.astype(np.float32), sigma=gaussian_blur)  
 file_type_lcc_ncc = "lcc_ncc_boundary"
 
@@ -1314,7 +1210,6 @@ lcc_ncc_boundary_reoriented = functions.downsample_and_rescale(lcc_ncc_boundary_
 file_type_lcc_ncc = "lcc_ncc_boundary"
 
 
-
 # %%  ------------------------- REORIENT THE AORTIC WALL BACK TO THEIR OR IGINAL SPACE ----------------
 
 print("Reorienting the aortic wall from the python space to patient space...")
@@ -1370,9 +1265,7 @@ lvot_patient_space = functions.reorient_volume_back(lvot_smooth, dicom_origin, r
 lvot_reoriented = functions.downsample_and_rescale(lvot_patient_space, downsample_factor=downsample_factor, inverse_zoom=inverse_zoom)
 
 
-
-
-#%%%
+#%%% -------------------------------- SAVING THE OBJECTS AS STL OBJECTS -----------------------------
 
 print("Saving the segmentations into usable STL objects...")
 
@@ -1458,69 +1351,8 @@ np.save(os.path.join(out_dir, "ncc_landmarks.npy"), ncc_landmarks_to_save)
 print("Saved commissure-based landmarks for LCC, RCC, NCC.")
 
 
-# %%  LOADING THE DATA
 
-# For testing purposes, the LCC cusp is first calculated.
-lcc_landmarks = np.load(r"H:\DATA\Afstuderen\2.Code\Stenosis-Severity-backup\temp\lcc_landmarks.npy")
-lcc_wall = np.load(r"H:\DATA\Afstuderen\2.Code\Stenosis-Severity-backup\temp\lcc_wall.npy")
-rcc_lcc_slice = np.load(r"H:\DATA\Afstuderen\2.Code\Stenosis-Severity-backup\temp\rcc_lcc_boundary_slice.npy")
-lcc_ncc_slice = np.load(r"H:\DATA\Afstuderen\2.Code\Stenosis-Severity-backup\temp\lcc_ncc_boundary_slice.npy")
-
-lcc_com1 = lcc_landmarks[0]
-lcc_com2 = lcc_landmarks[1]
-lcc_hinge = lcc_landmarks[2]
-
-# # Now we are going to use the center height hard coded. Should be extracted from the main script.
-# lcc_com1[0] = lcc
-# lcc_com2[0] = center_height
-
-# Convert both masks
-lcc_ncc_points = functions.mask_to_pointcloud(lcc_ncc_slice, lcc_ncc_height)
-rcc_lcc_points = functions.mask_to_pointcloud(rcc_lcc_slice, rcc_lcc_height)
-
-# Fit a spline through the points so that is less jagged and more smooth object
-lcc_ncc_points = functions.fit_spline(lcc_ncc_points, smoothing = 20)
-rcc_lcc_points = functions.fit_spline(rcc_lcc_points, smoothing = 20)
-
-# % --------------------------- CREATING THE CAP OF THE LEAFLET ---------------------------------
-
-surf, eval_pts, mask = functions.build_leaflet_surface(
-    aortic_wall_mask=lcc_wall,
-    commissure1=lcc_landmarks[0],
-    hinge=lcc_landmarks[2],
-    commissure2=lcc_landmarks[1],
-    boundary_curve_1=lcc_ncc_points,
-    boundary_curve_2=rcc_lcc_points,
-    volume_shape=(340,512,512),
-    pixel_spacing=pixel_spacing,
-    dicom_origin=dicom_origin,
-    output_path=r"H:\DATA\Afstuderen\2.Code\Stenosis-Severity-backup\temp",
-    patient_nr=patient_nr,  # dynamic as you prefer
-    file_type="lcc_leaflet_surface"
-)
-
-# %% -------------------- VOXELIZATION OF THE LEAFLET CAP -------------------------------
-
-# Reorienting the leaflet cap so that it is in patient space 
-
-lcc_cap_mask = functions.create_3d_mask_from_points(eval_pts, calc_volume.shape)
-lcc_cap_mask= gaussian_filter(lcc_cap_mask.astype(np.float32), sigma=gaussian_blur)  
-lcc_cap_mask_reoriented = functions.reorient_volume_back(lcc_cap_mask, dicom_origin, rotation_matrix_dicom)
-lcc_cap_mask_reoriented= functions.downsample_and_rescale(lcc_cap_mask_reoriented, downsample_factor=downsample_factor, inverse_zoom=inverse_zoom)
-functions.save_volume_as_stl_patient_space(
-    volume=lcc_cap_mask_reoriented,
-    output_path=output_path,
-    patient_nr=patient_nr,
-    file_type="lcc_cap_mask", 
-    zoom_x=pixel_spacing[2],
-    zoom_y=pixel_spacing[1],
-    zoom_z=pixel_spacing[0],
-    dicom_origin=dicom_origin
-)
-
-
-
-# %%% ALL THE LEAFLETS
+# %%% ------------------------- INTERPOLATING ALL THE LEAFLET CAPS (BOTTOM SIDE)-------------------------------
 
 
 # del calc_volume_smooth
@@ -1622,7 +1454,7 @@ for leaflet in leaflets:
 
     functions.save_volume_as_stl_patient_space(
         volume=cap_mask_reoriented,
-        output_path=output_dir,
+        output_path=output_path,
         patient_nr=patient_nr,
         file_type=f"{leaflet}_cap_mask",
         zoom_x=pixel_spacing[2],
