@@ -17,7 +17,7 @@ from skimage.morphology import disk, dilation, skeletonize
 from skimage.draw import polygon2mask
 from skimage.filters import gaussian
 from scipy.ndimage import binary_erosion
-
+from skimage.restoration import inpaint
 
 # %% ----------------------------------------PATIENT PATHS & SELECTION OF PATIENT -----------------------------
 
@@ -47,7 +47,7 @@ PATIENT_PATHS = {
 }
 
 # Choose which patient to work with
-patient_nr = "savi_01"   # e.g. "aos_14" or "savi_07"
+patient_nr = "savi_10"   # e.g. "aos_14" or "savi_07"
 
 # Automatically load directory
 dicom_dir = PATIENT_PATHS[patient_nr]
@@ -78,7 +78,9 @@ raw_volume_hu = raw_volume.astype(np.float32) * slope + intercept
 print(f"Shape of HU volume: {raw_volume_hu.shape}")
 
 # Create an edge detected image based on the imported DICOM
+calc_mask = raw_volume_hu > 500
 gradient_volume = functions.compute_edge_volume(raw_volume_hu, hu_window=(0, 450), sigma=2, normalize=False, visualize=True)
+gradient_volume[calc_mask] = 0
 volume = gradient_volume
 
 # Print to confirm gradient image generation
@@ -227,56 +229,56 @@ print(f"Maximum z-coordinate across all cusps: {z_max}")
 
 # %%% ------------------------------------------ PLOTTING SINGLE SLICE ---------------------------
 
-# # Slice index (X)
-# slice_idx = 50
+# Slice index (X)
+slice_idx = 50
 
-# # Extract the transversal slice
-# transversal_slice = reoriented_non_clipped[slice_idx, :, :]
+# Extract the transversal slice
+transversal_slice = reoriented_non_clipped[slice_idx, :, :]
 
-# # Plot the slice
-# plt.figure(figsize=(6,6))
-# plt.imshow(transversal_slice, cmap="gray")
-# plt.title(f"Transversal slice at x={slice_idx}")
-# plt.axis("off")
+# Plot the slice
+plt.figure(figsize=(6,6))
+plt.imshow(transversal_slice, cmap="gray")
+plt.title(f"Transversal slice at x={slice_idx}")
+plt.axis("off")
 
-# count = 0
-# # Overlay landmarks that lie on this slice
-# for z, y, x in circle_points:
-#     if z == slice_idx:  # Only plot landmarks on this slice
-#         plt.scatter(x, y, c='r', alpha=0.7,s=2)  # z → horizontal, y → vertical
-#         count+=1
+count = 0
+# Overlay landmarks that lie on this slice
+for z, y, x in circle_points:
+    if z == slice_idx:  # Only plot landmarks on this slice
+        plt.scatter(x, y, c='r', alpha=0.7,s=2)  # z → horizontal, y → vertical
+        count+=1
 
     
-# print(count)
-# plt.show()
+print(count)
+plt.show()
 
 
 
-# #%%  ------------------------------------------- PLOTTING ENTIRE FIGURE  ------------------------------
+#%%  ------------------------------------------- PLOTTING ENTIRE FIGURE  ------------------------------
 
-# # Loop over slice indices
-# for slice_idx in range(z_min,z_max+10):  # or any range you want
-#     # Extract the transversal slice
-#     transversal_slice = reoriented_non_clipped[slice_idx, :, :]
+# Loop over slice indices
+for slice_idx in range(z_min,z_max+10):  # or any range you want
+    # Extract the transversal slice
+    transversal_slice = reoriented_non_clipped[slice_idx, :, :]
     
-#     # Clear the current figure
-#     plt.clf()
+    # Clear the current figure
+    plt.clf()
     
-#     # Show the slice
-#     plt.imshow(transversal_slice, cmap="gray")
-#     plt.title(f"Transversal slice at x={slice_idx}")
-#     # plt.axis("off")
+    # Show the slice
+    plt.imshow(transversal_slice, cmap="gray")
+    plt.title(f"Transversal slice at x={slice_idx}")
+    # plt.axis("off")
     
-#     # Overlay landmarks that lie on this slice
-#     for z, y, x in all_rotated:
-#         if z == slice_idx:  # Only plot landmarks on this slice
-#             plt.scatter(x, y, c='r', s=1)  
+    # Overlay landmarks that lie on this slice
+    for z, y, x in all_rotated:
+        if z == slice_idx:  # Only plot landmarks on this slice
+            plt.scatter(x, y, c='r', s=1)  
             
-#     # Draw and pause
-#     plt.draw()
-#     plt.pause(0.1)  # pause 2 seconds
+    # Draw and pause
+    plt.draw()
+    plt.pause(0.1)  # pause 2 seconds
     
-# plt.close()
+plt.close()
 
 # %% ------------------------------------------- FIND THE WHOLE AORTIC WALL ------------------------
 
@@ -709,7 +711,7 @@ for slice_nr, slice_info in slice_data.items():
     # Final visualization of the skeletonized result
     plt.figure(figsize=(6, 6))
     plt.imshow(blurred_slice, cmap='gray')
-    plt.imshow(thicker_skeleton, cmap='Reds', alpha=0.5)
+    plt.imshow(thicker_skeleton, cmap='Reds', alpha=0.0)
     # Mercedes star overlay
     plt.title(f"Skeletonization with Percentile Threshold — Slice {slice_nr}")
     plt.axis("off")
@@ -869,8 +871,6 @@ for slice_nr, slice_info in slice_data.items():
                 aortic_wall_contour
             )
 
-    # print(f"{slice_nr} intersections: ", intersections)
-
     # Create COM-to-COM segments
     seg_c2c = {
         "LCC": functions.contour_segment(aortic_wall_contour, commissure_indices["lcc_ncc"], commissure_indices["rcc_lcc"]),
@@ -951,7 +951,7 @@ for slice_nr, slice_info in slice_data.items():
     # Optional visualization (COM-to-COM segments + boundaries)
     plt.figure(figsize=(6, 6))
     plt.imshow(slice_clipped, cmap='gray', origin='upper')
-    plt.imshow(mercedes_mask, cmap='jet', alpha=0.3)  # Adjust alpha for transparency
+    # plt.imshow(mercedes_mask, cmap='jet', alpha=0.3)  # Adjust alpha for transparency
     # plt.plot(seg_c2c["LCC"][:, 1], seg_c2c["LCC"][:, 0], color='cyan', lw=3, label='LCC')
     # plt.plot(seg_c2c["RCC"][:, 1], seg_c2c["RCC"][:, 0], color='green', lw=3, label='RCC')
     # plt.plot(seg_c2c["NCC"][:, 1], seg_c2c["NCC"][:, 0], color='magenta', lw=3, label='NCC')
