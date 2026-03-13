@@ -23,37 +23,37 @@ functions.save_ordered_landmarks(cusp_landmarks, center, output_path)
 # %% RECONSTRUCTION WTIH ADDITIONAL CONTROL POINTS
 
 # Base output path for reconstructions
-base_recon_path = r"H:\DATA\Afstuderen\3.Data\SSM"
+# base_recon_path = r"H:\DATA\Afstuderen\3.Data\SSM"
 
-# Non-coronary cusp reconstruction
-ncc_path = fr"H:\DATA\Afstuderen\3.Data\SSM\patient_database\{patient_id}\landmarks\ncc_template_landmarks_test.txt"
-ncc_ctrlpts = functions.load_leaflet_landmarks(ncc_path)
-leaf_1 = functions.calc_ctrlpoints(ncc_ctrlpts, center)
-interpolated_leaf_1 = functions.interpolate_surface(leaf_1)
-ncc_recon_path = os.path.join(base_recon_path, "ncc", "input_patients", patient_id)
-os.makedirs(ncc_recon_path, exist_ok=True)
-functions.save_surface_evalpts(interpolated_leaf_1, os.path.join(ncc_recon_path, "ncc_points.txt"))
-functions.export_vtk(interpolated_leaf_1, os.path.join(ncc_recon_path, "reconstructed_ncc.vtk"))
+# # Non-coronary cusp reconstruction
+# ncc_path = fr"H:\DATA\Afstuderen\3.Data\SSM\patient_database\{patient_id}\landmarks\ncc_template_landmarks_test.txt"
+# ncc_ctrlpts = functions.load_leaflet_landmarks(ncc_path)
+# leaf_1 = functions.calc_ctrlpoints(ncc_ctrlpts, center)
+# interpolated_leaf_1 = functions.interpolate_surface(leaf_1)
+# ncc_recon_path = os.path.join(base_recon_path, "ncc", "input_patients", patient_id)
+# os.makedirs(ncc_recon_path, exist_ok=True)
+# functions.save_surface_evalpts(interpolated_leaf_1, os.path.join(ncc_recon_path, "ncc_points.txt"))
+# functions.export_vtk(interpolated_leaf_1, os.path.join(ncc_recon_path, "reconstructed_ncc.vtk"))
 
-# Left-coronary cusp reconstruction
-lcc_path = fr"H:\DATA\Afstuderen\3.Data\SSM\patient_database\{patient_id}\landmarks\lcc_template_landmarks_test.txt"
-lcc_ctrlpts = functions.load_leaflet_landmarks(lcc_path)
-leaf_2 = functions.calc_ctrlpoints(lcc_ctrlpts, center)
-interpolated_leaf_2 = functions.interpolate_surface(leaf_2)
-# print("Control points of LCC:", leaf_2)
-lcc_recon_path = os.path.join(base_recon_path, "lcc", "input_patients", patient_id)
-os.makedirs(lcc_recon_path, exist_ok=True)
-functions.save_surface_evalpts(interpolated_leaf_2, os.path.join(lcc_recon_path, "lcc_points.txt"))
-functions.export_vtk(interpolated_leaf_2, os.path.join(lcc_recon_path, "reconstructed_lcc.vtk"))
+# # Left-coronary cusp reconstruction
+# lcc_path = fr"H:\DATA\Afstuderen\3.Data\SSM\patient_database\{patient_id}\landmarks\lcc_template_landmarks_test.txt"
+# lcc_ctrlpts = functions.load_leaflet_landmarks(lcc_path)
+# leaf_2 = functions.calc_ctrlpoints(lcc_ctrlpts, center)
+# interpolated_leaf_2 = functions.interpolate_surface(leaf_2)
+# # print("Control points of LCC:", leaf_2)
+# lcc_recon_path = os.path.join(base_recon_path, "lcc", "input_patients", patient_id)
+# os.makedirs(lcc_recon_path, exist_ok=True)
+# functions.save_surface_evalpts(interpolated_leaf_2, os.path.join(lcc_recon_path, "lcc_points.txt"))
+# functions.export_vtk(interpolated_leaf_2, os.path.join(lcc_recon_path, "reconstructed_lcc.vtk"))
 
-# # Right-coronary cusp reconstruction
-rcc_path = fr"H:\DATA\Afstuderen\3.Data\SSM\patient_database\{patient_id}\landmarks\rcc_template_landmarks_test.txt"
-rcc_ctrlpts = functions.load_leaflet_landmarks(rcc_path)
-leaf_3 = functions.calc_ctrlpoints(rcc_ctrlpts, center)
-interpolated_leaf_3 = functions.interpolate_surface(leaf_3)
-# print("Control points of RCC:", leaf_3)
-rcc_recon_path = os.path.join(base_recon_path, "rcc", "input_patients", patient_id)
-os.makedirs(rcc_recon_path, exist_ok=True)
-functions.save_surface_evalpts(interpolated_leaf_3, os.path.join(rcc_recon_path, "rcc_points.txt"))
-functions.export_vtk(interpolated_leaf_3, os.path.join(rcc_recon_path, "reconstructed_rcc.vtk"))
+# # # Right-coronary cusp reconstruction
+# rcc_path = fr"H:\DATA\Afstuderen\3.Data\SSM\patient_database\{patient_id}\landmarks\rcc_template_landmarks_test.txt"
+# rcc_ctrlpts = functions.load_leaflet_landmarks(rcc_path)
+# leaf_3 = functions.calc_ctrlpoints(rcc_ctrlpts, center)
+# interpolated_leaf_3 = functions.interpolate_surface(leaf_3)
+# # print("Control points of RCC:", leaf_3)
+# rcc_recon_path = os.path.join(base_recon_path, "rcc", "input_patients", patient_id)
+# os.makedirs(rcc_recon_path, exist_ok=True)
+# functions.save_surface_evalpts(interpolated_leaf_3, os.path.join(rcc_recon_path, "rcc_points.txt"))
+# functions.export_vtk(interpolated_leaf_3, os.path.join(rcc_recon_path, "reconstructed_rcc.vtk"))
 

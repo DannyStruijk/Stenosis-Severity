@@ -22,32 +22,35 @@ from skimage.restoration import inpaint
 # %% ----------------------------------------PATIENT PATHS & SELECTION OF PATIENT -----------------------------
 
 PATIENT_PATHS = {
-    # AoSstress patients
-    "aos_2":  r"T:/Research_01/CZE-2020.67 - SAVI-AoS/AoS stress/CT/Aosstress02/DICOM/00002C38/AA3D97B3/AA3B5B73/000062B4",
-    "aos_5":  r"T:/Research_01/CZE-2020.67 - SAVI-AoS/Aos stress/CT/Aosstress05/DICOM/0000CD6B/AA3BA81C/AAADD92A/0000C27F",
-    "aos_6":  r"T:/Research_01/CZE-2020.67 - SAVI-AoS/Aos stress/CT/Aosstress06/DICOM/00008A58/AA245852/AA659577/0000A0F7",
-    "aos_8":  r"T:/Research_01/CZE-2020.67 - SAVI-AoS/Aos stress/CT/Aosstress08/DICOM/0000A996/AA934448/AA0D3303/0000F9C1",
-    "aos_9":  r"T:/Research_01/CZE-2020.67 - SAVI-AoS/Aos stress/CT/Aosstress09/DICOM/0000B2D9/AA876FC8/AABB814D/0000534F",
-    "aos_11": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/Aos stress/CT/Aosstress11/DICOM/00006310/AAD9B219/AA824679/00004F79",
-    "aos_12": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/Aos stress/CT/Aosstress12/DICOM/0000B416/AABF5153/AA9CA582/0000799A",
-    "aos_13": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/Aos stress/CT/Aosstress13/DICOM/0000208C/AABDE934/AA243C5D/00002411",
-    "aos_14": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/Aos stress/CT/Aosstress14/DICOM/000037EC/AA4EC564/AA3B0DE6/00007EA9",
-    "aos_15": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/Aos stress/CT/Aosstress15/DICOM/00007464/AA714246/AA1B4F2E/00008A1B",
-
-    # SAVI AoS patients
-    "savi_01": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE001/DICOM/00003852/AA44D04F/AA7BB8C5/000050B5",
-    "savi_02": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE002/DICOM/0000AFC5/AAAA2796/AAFF16B0/0000ADA6",
-    "savi_03": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE003/DICOM/0000AF6A/AA4272CE/AA72A45E/000050F2",
-    "savi_04": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE004/DICOM/00002F76/AA1F4542/AAB1E4E9/0000CAC5",
-    "savi_05": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE005/DICOM/0000AF52/AA590C3F/AAC428CF/0000FEE0",
-    "savi_06": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE006/DICOM/00000EED/AA87381C/AAAEC035/00002581",
-    "savi_07": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE007/DICOM/000065F6/AAB95BAE/AA7A7E4C/00005896",
-    "savi_08": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE008/DICOM/000053DF/AA102722/AA7E9491/000073C6",
-    "savi_10": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE010/DICOM/00003911/AA8B6291/AA8D4457/0000EDE8",
+    "CZE001": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE001/DICOM/00003852/AA44D04F/AA7BB8C5/000050B5",
+    "CZE002": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE002/DICOM/0000AFC5/AAAA2796/AAFF16B0/0000ADA6",
+    "CZE003": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE003/DICOM/0000AF6A/AA4272CE/AA72A45E/000050F2",
+    "CZE004": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE004/DICOM/00002F76/AA1F4542/AAB1E4E9/0000CAC5",
+    "CZE005": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE005/DICOM/0000AF52/AA590C3F/AAC428CF/0000FEE0",
+    "CZE006": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE006/DICOM/00000EED/AA87381C/AAAEC035/00002581",
+    "CZE007": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE007/DICOM/000065F6/AAB95BAE/AA7A7E4C/00005896",
+    "CZE008": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE008/DICOM/000053DF/AA102722/AA7E9491/000073C6",
+    "CZE010": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE010/DICOM/00003911/AA8B6291/AA8D4457/0000EDE8",
+    "CZE011": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE011/DICOM/00005CB5/AAAA99F9/AA6670D7/0000949B",
+    "CZE012": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE012/DICOM/00003CC2/AA022842/AA289D50/00007754",
+    "CZE013": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE013/DICOM/0000EA91/AACEC60C/AA7E3964/0000E5BC",
+    "CZE014": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE014/DICOM/00005E34/AA79D3B8/AA0DFFCE/0000C950",
+    "CZE016": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE016/DICOM/00002765/AAECDDFB/AAE12657/00001053",
+    "CZE017": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE017/DICOM/00009314/AA9EE817/AAD307C6/000000A9",
+    "CZE018": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE018/DICOM/0000767B/AAC5650C/AADB5D54/0000CAEC",
+    "CZE019": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE019/DICOM/00008A57/AA9CD7F4/AAA7440B/00006E56",
+    "CZE020": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE020/DICOM/000057A3/AA56DBD9/AA4B0694/00005E78",
+    "CZE022": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE022/DICOM/00002E36/AA0DF707/AAE959BA/0000B1D3",
+    "CZE023": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE023/DICOM/0000B09F/AA9FDA4D/AA8D0F36/0000F21F",
+    "CZE025": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE025/DICOM/0000A32D/AAF725DA/AA6A556D/000058A9",
+    "CZE026": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE026/DICOM/00007858/AACE1771/AA3C074D/000033A6",
+    "CZE027": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE027/DICOM/000046F3/AA0B28CE/AA933D3E/00007339",
+    "CZE029": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE029/DICOM/00001B91/AADD797F/AA3A0E6E/00002DA1",
+    "CZE030": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE030/DICOM/000032F8/AAD2875F/AA7CD947/00002E0D",
 }
 
 # Choose which patient to work with
-patient_nr = "savi_10"   # e.g. "aos_14" or "savi_07"
+patient_nr = "CZE030"   # e.g. "aos_14" or "savi_07"
 
 # Automatically load directory
 dicom_dir = PATIENT_PATHS[patient_nr]
@@ -662,7 +665,7 @@ for slice_nr, slice_info in slice_data.items():
 
      # ----------------------------------------- SKELETONIZATION  ----------------------------------------
     # Apply Gaussian blur to the reoriented slice (sigma controls the blur intensity)
-    sigma = 2.5  # Adjust this value based on how much blur you want
+    sigma = 1.5  # Adjust this value based on how much blur you want
     blurred_slice = gaussian(slice_clipped, sigma=sigma)
     
     # Multiply the blurred image with the ROI mask
@@ -675,7 +678,7 @@ for slice_nr, slice_info in slice_data.items():
     if slice_nr == z_min:
         # Calculate the threshold for the first slice based on the 10th percentile
         roi_pixels_blurred = roi_image_blurred[roi_mask]  # Use blurred ROI pixels
-        percentile_10th = np.percentile(roi_pixels_blurred, 15)  # 15th percentile as threshold
+        percentile_10th = np.percentile(roi_pixels_blurred, 20)  # 15th percentile as threshold
         # print(f"Calculated 10th Percentile Threshold for Slice {slice_nr}: {percentile_10th:.2f}")
     else:
         # Use the previously calculated threshold for all other slices

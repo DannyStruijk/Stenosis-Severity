@@ -1,4 +1,3 @@
-from geomdl import BSpline
 import numpy as np
 import vtk
 from geomdl import fitting
@@ -6,46 +5,25 @@ import os
 from scipy.ndimage import zoom
 from scipy.ndimage import affine_transform
 from skimage.draw import polygon2mask
-from skimage.morphology import dilation, disk
 from scipy.interpolate import splprep, splev
 import pydicom
+from scipy.spatial.distance import cdist
+from scipy.spatial import cKDTree
+from skimage.measure import label, regionprops
+from scipy.ndimage import binary_closing
+from skimage.morphology import cube
+from scipy.ndimage import binary_erosion
+import matplotlib.pyplot as plt
+from skimage.filters import sobel
+from scipy.ndimage import gaussian_filter
+from skimage import exposure
+import trimesh
+from skimage import measure
+from skimage.draw import line
+from scipy.ndimage import binary_dilation
+from geomdl import fitting
 
-def export_vtk(surface, filename="surface.vtk"):
-    """
-    Save a B-Spline surface to a VTK file for visualization in ParaView.
-    
-    Parameters:
-    - surface: geomdl BSpline.Surface object
-    - filename: Name of the output VTK file (default: 'surface.vtk')
-    """
-    # Ensure surface is evaluated
-    surface.evaluate()
 
-    # Get surface points
-    points = np.array(surface.evalpts)  # List of (x, y, z) tuples
-
-    # Create VTK points array
-    vtk_points = vtk.vtkPoints()
-    for p in points:
-        vtk_points.InsertNextPoint(p)
-
-    # Create VTK polygonal data
-    polydata = vtk.vtkPolyData()
-    polydata.SetPoints(vtk_points)
-
-    # Create a triangulation of the points
-    delaunay = vtk.vtkDelaunay2D()
-    delaunay.SetInputData(polydata)
-    delaunay.Update()
-
-    # Write to VTK file
-    writer = vtk.vtkPolyDataWriter()
-    writer.SetFileName(filename)
-    writer.SetInputData(delaunay.GetOutput())
-    writer.Write()
-    
-    print(f"Surface saved as {filename}")
-    
 def calc_leaflet_landmarks(commissure_1, commissure_2, commissure_3, hinge_1, hinge_2, hinge_3):
     # Calculate midpoints between commissures
     mid_1_2 = np.mean([commissure_1, commissure_2], axis=0)
@@ -94,139 +72,6 @@ def fit_spline_pts(point_1: list, point_2: list, arch_control: list):
     arch_1, arch_2 = eval_pts[25], eval_pts[75]
     
     return arch_1, arch_2
-
-
-def calc_ctrlpoints(cusp_landmarks, leaflet_tip, delta=1e-3):
-    """
-    Function to calculate control points for a B-spline surface,
-    estimating intermediate points by averaging instead of spline fitting.
-
-    Parameters:
-        cusp_landmarks: List of three points [commissure_1, commissure_2, hinge]
-        leaflet_tip: The leaflet tip coordinate [x, y, z]
-        delta: Small value used to differentiate the leaflet tip points
-
-    Returns:
-        A 5x3 matrix representing control points for surface interpolation.
-    """
-    # Extract the relevant annotations for one cusp
-    commissure_1 = np.array(cusp_landmarks[0])
-    commissure_2 = np.array(cusp_landmarks[1])
-    hinge = np.array(cusp_landmarks[2])
-    leaflet_tip = np.array(leaflet_tip)
-    
-    # Center point between hinge and leaflet tip
-    center = (hinge + leaflet_tip) / 2
-
-    # Arch control points between leaflet tip and commissures
-    arch_control_1 = (leaflet_tip + commissure_1) / 2
-    arch_control_2 = (leaflet_tip + commissure_2) / 2
-
-    # Small perturbations around the leaflet tip
-    leaflet_tip_1 = leaflet_tip + np.array([delta,     delta / 10, 0])
-    leaflet_tip_2 = leaflet_tip - np.array([delta,     delta / 10, 0])
-    leaflet_tip_3 = leaflet_tip + np.array([2*delta,   delta / 10, 0])
-    leaflet_tip_4 = leaflet_tip - np.array([2*delta,   delta / 10, 0])
-
-    # Estimate intermediate points as averages instead of spline fitting
-    hinge_arch_1 = (commissure_1 + hinge) / 2
-    hinge_arch_2 = (commissure_2 + hinge) / 2
-
-    center_left = (arch_control_1 + center) / 2
-    center_right = (arch_control_2 + center) / 2
-
-    arch_left_1 = (commissure_1 + arch_control_1) / 2
-    arch_left_2 = (arch_control_1 + leaflet_tip) / 2
-
-    arch_right_1 = (commissure_2 + arch_control_2) / 2
-    arch_right_2 = (arch_control_2 + leaflet_tip) / 2
-
-    left_hinge_1 = (hinge_arch_1 + center_left) / 2
-    left_hinge_2 = (center_left + leaflet_tip_1) / 2
-
-    right_hinge_1 = (hinge_arch_2 + center_right) / 2
-    right_hinge_2 = (center_right + leaflet_tip_3) / 2
-
-    center_mid_1 = (hinge + center) / 2
-    center_mid_2 = (center + leaflet_tip_2) / 2
-
-    # Final 5x3 control grid
-    control_points = np.array([
-        [commissure_1, arch_left_1, arch_control_1, arch_left_2, leaflet_tip],
-        [hinge_arch_1, left_hinge_1, center_left,   left_hinge_2, leaflet_tip_1],
-        [hinge,       center_mid_1,  center,        center_mid_2,  leaflet_tip_2],
-        [hinge_arch_2, right_hinge_1, center_right, right_hinge_2, leaflet_tip_3],
-        [commissure_2, arch_right_1, arch_control_2, arch_right_2, leaflet_tip_4]
-    ], dtype=np.float64)
-
-    return control_points
-
-
-def reconstruct_surface(control_points, degree_u=2, degree_v=2, knotvector_u=None, knotvector_v=None, delta=0.01):
-    """
-    Constructs and evaluates a NURBS surface from given control points.
-
-    Parameters:
-        control_points (list): 2D grid of 3D control points.
-        degree_u (int): Degree in the U direction (default: 2).
-        degree_v (int): Degree in the V direction (default: 2).
-        knotvector_u (list, optional): Knot vector for U direction.
-        knotvector_v (list, optional): Knot vector for V direction.
-        delta (float): Surface evaluation resolution (default: 0.05).
-
-    Returns:
-        BSpline.Surface: The reconstructed and evaluated NURBS surface.
-    """
-
-    # Create the NURBS surface
-    surf = BSpline.Surface()
-    surf.degree_u = degree_u
-    surf.degree_v = degree_v
-    surf.ctrlpts2d = control_points
-
-    # Define default knot vectors if not provided
-    if knotvector_u is None:
-        knotvector_u = [0, 0, 1, 1]
-    if knotvector_v is None:
-        knotvector_v = [0, 0, 1, 1]
-
-    surf.knotvector_u = knotvector_u
-    surf.knotvector_v = knotvector_v
-    surf.delta = delta
-
-    # Evaluate the surface
-    surf.evaluate()
-    return surf
-
-
-def interpolate_surface(interp_points):
-    """
-    Constructs a NURBS surface from interp_points and prints debug info.
-    """
-
-    # print(f"Input interp_points type: {type(interp_points)}")
-    # print(f"Input interp_points shape: {getattr(interp_points, 'shape', 'no shape attribute')}")
-
-    size_u = interp_points.shape[0]
-    size_v = interp_points.shape[1]
-    print(f"Size_u: {size_u}, Size_v: {size_v}")
-
-    # Convert points to a flat tuple of 3D tuples matching the working example format
-    interp_points_2d = tuple(tuple(pt) for pt in interp_points.reshape(-1, 3))
-
-    # print(f"Reshaped interp_points_2d type: {type(interp_points_2d)}")
-    # print(f"Number of points: {len(interp_points_2d)}")
-    # print(interp_points_2d)
-
-    degree_u = 2
-    degree_v = 2
-    # print(f"Degree_u: {degree_u}, Degree_v: {degree_v}")
-
-    surf = fitting.approximate_surface(interp_points_2d, size_u, size_v, degree_u, degree_v)
-
-    surf.evaluate()
-    return surf
-
 
 
 def save_surface_evalpts(surface, save_dir = r"H:\DATA\Afstuderen\2.Code\Stenosis-Severity-backup\temp", filename="lcc"):
@@ -355,38 +200,6 @@ def load_leaflet_landmarks(file_path):
     except Exception as e:
         print(f"Error reading landmarks from {file_path}: {e}")
         return None
-
-
-def plot_control_points(control_points):
-    """
-    Plots control points with PyVista, including labels and connecting lines.
-    
-    Parameters:
-        control_points: List or 2D array of control points with shape (rows, cols, 3)
-    """
-    control_points = np.array(control_points)
-    rows, cols = control_points.shape[:2]
-
-    # Flatten points for plotting
-    points_flat = control_points.reshape(-1, 3)
-
-    # Create PyVista point cloud
-    point_cloud = pv.PolyData(points_flat)
-
-    # Create plotter
-    plotter = pv.Plotter()
-    plotter.add_mesh(point_cloud, color='red', point_size=10, render_points_as_spheres=True)
-
-    # Add labels for each control point as (row, col)
-    for r in range(rows):
-        for c in range(cols):
-            point = control_points[r, c]
-            label = f"({r},{c})"
-            plotter.add_point_labels(point, [label], font_size=12, text_color='black', point_color='yellow', shape_opacity=0.6)
-
-
-    plotter.add_axes()
-    plotter.show()
 
 
 def get_annular_normal(patient_number, base_path="H:/DATA/Afstuderen/3.Data/SSM/patient_database"):
@@ -607,8 +420,6 @@ def landmarks_to_voxel(txt_file, origin, pixel_spacing):
     
     return voxel_coords
 
-import numpy as np
-
 def reorient_landmarks(landmarks_zyx, R, dicom_origin, spacing, output_shape):
     """
     Reorient landmarks to match affine_transform applied to the volume.
@@ -651,44 +462,6 @@ def reorient_landmarks(landmarks_zyx, R, dicom_origin, spacing, output_shape):
     print(f"Number of landmarks after affine transform: {rotated_landmarks_voxel.shape[0]}")
 
     return rotated_landmarks_voxel
-
-
-
-def vtk_to_pointcloud(filename, origin, pixel_spacing):
-    """
-    Load a VTK PolyData surface and return points in voxel coordinates
-    aligned with a DICOM volume grid.
-
-    Parameters
-    ----------
-    filename : str
-        Path to VTK PolyData file.
-    origin : tuple of float
-        DICOM origin (LPS coordinates of voxel 0,0,0).
-    spacing : tuple of float
-        DICOM voxel spacing (dx, dy, dz).
-
-    Returns
-    -------
-    voxel_points : ndarray
-        Array of shape (N,3) containing points in voxel coordinates (z,y,x order if desired).
-    """
-    # Load VTK
-    reader = vtk.vtkPolyDataReader()
-    reader.SetFileName(filename)
-    reader.Update()
-    polydata = reader.GetOutput()
-
-    spacing = pixel_spacing[::-1]
-    
-    # Extract points
-    points_vtk = polydata.GetPoints()
-    points = np.array([points_vtk.GetPoint(i) for i in range(points_vtk.GetNumberOfPoints())])
-
-    # Convert LPS coordinates to voxel coordinates
-    voxel_points = np.array(points - np.array(origin)) / np.array(spacing)
-
-    return voxel_points
 
 
 def rotate_vtk_landmarks(vtk_points, rotation_matrix, rotation_offset):
@@ -746,7 +519,6 @@ def order_points_by_angle(points):
     
     return ordered_points
 
-from scipy.spatial.distance import cdist
 
 def order_points_nn(points):
     """
@@ -919,18 +691,6 @@ def contour_segment(contour, i_start, i_end, debug_image=None):
     # --- Choose shorter segment ---
     seg = seg_fwd if dist_fwd <= dist_rev else seg_rev
 
-    # --- Optional visualization ---
-    if debug_image is not None:
-        plt.figure(figsize=(6, 6))
-        plt.imshow(debug_image, cmap='gray', origin='upper')
-        plt.plot(contour[:, 1], contour[:, 0], 'y--', lw=1, alpha=0.5, label="Full Contour")
-        plt.plot(seg[:, 1], seg[:, 0], 'r-', lw=2, label="Selected Segment")
-        plt.scatter(contour[i_start, 1], contour[i_start, 0], c='lime', s=60, label="Start", edgecolors='k')
-        plt.scatter(contour[i_end, 1], contour[i_end, 0], c='cyan', s=60, label="End", edgecolors='k')
-        plt.title("Contour Segment Debug")
-        plt.legend()
-        plt.show()
-
     return seg
 
 
@@ -996,7 +756,6 @@ def resample_closed_contour(contour, n_points=100):
     return np.vstack([y_new, x_new]).T  # return in (row, col) order
 
 
-import matplotlib.pyplot as plt
 
 def find_all_boundary_intersections(
     upscaled,
@@ -1071,28 +830,6 @@ def find_all_boundary_intersections(
             intersections[name] = None
             line_data[name] = None
 
-    # Visualization
-    if plot:
-        plt.figure(figsize=(6, 6))
-        plt.imshow(upscaled, cmap="gray")
-
-        for name, (boundary, wall_segment, color) in boundaries.items():
-            if boundary is not None:
-                print(f"For {slice_idx} the {name} is non empty.")
-                # plt.contour(boundary, levels=[0.5], colors=color, linewidths=2)
-                if wall_segment is not None and len(wall_segment) > 1:
-                    plt.plot(wall_segment[:, 1], wall_segment[:, 0], '-', color=color, lw=1.5, alpha=0.8)
-                if name in line_data and line_data[name] is not None:
-                    x_line, y_line = line_data[name]
-                    plt.plot(x_line, y_line, '--', color=color, lw=1.2, alpha=0.8)  # show polyfit line
-                if intersections[name] is not None:
-                    plt.plot(intersections[name][1], intersections[name][0], 'or', markersize=6)
-
-        plt.title(f"Mercedes Star Intersections — Slice {slice_idx}")
-        plt.axis("off")
-        plt.tight_layout()
-        plt.show()
-
     return intersections
 
 
@@ -1150,11 +887,6 @@ def compute_boundary_to_com_distance(boundary_curve, com_point):
         return None
 
     return float(np.min(distances))
-
-
-from scipy.spatial import cKDTree
-import numpy as np
-from skimage.measure import label, regionprops
 
 def clean_boundary_from_mask(mask, aortic_wall_points, min_dist, commissures, center):
     """
@@ -1217,9 +949,7 @@ def clean_boundary_from_mask(mask, aortic_wall_points, min_dist, commissures, ce
 
     return coords, mercedes_mask
 
-from skimage.filters import sobel
-from scipy.ndimage import gaussian_filter
-from skimage import exposure
+
 
 def compute_edge_volume(raw_volume_hu,
                         hu_window=(0, 400),
@@ -1242,7 +972,6 @@ def compute_edge_volume(raw_volume_hu,
 
     smoothed_vol = np.zeros_like(clipped, dtype=np.float32)
     norm_vol = np.zeros_like(clipped, dtype=np.float32)
-    clahe_vol = np.zeros_like(clipped, dtype=np.float32)
     gradient_vol = np.zeros_like(clipped, dtype=np.float32)
 
     # Process each slice
@@ -1267,27 +996,6 @@ def compute_edge_volume(raw_volume_hu,
     # 6. Optional normalization to 0–255
     if normalize:
         gradient_vol = exposure.rescale_intensity(gradient_vol, out_range=(0, 255))
-
-    # -------------------------------------------------------------------------
-    # OPTIONAL VISUALIZATION
-    # -------------------------------------------------------------------------
-    if visualize:
-        fig, ax = plt.subplots(1, 4, figsize=(18, 4))
-        titles = ["Clipped HU", "Smoothed", "Normalized", "Gradient"]
-        images = [
-            clipped[slice_idx],
-            smoothed_vol[slice_idx],
-            norm_vol[slice_idx],
-            gradient_vol[slice_idx],
-        ]
-
-        for i in range(4):
-            ax[i].imshow(images[i], cmap="gray")
-            ax[i].set_title(titles[i])
-            ax[i].axis("off")
-
-        plt.tight_layout()
-        plt.show()
 
     return gradient_vol
 
@@ -1357,9 +1065,6 @@ def rotate_segmentation_back(seg_rotated, R, rotation_center, upscaling_factor):
 
     return seg_original
 
-from skimage.draw import line
-
-
 def create_mercedes_mask(image, commissure_points, center_point, line_thickness=8):
     """
     Creates a mask of lines connecting the commissures to the center with specified thickness.
@@ -1397,7 +1102,6 @@ def create_mercedes_mask(image, commissure_points, center_point, line_thickness=
     return mask
 
 
-from skimage import measure
 
 def save_volume_as_stl(calc_volume, output_path, patient_nr, file_type):
     """Save the calcification volume as an STL file."""
@@ -1475,9 +1179,6 @@ def downsample_and_rescale(volume, downsample_factor, inverse_zoom):
     
     return volume_rescaled
 
-
-import trimesh
-
 def save_volume_as_stl_patient_space(volume, output_path, patient_nr, file_type,
                                      zoom_x, zoom_y, zoom_z,
                                      dicom_origin):
@@ -1524,11 +1225,6 @@ def save_volume_as_stl_patient_space(volume, output_path, patient_nr, file_type,
     mesh.export(output_filename)
     
     print(f"[OK] {file_type} volume saved as STL in patient space: {output_filename}")
-
-
-import numpy as np
-from scipy.ndimage import binary_dilation, gaussian_filter
-from scipy.spatial import cKDTree
 
 def bresenham_line_2d(p0, p1):
     """
@@ -1792,15 +1488,6 @@ def create_3d_mask_from_points(points, volume_shape, thickness_voxels=1):
     return mask
 
 
-from scipy.ndimage import gaussian_filter, binary_closing, binary_dilation
-from skimage.morphology import cube
-
-
-import numpy as np
-from scipy.ndimage import binary_erosion
-
-
-
 def get_leaflet_attachment_curve(
         aortic_wall_mask,
         commissure1,
@@ -1868,9 +1555,6 @@ def create_leaflet_surface_from_curves(curves,
     surf : geomdl surface object
     eval_pts : (M,3) evaluated surface points
     """
-
-    import numpy as np
-    from geomdl import fitting
 
     # --- Convert safely to numpy arrays ---
     curves = [np.array(c) for c in curves]

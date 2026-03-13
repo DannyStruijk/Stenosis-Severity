@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>383</width>
-    <height>717</height>
+    <height>786</height>
    </rect>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
@@ -144,7 +144,7 @@
       <item>
        <widget class="QPushButton" name="reconstructButton">
         <property name="text">
-         <string>Reconstruct Aortic Leaflets</string>
+         <string>Save Annotations</string>
         </property>
        </widget>
       </item>

@@ -1,18 +1,25 @@
 #%%%%%%%% IMPORTING MODULES AND INITIALIZING METADATA
 
 import os
-import logging
 from typing import Optional
 import vtk
 import subprocess
-import sys
 import slicer
 from slicer.i18n import tr as _
 from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
 from slicer.parameterNodeWrapper import parameterNodeWrapper
 from DICOMLib import DICOMUtils
-from slicer import vtkMRMLMarkupsFiducialNode
+import numpy as np
+import sys
+
+functions_path = r"H:\DATA\Afstuderen\2.Code\Stenosis-Severity-backup\surface_reconstruction"
+
+if functions_path not in sys.path:
+    sys.path.insert(0, functions_path)
+
+import functions
+
 
 class Interface(ScriptedLoadableModule):
     def __init__(self, parent):
@@ -80,30 +87,34 @@ class InterfaceWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         # Clear existing items in the dropdown
         self.ui.dicom_dropdown.clear()
         
-        # Add all of the AoSstress patients
-        self.ui.dicom_dropdown.addItem("Patient 14", "T:/Research_01/CZE-2020.67 - SAVI-AoS/AoS stress/CT/Aosstress14/DICOM/000037EC/AA4EC564/AA3B0DE6/00007EA9")
-        self.ui.dicom_dropdown.addItem("Patient 2",  "T:/Research_01/CZE-2020.67 - SAVI-AoS/AoS stress/CT/Aosstress02/DICOM/00002C38/AA3D97B3/AA3B5B73/000062B4")
-        self.ui.dicom_dropdown.addItem("Patient 5",  "T:/Research_01/CZE-2020.67 - SAVI-AoS/AoS stress/CT/Aosstress05/DICOM/0000CD6B/AA3BA81C/AAADD92A/0000C27F")
-        self.ui.dicom_dropdown.addItem("Patient 6",  "T:/Research_01/CZE-2020.67 - SAVI-AoS/AoS stress/CT/Aosstress06/DICOM/00008A58/AA245852/AA659577/0000A0F7")
-        self.ui.dicom_dropdown.addItem("Patient 8",  "T:/Research_01/CZE-2020.67 - SAVI-AoS/AoS stress/CT/Aosstress08/DICOM/0000A996/AA934448/AA0D3303/0000F9C1")
-        self.ui.dicom_dropdown.addItem("Patient 9",  "T:/Research_01/CZE-2020.67 - SAVI-AoS/AoS stress/CT/Aosstress09/DICOM/0000B2D9/AA876FC8/AABB814D/0000534F")
-        self.ui.dicom_dropdown.addItem("Patient 11", "T:/Research_01/CZE-2020.67 - SAVI-AoS/AoS stress/CT/Aosstress11/DICOM/00006310/AAD9B219/AA824679/00004F79")
-        self.ui.dicom_dropdown.addItem("Patient 12", "T:/Research_01/CZE-2020.67 - SAVI-AoS/AoS stress/CT/Aosstress12/DICOM/0000B416/AABF5153/AA9CA582/0000799A")
-        self.ui.dicom_dropdown.addItem("Patient 13", "T:/Research_01/CZE-2020.67 - SAVI-AoS/AoS stress/CT/Aosstress13/DICOM/0000208C/AABDE934/AA243C5D/00002411")
-        self.ui.dicom_dropdown.addItem("Patient 14", "T:/Research_01/CZE-2020.67 - SAVI-AoS/AoS stress/CT/Aosstress14/DICOM/000037EC/AA4EC564/AA3B0DE6/00007EA9")
-        self.ui.dicom_dropdown.addItem("Patient 15", "T:/Research_01/CZE-2020.67 - SAVI-AoS/AoS stress/CT/Aosstress15/DICOM/00007464/AA714246/AA1B4F2E/00008A1B")
         # Add SAVI-AoS patients
-        self.ui.dicom_dropdown.addItem("SAVI_01", "T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE001/DICOM/00003852/AA44D04F/AA7BB8C5/000050B5")
-        self.ui.dicom_dropdown.addItem("SAVI_02", "T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE002/DICOM/0000AFC5/AAAA2796/AAFF16B0/0000ADA6")
-        self.ui.dicom_dropdown.addItem("SAVI_03", "T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE003/DICOM/0000AF6A/AA4272CE/AA72A45E/000050F2")
-        self.ui.dicom_dropdown.addItem("SAVI_04", "T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE004/DICOM/00002F76/AA1F4542/AAB1E4E9/0000CAC5")
-        self.ui.dicom_dropdown.addItem("SAVI_05", "T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE005/DICOM/0000AF52/AA590C3F/AAC428CF/0000FEE0")
-        self.ui.dicom_dropdown.addItem("SAVI_06", "T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE006/DICOM/00000EED/AA87381C/AAAEC035/00002581")
-        self.ui.dicom_dropdown.addItem("SAVI_07", "T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE007/DICOM/000065F6/AAB95BAE/AA7A7E4C/00005896")
-        self.ui.dicom_dropdown.addItem("SAVI_08", "T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE008/DICOM/000053DF/AA102722/AA7E9491/000073C6")
-        self.ui.dicom_dropdown.addItem("SAVI_10", "T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE010/DICOM/00003911/AA8B6291/AA8D4457/0000EDE8")
-
-
+        self.ui.dicom_dropdown.addItem("CZE001", "T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE001/DICOM/00003852/AA44D04F/AA7BB8C5/000050B5")
+        self.ui.dicom_dropdown.addItem("CZE002", "T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE002/DICOM/0000AFC5/AAAA2796/AAFF16B0/0000ADA6")
+        self.ui.dicom_dropdown.addItem("CZE003", "T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE003/DICOM/0000AF6A/AA4272CE/AA72A45E/000050F2")
+        self.ui.dicom_dropdown.addItem("CZE004", "T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE004/DICOM/00002F76/AA1F4542/AAB1E4E9/0000CAC5")
+        self.ui.dicom_dropdown.addItem("CZE005", "T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE005/DICOM/0000AF52/AA590C3F/AAC428CF/0000FEE0")
+        self.ui.dicom_dropdown.addItem("CZE006", "T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE006/DICOM/00000EED/AA87381C/AAAEC035/00002581")
+        self.ui.dicom_dropdown.addItem("CZE007", "T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE007/DICOM/000065F6/AAB95BAE/AA7A7E4C/00005896")
+        self.ui.dicom_dropdown.addItem("CZE008", "T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE008/DICOM/000053DF/AA102722/AA7E9491/000073C6")
+        self.ui.dicom_dropdown.addItem("CZE010", "T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE010/DICOM/00003911/AA8B6291/AA8D4457/0000EDE8")
+        self.ui.dicom_dropdown.addItem("CZE011", "T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE011/DICOM/00005CB5/AAAA99F9/AA6670D7/0000949B")
+        self.ui.dicom_dropdown.addItem("CZE012", "T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE012/DICOM/00003CC2/AA022842/AA289D50/00007754")
+        self.ui.dicom_dropdown.addItem("CZE013", "T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE013/DICOM/0000EA91/AACEC60C/AA7E3964/0000E5BC")
+        self.ui.dicom_dropdown.addItem("CZE014", "T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE014/DICOM/00005E34/AA79D3B8/AA0DFFCE/0000C950")
+        self.ui.dicom_dropdown.addItem("CZE016", "T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE016/DICOM/00002765/AAECDDFB/AAE12657/00001053")
+        self.ui.dicom_dropdown.addItem("CZE017", "T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE017/DICOM/00009314/AA9EE817/AAD307C6/000000A9")
+        self.ui.dicom_dropdown.addItem("CZE018", "T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE018/DICOM/0000767B/AAC5650C/AADB5D54/0000CAEC")
+        self.ui.dicom_dropdown.addItem("CZE019", "T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE019/DICOM/00008A57/AA9CD7F4/AAA7440B/00006E56")
+        self.ui.dicom_dropdown.addItem("CZE020", "T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE020/DICOM/000057A3/AA56DBD9/AA4B0694/00005E78")
+        self.ui.dicom_dropdown.addItem("CZE022", "T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE022/DICOM/00002E36/AA0DF707/AAE959BA/0000B1D3")
+        self.ui.dicom_dropdown.addItem("CZE023", "T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE023/DICOM/0000B09F/AA9FDA4D/AA8D0F36/0000F21F")
+        self.ui.dicom_dropdown.addItem("CZE025", "T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE025/DICOM/0000A32D/AAF725DA/AA6A556D/000058A9")
+        self.ui.dicom_dropdown.addItem("CZE026", "T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE026/DICOM/00007858/AACE1771/AA3C074D/000033A6")
+        self.ui.dicom_dropdown.addItem("CZE027", "T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE027/DICOM/000046F3/AA0B28CE/AA933D3E/00007339")
+        self.ui.dicom_dropdown.addItem("CZE029", "T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE029/DICOM/00001B91/AADD797F/AA3A0E6E/00002DA1")
+        self.ui.dicom_dropdown.addItem("CZE030", "T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE030/DICOM/000032F8/AAD2875F/AA7CD947/00002E0D")
+        
+        
     def load_dicom_button(self):
         # Get the patient name and DICOM path from dropdown
         patientName = self.ui.dicom_dropdown.currentText
@@ -233,38 +244,70 @@ class InterfaceWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
                 self.annotationNode.RemoveNthControlPoint(0)  # Remove first control point iteratively
         self.disable_annotation()
         
-    def reconstruct(self, output_file="ras_coordinates.txt"):
+    def reconstruct(self):
+
+        # Get selected patient
+        patient_id = self.ui.dicom_dropdown.currentText
         
-        # Define the desired path for saving the file
-        path = "H:/DATA/Afstuderen/2.Code/Stenosis-Severity/annotations"
-        
-        # Combine the path and the filename to create the full file path
-        full_output_path = f"{path}/{output_file}"
+        # Set annotations folder and patient-specific files
+        annotations_folder = r"H:\DATA\Afstuderen\2.Code\Stenosis-Severity-backup\annotations"
+        os.makedirs(annotations_folder, exist_ok=True)
+        ras_file = os.path.join(annotations_folder, f"{patient_id}_ras_coordinates.txt")
     
-        # Open the file in write mode
-        with open(full_output_path, 'w') as f:
-            # Loop through all the points
-            for index in range(self.numPoints-1):
-                point_Ras = [0, 0, 0]
-                # Get the RAS coordinates for the current point
-                self.annotationNode.GetNthControlPointPositionWorld(index, point_Ras)
-                print(index)
-                
-                # Convert RAS coordinates to LPS
-                point_lps = self.transform_to_lps(point_Ras)
-                
-                # Write the LPS coordinates to the file (one line per point)
-                f.write(f"{point_lps[0]}\t{point_lps[1]}\t{point_lps[2]}\n")
+        # Check if annotation node exists
+        if not self.annotationNode or self.numPoints == 0:
+            print("No points annotated yet!")
+            return
+    
+        # ---- SAVE ONLY VALID POINTS (ignore unplaced placeholders) ----
+        landmarks_to_save = []
+        num_control_points = self.annotationNode.GetNumberOfControlPoints()  # <-- get it directly
         
-        print(f"LPS coordinates saved to {full_output_path}")
-        print("The leaflets are now being calculated based on the annotated landmarks.")
-        # Path to the script you want to run externally
-        script_path = "H:/DATA/Afstuderen/2.Code/Stenosis-Severity/surface_reconstruction/leaflet_interpolation.py"
-        # Run the script using subprocess
-        subprocess.run([sys.executable, script_path], check=True)
-        print("The leaflets are now reconstructed. Continue with the SSM to achieve the final results.")
-        
-        return
+        for index in range(num_control_points):
+            point_Ras = [0, 0, 0]
+            self.annotationNode.GetNthControlPointPositionWorld(index, point_Ras)
+            if point_Ras == [0, 0, 0]:
+                continue  # skip unplaced placeholder points
+            point_lps = self.transform_to_lps(point_Ras)
+            landmarks_to_save.append(point_lps)
+    
+        if len(landmarks_to_save) != 7:
+            print(f"Error: exactly 7 points required, got {len(landmarks_to_save)}")
+            return
+    
+        # Save the RAS/LPS landmarks
+        with open(ras_file, 'w') as f:
+            for p in landmarks_to_save:
+                f.write(f"{p[0]}\t{p[1]}\t{p[2]}\n")
+    
+        print(f"RAS/LPS landmarks saved to {ras_file}")
+    
+        # ---- PROCESS LANDMARKS ----
+        landmarks = np.array(landmarks_to_save)
+        commissure_1, commissure_2, commissure_3, center, hinge_1, hinge_2, hinge_3 = landmarks
+    
+        # Calculate cusp landmarks
+        cusp_landmarks = functions.calc_leaflet_landmarks(
+            commissure_1,
+            commissure_2,
+            commissure_3,
+            hinge_1,
+            hinge_2,
+            hinge_3
+        )
+        print("CUSP LANDMARKS", cusp_landmarks)
+    
+        # ---- SAVE PROCESSED LANDMARKS ----
+        # 1️⃣ Patient database
+        db_output_path = os.path.join(r"H:\DATA\Afstuderen\3.Data\SSM\patient_database", patient_id, "landmarks")
+        os.makedirs(db_output_path, exist_ok=True)
+        functions.save_ordered_landmarks(cusp_landmarks, center, db_output_path)
+        print(f"Ordered landmarks saved in patient database: {db_output_path}")
+    
+        # 2️⃣ Also save a copy in the annotations folder
+        annotations_output_file = os.path.join(annotations_folder, f"{patient_id}_ordered_landmarks.txt")
+        functions.save_ordered_landmarks(cusp_landmarks, center, annotations_output_file)
+        print(f"Ordered landmarks also saved in annotations folder: {annotations_output_file}")
     
     def transform_to_lps(self, point_Ras):
         """
