@@ -1892,3 +1892,151 @@ def keep_largest_component_3d(volume_mask):
     print(f"[Info] Largest 3D component size: {largest_region.area} voxels")
 
     return largest_component_mask
+
+def assign_calcifications_3D_voxelwise(calc_mask, LCC_mask, RCC_mask, NCC_mask):
+    """
+    Assign each calcification voxel to the closest leaflet cap in 3D
+    using voxelwise nearest-neighbor assignment (physical distances).
+
+    Parameters
+    ----------
+    calc_mask : 3D binary array
+        Binary mask of all calcifications
+    LCC_mask, RCC_mask, NCC_mask : 3D binary arrays
+        Binary masks of each leaflet cap
+    pixel_spacing : tuple of 3 floats
+        Voxel spacing in (z, y, x) order for physical distances
+
+    Returns
+    -------
+    LCC_calc, RCC_calc, NCC_calc : 3D binary arrays
+        Assigned calcifications per leaflet
+    """
+    # Ensure boolean
+    calc_mask = calc_mask.astype(bool)
+    LCC_mask = LCC_mask.astype(bool)
+    RCC_mask = RCC_mask.astype(bool)
+    NCC_mask = NCC_mask.astype(bool)
+
+    # Output volumes
+    LCC_calc = np.zeros_like(calc_mask, dtype=np.uint8)
+    RCC_calc = np.zeros_like(calc_mask, dtype=np.uint8)
+    NCC_calc = np.zeros_like(calc_mask, dtype=np.uint8)
+
+    # Get voxel coordinates
+    calc_coords = np.column_stack(np.nonzero(calc_mask))
+    LCC_coords = np.column_stack(np.nonzero(LCC_mask))
+    RCC_coords = np.column_stack(np.nonzero(RCC_mask))
+    NCC_coords = np.column_stack(np.nonzero(NCC_mask))
+
+    if len(calc_coords) == 0:
+        print("No calcification voxels found!")
+        return LCC_calc, RCC_calc, NCC_calc
+
+    # Build KD-trees
+    tree_LCC = cKDTree(LCC_coords)
+    tree_RCC = cKDTree(RCC_coords)
+    tree_NCC = cKDTree(NCC_coords)
+
+    # Query distances for all calc voxels
+    d_LCC, _ = tree_LCC.query(calc_coords)
+    d_RCC, _ = tree_RCC.query(calc_coords)
+    d_NCC, _ = tree_NCC.query(calc_coords)
+
+    # Assign each voxel to nearest leaflet
+    nearest_leaflet = np.argmin(np.stack([d_LCC, d_RCC, d_NCC], axis=1), axis=1)
+
+    LCC_calc[tuple(calc_coords[nearest_leaflet==0].T)] = 1
+    RCC_calc[tuple(calc_coords[nearest_leaflet==1].T)] = 1
+    NCC_calc[tuple(calc_coords[nearest_leaflet==2].T)] = 1
+
+    # Optional: print summary
+    print(f"Assigned calcifications: LCC={np.count_nonzero(LCC_calc)}, "
+          f"RCC={np.count_nonzero(RCC_calc)}, NCC={np.count_nonzero(NCC_calc)}, "
+          f"Total={np.count_nonzero(LCC_calc)+np.count_nonzero(RCC_calc)+np.count_nonzero(NCC_calc)}")
+
+    return LCC_calc, RCC_calc, NCC_calc
+
+
+def find_max_length_slice(data_dict):
+    """
+    Finds the slice where the boundary length is maximal.
+
+    Parameters:
+        data_dict (dict): e.g. LCC_data, RCC_data, NCC_data
+
+    Returns:
+        max_slice (int): slice index of maximum boundary length
+        max_length (float): corresponding length
+    """
+    max_length = -np.inf
+    max_slice = None
+
+    for slice_nr, data in data_dict.items():
+        length = data.get("boundary_length", None)
+
+        if length is None:
+            continue
+
+        if length > max_length:
+            max_length = length
+            max_slice = slice_nr
+
+    return max_slice, max_length
+
+
+
+def coords_from_mask(mask):
+    """Return pixel coordinates of all nonzero pixels in (row, col) format."""
+    return np.column_stack(np.nonzero(mask))
+
+
+from skimage.measure import find_contours
+
+def ordered_coords_from_mask(mask, start_point=None):
+    """
+    Extract ordered coordinates from a 2D binary mask using skimage.find_contours.
+    start_point: optional (row, col) to start ordering from.
+    """
+    # find_contours returns coordinates in (row, col) as floats
+    contours = find_contours(mask.astype(float), 0.5)
+    if len(contours) == 0:
+        return np.empty((0,2))
+    
+    # Take the longest contour
+    contour = max(contours, key=lambda c: len(c))
+    
+    # Optionally reorder to start near start_point
+    if start_point is not None and contour.shape[0] > 0:
+        dists = np.linalg.norm(contour - np.array(start_point), axis=1)
+        idx = np.argmin(dists)
+        contour = np.vstack([contour[idx:], contour[:idx]])
+    
+    # Round to integer pixel coordinates
+    contour = np.round(contour).astype(int)
+    return contour
+
+def build_leaflet_mask(slice_shape, wall_coords, comA, comB, center):
+    """
+    Build a leaflet mask using wall mask and straight lines to center.
+    
+    Polygon path:
+    comA -> wall -> comB -> center -> comA
+    """
+    # Extract wall coordinates
+    wall_coords = np.round(wall_coords).astype(int)
+    
+    # Combine polygon points
+    polygon_points = [comA]
+    if wall_coords.size > 0:
+        polygon_points.append(wall_coords)
+    polygon_points.append(comB)
+    polygon_points.append(center)
+    polygon_points.append(comA)  # close polygon
+    
+    polygon_points = np.vstack(polygon_points)
+    
+    # Create mask
+    mask = polygon2mask(slice_shape, polygon_points)
+    return mask
+

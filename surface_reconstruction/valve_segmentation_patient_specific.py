@@ -35,6 +35,7 @@ PATIENT_PATHS = {
     "CZE012": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE012/DICOM/00003CC2/AA022842/AA289D50/00007754",
     "CZE013": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE013/DICOM/0000EA91/AACEC60C/AA7E3964/0000E5BC",
     "CZE014": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE014/DICOM/00005E34/AA79D3B8/AA0DFFCE/0000C950",
+    "CZE015": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE015/2de versie/DICOM/00003971/AA8D3DE7/AA73252D/0000D7A8",
     "CZE016": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE016/DICOM/00002765/AAECDDFB/AAE12657/00001053",
     "CZE017": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE017/DICOM/00009314/AA9EE817/AAD307C6/000000A9",
     "CZE018": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE018/DICOM/0000767B/AAC5650C/AADB5D54/0000CAEC",
@@ -42,6 +43,7 @@ PATIENT_PATHS = {
     "CZE020": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE020/DICOM/000057A3/AA56DBD9/AA4B0694/00005E78",
     "CZE022": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE022/DICOM/00002E36/AA0DF707/AAE959BA/0000B1D3",
     "CZE023": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE023/DICOM/0000B09F/AA9FDA4D/AA8D0F36/0000F21F",
+    "CZE024": "T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE024/DICOM/0000431B/AA1DAD4A/AAAA0072/0000E6A7",
     "CZE025": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE025/DICOM/0000A32D/AAF725DA/AA6A556D/000058A9",
     "CZE026": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE026/DICOM/00007858/AACE1771/AA3C074D/000033A6",
     "CZE027": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE027/DICOM/000046F3/AA0B28CE/AA933D3E/00007339",
@@ -50,7 +52,7 @@ PATIENT_PATHS = {
 }
 
 # Choose which patient to work with
-patient_nr = "CZE030"   # e.g. "aos_14" or "savi_07"
+patient_nr = "CZE024"   # e.g. "aos_14" or "savi_07"
 
 # Automatically load directory
 dicom_dir = PATIENT_PATHS[patient_nr]
@@ -562,6 +564,8 @@ for z in range(z_min, z_max + 1):
 
 plt.show()
 
+
+
 # %%-------------------------------  EXTRACTION OF THE LEAFET BOUNDARIES ---------------------------
 
 from skimage.morphology import binary_erosion
@@ -609,9 +613,7 @@ boundary_event_state = {
     "ncc_rcc": {"was_above": False, "event_slice": None},
 }
 
-
 commissure_points = [rcc_lcc_com, lcc_ncc_com, ncc_rcc_com]
-
 mercedes_star = False
 
 # Loop over slices
@@ -665,7 +667,7 @@ for slice_nr, slice_info in slice_data.items():
 
      # ----------------------------------------- SKELETONIZATION  ----------------------------------------
     # Apply Gaussian blur to the reoriented slice (sigma controls the blur intensity)
-    sigma = 1.5  # Adjust this value based on how much blur you want
+    sigma = 1  # Adjust this value based on how much blur you want
     blurred_slice = gaussian(slice_clipped, sigma=sigma)
     
     # Multiply the blurred image with the ROI mask
@@ -804,7 +806,7 @@ for slice_nr, slice_info in slice_data.items():
             cleaned_ncc_rcc_boundary,
             slice_nr,
             mercedes_mask,
-            plot=False
+            plot=True
             )
     
     commissure_names = ["lcc_ncc", "rcc_lcc", "ncc_rcc"]
@@ -947,10 +949,10 @@ for slice_nr, slice_info in slice_data.items():
     # Optional visualization (COM-to-COM segments + boundaries)
     plt.figure(figsize=(6, 6))
     plt.imshow(slice_clipped, cmap='gray', origin='upper')
-    # plt.imshow(mercedes_mask, cmap='jet', alpha=0.3)  # Adjust alpha for transparency
-    # plt.plot(seg_c2c["LCC"][:, 1], seg_c2c["LCC"][:, 0], color='cyan', lw=3, label='LCC')
-    # plt.plot(seg_c2c["RCC"][:, 1], seg_c2c["RCC"][:, 0], color='green', lw=3, label='RCC')
-    # plt.plot(seg_c2c["NCC"][:, 1], seg_c2c["NCC"][:, 0], color='magenta', lw=3, label='NCC')
+    plt.imshow(mercedes_mask, cmap='jet', alpha=0.3)  # Adjust alpha for transparency
+    plt.plot(seg_c2c["LCC"][:, 1], seg_c2c["LCC"][:, 0], color='cyan', lw=3, label='LCC')
+    plt.plot(seg_c2c["RCC"][:, 1], seg_c2c["RCC"][:, 0], color='green', lw=3, label='RCC')
+    plt.plot(seg_c2c["NCC"][:, 1], seg_c2c["NCC"][:, 0], color='magenta', lw=3, label='NCC')
     plt.plot(cleaned_lcc_ncc_boundary[:, 1], cleaned_lcc_ncc_boundary[:, 0], color='cyan', lw=2)
     plt.plot(cleaned_rcc_lcc_boundary[:, 1], cleaned_rcc_lcc_boundary[:, 0], color='green', lw=2)
     plt.plot(cleaned_ncc_rcc_boundary[:, 1], cleaned_ncc_rcc_boundary[:, 0], color='magenta', lw=2)
@@ -959,7 +961,14 @@ for slice_nr, slice_info in slice_data.items():
     plt.legend()
     plt.show()
 
-    
+
+
+# %% SEGMENT THE CALCIFICATION INTO LEAFLET_SPECIFIC 
+
+# In this segment the calcification will be split into three different regions based on the a priori knowledge and the found boudnaries
+
+
+
 # %% ----------------EXTRACT LEAFLET-SPECIFIC CENTER HEIGHTS ---------------
 
 # The shrink ratio is where we say that the boundary has shrunk this much that we will argument that the mercedes star is there.
@@ -977,6 +986,180 @@ print("NCC_RCC max at:", ncc_max_slice, "shrink at:", ncc_event)
 lcc_ncc_height = lcc_event
 rcc_lcc_height = rcc_event
 ncc_rcc_height = ncc_event
+
+# %% EXTRACT LEAFLET SPECIFIC WHEN THE MERCEDES STAR OCCURS. THIS IS NECESSARY TO MAKE 3 SEPERATE REGIONS WITHIN THE ROI
+
+import importlib
+import functions
+importlib.reload(functions)
+
+lcc_max_slice, lcc_max_len = functions.find_max_length_slice(LCC_data)
+rcc_max_slice, rcc_max_len = functions.find_max_length_slice(RCC_data)
+ncc_max_slice, ncc_max_len = functions.find_max_length_slice(NCC_data)
+
+print("Max slices:")
+print("LCC:", lcc_max_slice)
+print("RCC:", rcc_max_slice)
+print("NCC:", ncc_max_slice)
+
+mercedes_height = int(round((
+    lcc_max_slice +
+    rcc_max_slice +
+    ncc_max_slice
+) / 3))
+
+print("Mercedes slice (average):", mercedes_height)
+
+#LCC
+data = LCC_data[mercedes_height]
+wall_lcc = data["com_to_com"]
+boundary_lcc_ncc = data["lcc_ncc_boundary"]
+com_lcc_ncc = data["lcc_ncc_com"]
+com_rcc_lcc = data["rcc_lcc_com"]
+
+#RCC
+data = RCC_data[mercedes_height]
+wall_rcc = data["com_to_com"]
+boundary_rcc_lcc = data["rcc_lcc_boundary"]
+com_rcc_lcc = data["rcc_lcc_com"]
+com_ncc_rcc = data["ncc_rcc_com"]
+
+#NCC
+data = NCC_data[mercedes_height]
+wall_ncc = data["com_to_com"]
+boundary_ncc_rcc = data["ncc_rcc_boundary"]
+com_ncc_rcc = data["ncc_rcc_com"]
+com_lcc_ncc = data["lcc_ncc_com"]
+
+# Grab the slice shape from your reoriented data
+slice_shape = reoriented_non_clipped[mercedes_height].shape
+
+# Build the NCC leaflet mask
+ncc_region_mask = functions.build_leaflet_mask(
+    slice_shape=slice_shape,
+    wall_coords=wall_ncc,       # the wall connecting the two commissures
+    comA=com_lcc_ncc,         # starting commissure on the wall
+    comB=com_ncc_rcc,         # ending commissure on the wall
+    center=center        # leaflet center point
+)
+
+# Build the LCC leaflet mask
+lcc_region_mask = functions.build_leaflet_mask(
+    slice_shape=slice_shape,
+    wall_coords=wall_lcc,       # the wall connecting the two commissures
+    comA=com_lcc_ncc,         # starting commissure on the wall
+    comB=com_rcc_lcc,         # ending commissure on the wall
+    center=center         # leaflet center point
+)
+
+# Build the RCC leaflet mask
+rcc_region_mask = functions.build_leaflet_mask(
+    slice_shape=slice_shape,
+    wall_coords=wall_rcc,       # the wall connecting the two commissures
+    comA=com_ncc_rcc,         # starting commissure on the wall
+    comB=com_rcc_lcc,         # ending commissure on the wall
+    center=center         # leaflet center point
+)
+
+
+# Grab the slice
+slice_img = reoriented_non_clipped[mercedes_height, :, :]
+
+plt.figure(figsize=(6,6))
+plt.imshow(slice_img, cmap='gray')
+
+# Overlay the leaflet masks with transparency and different colors
+plt.imshow(ncc_region_mask, cmap='Reds', alpha=0.4, label='NCC')
+plt.imshow(lcc_region_mask, cmap='Greens', alpha=0.4, label='LCC')
+plt.imshow(rcc_region_mask, cmap='Blues', alpha=0.4, label='RCC')
+
+plt.title(f"Aortic Leaflet Masks - Slice {mercedes_height}")
+plt.axis('off')
+plt.show()
+
+
+
+
+
+# %% CALCULATE THE PERIMETER TO CREATE BULLS
+
+# Combine all com-to-com wall points in order
+all_walls = np.vstack([wall_lcc, wall_ncc, wall_rcc])
+
+# Make sure it's closed
+all_walls_closed = np.vstack([all_walls, all_walls[0]])
+
+# Compute area using shoelace formula
+x = all_walls_closed[:, 1]  # column indices
+y = all_walls_closed[:, 0]  # row indices
+total_area = 0.5 * np.abs(np.sum(x[:-1]*y[1:] - x[1:]*y[:-1]))
+print(f"Total valve area: {total_area:.2f} pixels^2")
+
+radius_half_area = np.sqrt(0.5 * total_area / np.pi)
+print(f"Radius to cover half the area: {radius_half_area:.2f} pixels")
+
+yy, xx = np.meshgrid(np.arange(slice_shape[0]), np.arange(slice_shape[1]), indexing='ij')
+dist_from_center = np.sqrt((yy - center[0])**2 + (xx - center[1])**2)
+
+center_half_area_mask = dist_from_center <= radius_half_area
+
+# Visualize
+plt.figure(figsize=(6,6))
+plt.imshow(slice_img, cmap='gray')
+plt.imshow(center_half_area_mask, cmap='Reds', alpha=0.4)
+plt.scatter(center[1], center[0], c='blue', marker='x')
+plt.title(f"Half-area circular mask (radius={radius_half_area:.2f})")
+plt.axis('off')
+plt.show()
+
+# Calculate mask area in pixels
+mask_area = np.count_nonzero(center_half_area_mask)
+print(f"Mask area: {mask_area} pixels^2")
+
+# Fraction of total valve area
+fraction_covered = mask_area / total_area
+print(f"Fraction of valve area covered: {fraction_covered:.2f}")
+
+#%% CREATE THE MASKS FOR CENTRAL AND PERIPHERAL
+
+
+# -------------------------------
+# Central and peripheral NCC
+# -------------------------------
+central_ncc_mask = ncc_region_mask & center_half_area_mask       # intersection
+peripheral_ncc_mask = ncc_region_mask & (~center_half_area_mask) # remaining part
+
+# -------------------------------
+# Central and peripheral LCC
+# -------------------------------
+central_lcc_mask = lcc_region_mask & center_half_area_mask
+peripheral_lcc_mask = lcc_region_mask & (~center_half_area_mask)
+
+# -------------------------------
+# Central and peripheral RCC
+# -------------------------------
+central_rcc_mask = rcc_region_mask & center_half_area_mask
+peripheral_rcc_mask = rcc_region_mask & (~center_half_area_mask)
+
+# -------------------------------
+# Visualize all combinations
+# -------------------------------
+plt.figure(figsize=(6,6))
+plt.imshow(slice_img, cmap='gray')
+
+plt.imshow(central_ncc_mask, cmap='Reds', alpha=0.5)
+plt.imshow(peripheral_ncc_mask, cmap='Reds', alpha=0.2)
+
+plt.imshow(central_lcc_mask, cmap='Greens', alpha=0.5)
+plt.imshow(peripheral_lcc_mask, cmap='Greens', alpha=0.2)
+
+plt.imshow(central_rcc_mask, cmap='Blues', alpha=0.5)
+plt.imshow(peripheral_rcc_mask, cmap='Blues', alpha=0.2)
+
+plt.scatter(center[1], center[0], c='yellow', marker='x')
+plt.title(f"Leaflet Central vs Peripheral Regions - Slice {mercedes_height}")
+plt.axis('off')
+plt.show()
 
 
 # %% -------------------------------- SAVING THE CALCIFICATION VOLUME ----------------------
@@ -1175,7 +1358,7 @@ print("Reorienting the leaflet boundaries from the python space to patient space
 
 # del clipped_dicom
 # del gradient_volume
-# del calc_volume
+
 
 ## The objects are made in the reoriented space. Now reorient it back so it is in the patient space
 inverse_zoom = (
@@ -1349,6 +1532,7 @@ print("Saved commissure-based landmarks for LCC, RCC, NCC.")
 
 
 # %%% ------------------------- INTERPOLATING ALL THE LEAFLET CAPS (BOTTOM SIDE)-------------------------------
+from scipy.ndimage import binary_closing
 
 
 # del calc_volume_smooth
@@ -1367,6 +1551,9 @@ boundary_height_map = {
     "rcc_lcc_boundary_slice.npy": rcc_lcc_height,
     "ncc_rcc_boundary_slice.npy": ncc_rcc_height
 }
+
+leaflet_caps_3D = {}
+
 
 # -------------------- FUNCTIONAL EXPORT LOOP --------------------
 for leaflet in leaflets:
@@ -1438,14 +1625,15 @@ for leaflet in leaflets:
 
     # ---------------- Voxelization & STL export ----------------
     print("Creating 3D mask and exporting STL...")
-    cap_mask = functions.create_3d_mask_from_points(eval_pts, calc_volume.shape)
-    cap_mask = binary_closing(cap_mask, structure=closing_structure)
+    cap_mask_points = functions.create_3d_mask_from_points(eval_pts, calc_volume.shape)
+    cap_mask = binary_closing(cap_mask_points, structure=closing_structure)
     cap_mask = binary_dilation(cap_mask, cube(3))
     cap_mask = gaussian_filter(cap_mask.astype(np.float32), sigma=gaussian_blur)
     cap_mask_reoriented = functions.reorient_volume_back(cap_mask, dicom_origin, rotation_matrix_dicom)
     cap_mask_reoriented = functions.downsample_and_rescale(cap_mask_reoriented,
                                                            downsample_factor=downsample_factor,
                                                            inverse_zoom=inverse_zoom)
+    leaflet_caps_3D[leaflet] = cap_mask.copy()
     print("Mask reoriented and rescaled, shape:", cap_mask_reoriented.shape)
 
     functions.save_volume_as_stl_patient_space(
@@ -1466,5 +1654,188 @@ for leaflet in leaflets:
     print(f"Wall and landmarks saved for {leaflet.upper()}")
 
 
+
+#%% 
+from scipy.ndimage import label
+
+# -------------------------------
+# Step 1: Combine all aortic valve masks
+# -------------------------------
+
+# dictionary of masks you already have
+valve_masks = {
+    "LCC_com_to_com": lcc_wall_3d,
+    "NCC_com_to_com": ncc_wall_3d,
+    "RCC_com_to_com": rcc_wall_3d,
+    "RCC_to_LCC": rcc_lcc_grown,
+    "NCC_to_RCC": ncc_rcc_grown,
+    "LCC_to_NCC": lcc_ncc_grown,
+}
+
+# Initialize empty boolean array
+valve_mask_combined = np.zeros_like(calc_volume, dtype=bool)
+
+# Combine all wall and boundary masks, cast to bool
+for m in valve_masks.values():
+    valve_mask_combined |= m.astype(bool)
+
+# Add the leaflet caps (cast to bool)
+for cap_mask in leaflet_caps_3D.values():
+    valve_mask_combined |= cap_mask.astype(bool)
+
+# Slightly dilate to make sure any touching calcification is included
+valve_mask_combined_dilated = binary_dilation(valve_mask_combined, cube(3))
+
+# -------------------------------
+# Step 2: Keep connected calc chunks that touch the valve
+# -------------------------------
+
+# Label connected components in the calcification volume
+labeled_calc, num_features = label(calc_volume)
+
+# Initialize the filtered volume
+calc_filtered = np.zeros_like(calc_volume, dtype=bool)
+
+# Keep any connected component that touches the dilated valve mask
+for i in range(1, num_features + 1):
+    component = (labeled_calc == i)
+    if np.any(component & valve_mask_combined_dilated):
+        calc_filtered |= component
+
+# calc_filtered now contains only calcifications that touch the valve (wall or leaflets)
+
+
+# %% ALLOCATING THE CALC MASKS
+
+# SEGMENTING THE CALCIFICATION BITS
+z_coords, y_coords, x_coords = np.nonzero(calc_filtered)
+
+# Compute bounding box
+z_min, z_max = z_coords.min(), z_coords.max()
+y_min, y_max = y_coords.min(), y_coords.max()
+x_min, x_max = x_coords.min(), x_coords.max()
+
+# Crop calcification volume
+calc_crop = calc_filtered[z_min:z_max+1, y_min:y_max+1, x_min:x_max+1]
+
+num_slices = calc_crop.shape[0]
+
+# Step 2: Crop the polygon masks to match the calc_crop bounding box
+ncc_region_mask_crop = ncc_region_mask[y_min:y_max+1, x_min:x_max+1]
+lcc_region_mask_crop = lcc_region_mask[y_min:y_max+1, x_min:x_max+1]
+rcc_region_mask_crop = rcc_region_mask[y_min:y_max+1, x_min:x_max+1]
+
+# Step 3: Extend 2D cropped masks along Z
+num_slices = calc_crop.shape[0]
+
+NCC_mask_3D = np.repeat(ncc_region_mask_crop[np.newaxis, :, :], num_slices, axis=0)
+LCC_mask_3D = np.repeat(lcc_region_mask_crop[np.newaxis, :, :], num_slices, axis=0)
+RCC_mask_3D = np.repeat(rcc_region_mask_crop[np.newaxis, :, :], num_slices, axis=0)
+
+# Step 4: Apply the masks to calc_crop
+NCC_calc_volume = calc_crop * NCC_mask_3D
+LCC_calc_volume = calc_crop * LCC_mask_3D
+RCC_calc_volume = calc_crop * RCC_mask_3D
+
+# Optional: convert to boolean
+NCC_calc_volume = NCC_calc_volume.astype(bool)
+LCC_calc_volume = LCC_calc_volume.astype(bool)
+RCC_calc_volume = RCC_calc_volume.astype(bool)
+
+# Create empty full-volume arrays
+NCC_calc_full = np.zeros_like(calc_volume, dtype=bool)
+LCC_calc_full = np.zeros_like(calc_volume, dtype=bool)
+RCC_calc_full = np.zeros_like(calc_volume, dtype=bool)
+
+# Place the cropped & masked calcifications back into the full volume
+NCC_calc_full[z_min:z_max+1, y_min:y_max+1, x_min:x_max+1] = NCC_calc_volume
+LCC_calc_full[z_min:z_max+1, y_min:y_max+1, x_min:x_max+1] = LCC_calc_volume
+RCC_calc_full[z_min:z_max+1, y_min:y_max+1, x_min:x_max+1] = RCC_calc_volume
+
+# print("Calcifications mapped back to full volume.")
+
+
+# %% CREATE DICTIONARY OF MASKS TO SAVE
+
+calc_masks_to_save = {
+    "LCC_calc": LCC_calc_full,
+    "RCC_calc": RCC_calc_full,
+    "NCC_calc": NCC_calc_full,
+    file_type_calc_volume: calcification_mask_reoriented
+}
+
+# %% CREATE CENTRAL AND PERIPHERAL CALC VOLUMES FOR EACH LEAFLET
+
+# Make sure your center_half_area_mask is already defined
+# If you have stacked it along Z (like leaflet masks), we can just multiply
+
+num_slices = calc_volume.shape[0]
+
+# Stack the 2D central circle mask along Z
+center_half_area_mask_3D = np.repeat(center_half_area_mask[np.newaxis, :, :], num_slices, axis=0)
+
+# Central calc volumes
+central_ncc_calc = NCC_calc_full & center_half_area_mask_3D
+central_lcc_calc = LCC_calc_full & center_half_area_mask_3D
+central_rcc_calc = RCC_calc_full & center_half_area_mask_3D
+
+# Peripheral calc volumes
+peripheral_ncc_calc = NCC_calc_full & (~center_half_area_mask_3D)
+peripheral_lcc_calc = LCC_calc_full & (~center_half_area_mask_3D)
+peripheral_rcc_calc = RCC_calc_full & (~center_half_area_mask_3D)
+
+# Add these new volumes to the dictionary to save
+calc_masks_to_save.update({
+    "central_NCC_calc": central_ncc_calc,
+    "peripheral_NCC_calc": peripheral_ncc_calc,
+    "central_LCC_calc": central_lcc_calc,
+    "peripheral_LCC_calc": peripheral_lcc_calc,
+    "central_RCC_calc": central_rcc_calc,
+    "peripheral_RCC_calc": peripheral_rcc_calc,
+})
+
+print("Central and peripheral calc volumes added to save dictionary.")
+
+# %% LOOP AND SAVE STL FILES WITH SMOOTHING + REORIENTATION
+for name, volume in calc_masks_to_save.items():
+
+    # Count voxels (for binary masks)
+    voxel_count = np.count_nonzero(volume)
+    print(f"{name}: {voxel_count} voxels of calcification")
+
+    if voxel_count == 0:
+        print(f"Skipping {name} (empty mask)")
+        continue
+
+    # --- Smooth mask ---
+    volume_smooth = gaussian_filter(volume.astype(np.float32), sigma=gaussian_blur)
+
+    # --- Reorient back to patient space ---
+    volume_reoriented = functions.reorient_volume_back(
+        volume_smooth, 
+        dicom_origin, 
+        rotation_matrix_dicom
+    )
+
+    # --- Downsample & rescale ---
+    volume_final = functions.downsample_and_rescale(
+        volume_reoriented, 
+        downsample_factor=downsample_factor, 
+        inverse_zoom=inverse_zoom
+    )
+
+    # --- Save STL ---
+    functions.save_volume_as_stl_patient_space(
+        volume=volume_final,
+        output_path=output_path,
+        patient_nr=patient_nr,
+        file_type=name,
+        zoom_x=pixel_spacing[2],
+        zoom_y=pixel_spacing[1],
+        zoom_z=pixel_spacing[0],
+        dicom_origin=dicom_origin
+    )
+
+print("Assigned calcification masks saved as STL (smoothed & reoriented).")
 
 
