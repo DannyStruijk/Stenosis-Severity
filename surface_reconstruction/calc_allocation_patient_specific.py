@@ -51,8 +51,9 @@ PATIENT_PATHS = {
     "CZE030": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE030/DICOM/000032F8/AAD2875F/AA7CD947/00002E0D",
 }
 
+
 # Choose which patient to work with
-patient_nr = "CZE024"   # e.g. "aos_14" or "savi_07"
+patient_nr = "CZE025"   # e.g. "aos_14" or "savi_07"
 
 # Automatically load directory
 dicom_dir = PATIENT_PATHS[patient_nr]
@@ -302,7 +303,7 @@ from skimage.filters import gaussian
 # ------------------------------------- INITIALIZING VARIABLES FOR ACTIVE CONTOURS ------------------
 
 alpha = 0.01   # elasticity (snake tension)
-beta = 0.1     # rigidity (smoothness)
+beta = 0.1    # rigidity (smoothness)
 gamma = 0.01   # step size
 total_iterations = 20
 
@@ -667,7 +668,7 @@ for slice_nr, slice_info in slice_data.items():
 
      # ----------------------------------------- SKELETONIZATION  ----------------------------------------
     # Apply Gaussian blur to the reoriented slice (sigma controls the blur intensity)
-    sigma = 1  # Adjust this value based on how much blur you want
+    sigma = 1.5  # Adjust this value based on how much blur you want
     blurred_slice = gaussian(slice_clipped, sigma=sigma)
     
     # Multiply the blurred image with the ROI mask
@@ -680,7 +681,7 @@ for slice_nr, slice_info in slice_data.items():
     if slice_nr == z_min:
         # Calculate the threshold for the first slice based on the 10th percentile
         roi_pixels_blurred = roi_image_blurred[roi_mask]  # Use blurred ROI pixels
-        percentile_10th = np.percentile(roi_pixels_blurred, 20)  # 15th percentile as threshold
+        percentile_10th = np.percentile(roi_pixels_blurred, 30)  # 15th percentile as threshold
         # print(f"Calculated 10th Percentile Threshold for Slice {slice_nr}: {percentile_10th:.2f}")
     else:
         # Use the previously calculated threshold for all other slices
@@ -1163,7 +1164,7 @@ plt.show()
 
 
 # %% -------------------------------- SAVING THE CALCIFICATION VOLUME ----------------------
-gaussian_blur = 1.5
+gaussian_blur = 1
 
 # Define output pathfor the all the segmentations in patient space, make if not existent
 output_path = f"H:/DATA/Afstuderen/3.Data/output_valve_segmentation/{patient_nr}/patient_space"
@@ -1677,6 +1678,8 @@ print("Central and peripheral calc volumes added to save dictionary.")
 calc_output_path = f"H:/DATA/Afstuderen/3.Data/output_valve_segmentation/{patient_nr}/patient_space/calc_volumes"
 os.makedirs(calc_output_path, exist_ok=True)
 
+# Minimum number of voxels to consider valid
+MIN_VOXELS = 200  # adjust as needed
 
 for name, volume in calc_masks_to_save.items():
 
@@ -1684,8 +1687,8 @@ for name, volume in calc_masks_to_save.items():
     voxel_count = np.count_nonzero(volume)
     print(f"{name}: {voxel_count} voxels of calcification")
 
-    if voxel_count == 0:
-        print(f"Skipping {name} (empty mask)")
+    if voxel_count < MIN_VOXELS:
+        print(f"Skipping {name} (too small, < {MIN_VOXELS} voxels)")
         continue
 
     # --- Smooth mask ---
@@ -1718,7 +1721,6 @@ for name, volume in calc_masks_to_save.items():
     )
 
 print("Assigned calcification masks saved as STL (smoothed & reoriented).")
-
 # %% SAVING THE STATS
 
 import pandas as pd

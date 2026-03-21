@@ -2033,7 +2033,8 @@ def build_leaflet_mask(slice_shape, wall_coords, comA, comB, center):
     polygon_points.append(comB)
     polygon_points.append(center)
     polygon_points.append(comA)  # close polygon
-    
+    for i, arr in enumerate(polygon_points):
+        print(f"Index {i}: shape = {np.shape(arr)}")
     polygon_points = np.vstack(polygon_points)
     
     # Create mask

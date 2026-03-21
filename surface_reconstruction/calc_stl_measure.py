@@ -2,7 +2,7 @@ import os
 import trimesh
 import pandas as pd
 
-folder = r"H:\DATA\Afstuderen\3.Data\output_valve_segmentation\CZE024\patient_space\calc_volumes"
+folder = r"H:\DATA\Afstuderen\3.Data\output_valve_segmentation\CZE015\patient_space\calc_volumes"
 
 # 🔥 Extract patient ID from folder path
 patient_id = os.path.normpath(folder).split(os.sep)[-3]  # -> CZE024
