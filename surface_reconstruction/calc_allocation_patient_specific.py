@@ -303,7 +303,7 @@ from skimage.filters import gaussian
 # ------------------------------------- INITIALIZING VARIABLES FOR ACTIVE CONTOURS ------------------
 
 alpha = 0.01   # elasticity (snake tension)
-beta = 0.1    # rigidity (smoothness)
+beta = 0.5    # rigidity (smoothness)
 gamma = 0.01   # step size
 total_iterations = 20
 
@@ -681,7 +681,7 @@ for slice_nr, slice_info in slice_data.items():
     if slice_nr == z_min:
         # Calculate the threshold for the first slice based on the 10th percentile
         roi_pixels_blurred = roi_image_blurred[roi_mask]  # Use blurred ROI pixels
-        percentile_10th = np.percentile(roi_pixels_blurred, 30)  # 15th percentile as threshold
+        percentile_10th = np.percentile(roi_pixels_blurred, 40)  # 15th percentile as threshold
         # print(f"Calculated 10th Percentile Threshold for Slice {slice_nr}: {percentile_10th:.2f}")
     else:
         # Use the previously calculated threshold for all other slices
@@ -916,8 +916,8 @@ for slice_nr, slice_info in slice_data.items():
         "rcc_lcc_boundary": cleaned_rcc_lcc_boundary.copy(),
         "com_to_com": seg_c2c["LCC"].copy(),
         "aortic_wall_contour": aortic_wall_contour.copy(),
-        "lcc_ncc_com": safe_copy(intersections.get("lcc_ncc"), prev_intersections.get("lcc_ncc")),
-        "rcc_lcc_com": safe_copy(intersections.get("rcc_lcc"), prev_intersections.get("rcc_lcc")),
+        "lcc_ncc_com": safe_copy(intersections.get("lcc_ncc"),prev_intersections.get("lcc_ncc") or base_commissure["lcc_ncc"]),
+        "rcc_lcc_com": safe_copy(intersections.get("rcc_lcc"), prev_intersections.get("rcc_lcc") or base_commissure["rcc_lcc"]),
         "height": slice_nr,
         "boundary_length": length_lcc,
         "shrink_event_slice": boundary_event_state["lcc_ncc"]["event_slice"],
@@ -928,8 +928,8 @@ for slice_nr, slice_info in slice_data.items():
         "rcc_lcc_boundary": cleaned_rcc_lcc_boundary.copy(),
         "ncc_rcc_boundary": cleaned_ncc_rcc_boundary.copy(),
         "com_to_com": seg_c2c["RCC"].copy(),
-        "rcc_lcc_com": safe_copy(intersections.get("rcc_lcc"), prev_intersections.get("rcc_lcc")),
-        "ncc_rcc_com": safe_copy(intersections.get("ncc_rcc"), prev_intersections.get("ncc_rcc")),
+        "rcc_lcc_com": safe_copy(intersections.get("rcc_lcc"), prev_intersections.get("rcc_lcc") or base_commissure["rcc_lcc"]),
+        "ncc_rcc_com": safe_copy(intersections.get("ncc_rcc"), prev_intersections.get("ncc_rcc") or base_commissure["ncc_rcc"]),
         "height": slice_nr,
         "boundary_length": length_rcc,
         "shrink_event_slice": boundary_event_state["rcc_lcc"]["event_slice"],
@@ -940,8 +940,8 @@ for slice_nr, slice_info in slice_data.items():
         "ncc_rcc_boundary": cleaned_ncc_rcc_boundary.copy(),
         "lcc_ncc_boundary": cleaned_lcc_ncc_boundary.copy(),
         "com_to_com": seg_c2c["NCC"].copy(),
-        "ncc_rcc_com": safe_copy(intersections.get("ncc_rcc"), prev_intersections.get("ncc_rcc")),
-        "lcc_ncc_com": safe_copy(intersections.get("lcc_ncc"), prev_intersections.get("lcc_ncc")),
+        "ncc_rcc_com": safe_copy(intersections.get("ncc_rcc"), prev_intersections.get("ncc_rcc") or base_commissure["ncc_rcc"]),
+        "lcc_ncc_com": safe_copy(intersections.get("lcc_ncc"), prev_intersections.get("lcc_ncc") or base_commissure["lcc_ncc"]),
         "height": slice_nr,
         "boundary_length": length_ncc,
         "shrink_event_slice": boundary_event_state["ncc_rcc"]["event_slice"],
@@ -1679,7 +1679,7 @@ calc_output_path = f"H:/DATA/Afstuderen/3.Data/output_valve_segmentation/{patien
 os.makedirs(calc_output_path, exist_ok=True)
 
 # Minimum number of voxels to consider valid
-MIN_VOXELS = 200  # adjust as needed
+MIN_VOXELS = 150  # adjust as needed
 
 for name, volume in calc_masks_to_save.items():
 
