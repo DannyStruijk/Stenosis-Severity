@@ -3,7 +3,7 @@ import trimesh
 import pandas as pd
 
 base_folder = r"H:\DATA\Afstuderen\3.Data\output_valve_segmentation"
-master_path = r"H:\DATA\Afstuderen\3.Data\output_valve_segmentation\patient_data.xlsx"
+master_path = r"H:/DATA/Afstuderen/3.Data/patient_data/patient_data.xlsx"
 
 stl_names = [
     "LCC_calc",
@@ -19,11 +19,11 @@ stl_names = [
 ]
 
 # 🔥 Select patients here
-patients_to_process = [f"CZE{i:03d}" for i in range(1, 31)]  # all patients again
+patients_to_process = [f"CZE{i:03d}" for i in range(1, 39)]  # all patients again
 
 # 🔥 Load master file
 df_master = pd.read_excel(master_path)
-df_master["PatientNr"] = df_master["PatientNr"].astype(str).str.strip()
+locaAldf_master["PatientNr"] = df_master["PatientNr"].astype(str).str.strip()
 
 for patient_id in patients_to_process:
     

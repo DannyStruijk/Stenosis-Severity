@@ -787,7 +787,7 @@ def find_all_boundary_intersections(
         y_true, x_true = boundary[:, 0], boundary[:, 1]
         # --- Compute total Euclidean length along the boundary ---
         boundary_points = boundary
-        if len(boundary_points) < 4:
+        if len(boundary_points) < 5:
             total_length = 0
         else:
             total_length = compute_max_pairwise_distance(boundary)  

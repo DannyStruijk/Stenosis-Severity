@@ -17,7 +17,7 @@ stl_names = [
     "peripheral_RCC_calc"
 ]
 
-for i in range(1, 31):
+for i in range(29,30):
     patient_id = f"CZE{i:03d}"
     
     folder = os.path.join(

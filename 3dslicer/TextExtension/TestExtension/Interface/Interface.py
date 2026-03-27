@@ -115,6 +115,15 @@ class InterfaceWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.ui.dicom_dropdown.addItem("CZE027", "T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE027/DICOM/000046F3/AA0B28CE/AA933D3E/00007339")
         self.ui.dicom_dropdown.addItem("CZE029", "T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE029/DICOM/00001B91/AADD797F/AA3A0E6E/00002DA1")
         self.ui.dicom_dropdown.addItem("CZE030", "T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE030/DICOM/000032F8/AAD2875F/AA7CD947/00002E0D")
+        self.ui.dicom_dropdown.addItem("CZE031", "T:\Research_01\CZE-2020.67 - SAVI-AoS\output_Rachelle\SAVI_Aos_dicom\CZE031\S8010")
+        self.ui.dicom_dropdown.addItem("CZE032", "T:\Research_01\CZE-2020.67 - SAVI-AoS\output_Rachelle\SAVI_Aos_dicom\CZE032\S8010")
+        self.ui.dicom_dropdown.addItem("CZE033", "T:\Research_01\CZE-2020.67 - SAVI-AoS\output_Rachelle\SAVI_Aos_dicom\CZE033\S8010")
+        self.ui.dicom_dropdown.addItem("CZE034", "T:\Research_01\CZE-2020.67 - SAVI-AoS\output_Rachelle\SAVI_Aos_dicom\CZE034\S10010")
+        self.ui.dicom_dropdown.addItem("CZE035", "T:\Research_01\CZE-2020.67 - SAVI-AoS\output_Rachelle\SAVI_Aos_dicom\CZE035\S8010")
+        self.ui.dicom_dropdown.addItem("CZE036", "T:\Research_01\CZE-2020.67 - SAVI-AoS\output_Rachelle\SAVI_Aos_dicom\CZE036\S8010")
+        self.ui.dicom_dropdown.addItem("CZE037", "T:\Research_01\CZE-2020.67 - SAVI-AoS\output_Rachelle\SAVI_Aos_dicom\CZE037\S9010")
+        self.ui.dicom_dropdown.addItem("CZE038", "T:\Research_01\CZE-2020.67 - SAVI-AoS\output_Rachelle\SAVI_Aos_dicom\CZE038\S10010")
+        
         
         
     def load_dicom_button(self):

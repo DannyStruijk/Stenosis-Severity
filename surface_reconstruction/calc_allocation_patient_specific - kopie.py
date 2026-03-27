@@ -883,6 +883,8 @@ lcc_ncc_height = lcc_event
 rcc_lcc_height = rcc_event
 ncc_rcc_height = ncc_event
 
+
+
 # %% EXTRACT LEAFLET SPECIFIC WHEN THE MERCEDES STAR OCCURS. THIS IS NECESSARY TO MAKE 3 SEPERATE REGIONS WITHIN THE ROI
 
 import importlib
@@ -958,11 +960,23 @@ rcc_region_mask = functions.build_leaflet_mask(
 )
 
 
-# Grab the slice
-slice_img = reoriented_non_clipped[mercedes_height, :, :]
 
-plt.figure(figsize=(6,6))
-plt.imshow(slice_img, cmap='gray')
+
+# -------------------------------
+# Compute areas
+# -------------------------------
+
+pixel_area_mm2 = target_spacing ** 2
+
+# Compute areas
+ncc_area_mm2 = np.count_nonzero(ncc_region_mask) * pixel_area_mm2
+lcc_area_mm2 = np.count_nonzero(lcc_region_mask) * pixel_area_mm2
+rcc_area_mm2 = np.count_nonzero(rcc_region_mask) * pixel_area_mm2
+
+print(f"NCC area: {ncc_area_mm2:.2f} mm²")
+print(f"LCC area: {lcc_area_mm2:.2f} mm²")
+print(f"RCC area: {rcc_area_mm2:.2f} mm²")
+
 
 # Overlay the leaflet masks with transparency and different colors
 plt.imshow(ncc_region_mask, cmap='Reds', alpha=0.4, label='NCC')
@@ -976,45 +990,41 @@ plt.show()
 
 
 
-
 # %% CALCULATE THE PERIMETER TO CREATE BULLS
 
-# Combine all com-to-com wall points in order
-all_walls = np.vstack([wall_lcc, wall_ncc, wall_rcc])
 
-# Make sure it's closed
-all_walls_closed = np.vstack([all_walls, all_walls[0]])
+total_area = ncc_area_mm2 + lcc_area_mm2 + rcc_area_mm2
+total_area_pixels = total_area/pixel_area_mm2
+print(f"Total valve area: {total_area:.2f} mm2")
 
-# Compute area using shoelace formula
-x = all_walls_closed[:, 1]  # column indices
-y = all_walls_closed[:, 0]  # row indices
-total_area = 0.5 * np.abs(np.sum(x[:-1]*y[1:] - x[1:]*y[:-1]))
-print(f"Total valve area: {total_area:.2f} pixels^2")
+# Compute radius to cover one-third of total valve area
+radius_one_third_area = np.sqrt((1/4) * total_area_pixels / np.pi)
+print(f"Radius to cover one-third of the area: {radius_one_third_area:.2f} pixels")
 
-radius_half_area = np.sqrt(0.5 * total_area / np.pi)
-print(f"Radius to cover half the area: {radius_half_area:.2f} pixels")
-
+# Build mask
 yy, xx = np.meshgrid(np.arange(slice_shape[0]), np.arange(slice_shape[1]), indexing='ij')
 dist_from_center = np.sqrt((yy - center[0])**2 + (xx - center[1])**2)
 
-center_half_area_mask = dist_from_center <= radius_half_area
+center_one_third_area_mask = dist_from_center <= radius_one_third_area
 
 # Visualize
 plt.figure(figsize=(6,6))
 plt.imshow(slice_img, cmap='gray')
-plt.imshow(center_half_area_mask, cmap='Reds', alpha=0.4)
+plt.imshow(center_one_third_area_mask, cmap='Reds', alpha=0.4)
 plt.scatter(center[1], center[0], c='blue', marker='x')
-plt.title(f"Half-area circular mask")
+plt.title(f"One-third area circular mask")
 plt.axis('off')
 plt.show()
 
 # Calculate mask area in pixels
-mask_area = np.count_nonzero(center_half_area_mask)
+mask_area = np.count_nonzero(center_one_third_area_mask)
 print(f"Mask area: {mask_area} pixels^2")
 
 # Fraction of total valve area
-fraction_covered = mask_area / total_area
+fraction_covered = mask_area / total_area_pixels
 print(f"Fraction of valve area covered: {fraction_covered:.2f}")
+
+
 
 #%% CREATE THE MASKS FOR CENTRAL AND PERIPHERAL
 
@@ -1057,580 +1067,23 @@ plt.title(f"Leaflet Central vs Peripheral Regions - Slice {mercedes_height}")
 plt.axis('off')
 plt.show()
 
+# -------------------------------
+# Save areas to file
+# -------------------------------
 
-# %% -------------------------------- SAVING THE CALCIFICATION VOLUME ----------------------
-gaussian_blur = 1
-
-# Define output pathfor the all the segmentations in patient space, make if not existent
-output_path = f"H:/DATA/Afstuderen/3.Data/output_valve_segmentation/{patient_nr}/patient_space"
-os.makedirs(output_path, exist_ok=True)
-
-# Save the previously calculated calcium volume as an STL
-file_type = "calc_volume"
-calc_volume_smooth = gaussian_filter(calc_volume.astype(np.float32), sigma=gaussian_blur) 
- 
-
-# %% -------------------------------- COVNERTING THE BOUNDARIES IN 3D OBJECT ---------------
-
-hinge_z_values = [
-    lcc_rotated[2][0],
-    rcc_rotated[2][0],
-    ncc_rotated[2][0]
-]
-
-min_hinge_z = min(hinge_z_values)
-
-# center_height = int((lcc_rotated[3][0] + min_hinge_z)/2) 
-
-print("Post-processing the found boundaries so that they can be converted into 3D objects..")
-
-# --- Process RCC to LCC Boundary ---
-rcc_lcc_boundary_3d = functions.create_3d_mask_from_boundary_points(RCC_data, calc_volume.shape, "rcc_lcc_boundary")
-dilated_mask_3d_rcc_lcc = binary_dilation(rcc_lcc_boundary_3d, cube(5))  # Adjust the cube size as needed
-dilated_mask_3d_rcc_lcc = functions.keep_largest_component_3d(dilated_mask_3d_rcc_lcc)
-rcc_lcc_boundary_smooth = gaussian_filter(dilated_mask_3d_rcc_lcc.astype(np.float32), sigma=gaussian_blur)  
-file_type_rcc_lcc = "rcc_lcc_boundary"
-
-# --- Process NCC to RCC Boundary ---
-ncc_rcc_boundary_3d = functions.create_3d_mask_from_boundary_points(NCC_data, calc_volume.shape, "ncc_rcc_boundary")
-dilated_mask_3d_ncc_rcc = binary_dilation(ncc_rcc_boundary_3d, cube(5))  # Adjust the cube size as needed
-dilated_mask_3d_ncc_rcc = functions.keep_largest_component_3d(dilated_mask_3d_ncc_rcc)
-ncc_rcc_boundary_smooth = gaussian_filter(dilated_mask_3d_ncc_rcc.astype(np.float32), sigma=gaussian_blur)  
-file_type_ncc_rcc = "ncc_rcc_boundary"
-
-# --- Process LCC to NCC Boundary ---
-lcc_ncc_boundary_3d = functions.create_3d_mask_from_boundary_points(LCC_data, calc_volume.shape, "lcc_ncc_boundary")
-dilated_mask_3d_lcc_ncc = binary_dilation(lcc_ncc_boundary_3d, cube(5))  # Adjust the cube size as needed
-dilated_mask_3d_lcc_ncc = functions.keep_largest_component_3d(dilated_mask_3d_lcc_ncc)
-lcc_ncc_boundary_smooth = gaussian_filter(dilated_mask_3d_lcc_ncc.astype(np.float32), sigma=gaussian_blur)  
-file_type_lcc_ncc = "lcc_ncc_boundary"
-
-# %% showcasing the found boundaries
-
-# Assuming your 3D boundary masks exist:
-# lcc_ncc_boundary_3d, rcc_lcc_boundary_3d, ncc_rcc_boundary_3d
-
-boundaries = [
-    ("LCC→NCC", lcc_ncc_boundary_3d, "red"),
-    ("RCC→LCC", rcc_lcc_boundary_3d, "blue"),
-    ("NCC→RCC", ncc_rcc_boundary_3d, "green")
-]
-
-plt.figure(figsize=(8,8))
-
-for name, mask, color in boundaries:
-    coords = np.array(np.where(mask))  # Z,Y,X
-    x, y, z = coords[2], coords[1], coords[0]
-    plt.scatter(x, y, s=1, c=color, label=name)
-
-plt.xlabel('X')
-plt.ylabel('Y')
-plt.title('Top-Down View of All Leaflet Boundaries')
-plt.gca().invert_yaxis()  # match image coordinates
-plt.axis('equal')
-plt.legend()
-plt.show()
-
-
-
-# %% ----------------------------- AORTIC WALL ----------------------------
-
-from scipy.ndimage import binary_closing
-
-print("Post-processing the aortic wall so that it can be converted into 3D objects..")
-
-# Structuring elements
-closing_structure = cube(5)   # adjust if holes are bigger
-dilation_structure = cube(3)  # optional, remove if you don't want to thicken
-
-# --- Process RCC to LCC COM to COM Boundary ---
-rcc_wall_3d = functions.create_3d_mask_from_boundary_points(RCC_data, calc_volume.shape, "com_to_com")
-rcc_wall_3d = binary_closing(rcc_wall_3d, structure=closing_structure)
-rcc_wall_3d = binary_dilation(rcc_wall_3d, closing_structure)
-rcc_wall_smooth = gaussian_filter(rcc_wall_3d.astype(np.float32), sigma=gaussian_blur)  
-file_type_rcc_lcc_com_to_com = "rcc_lcc_com_to_com"
-
-# --- Process NCC to RCC COM to COM Boundary ---
-ncc_wall_3d = functions.create_3d_mask_from_boundary_points(NCC_data, calc_volume.shape, "com_to_com")
-ncc_wall_3d = binary_closing(ncc_wall_3d, structure=closing_structure)
-ncc_wall_3d = binary_dilation(ncc_wall_3d, closing_structure)
-ncc_wall_smooth = gaussian_filter(ncc_wall_3d.astype(np.float32), sigma=gaussian_blur)  
-file_type_ncc_rcc_com_to_com = "ncc_rcc_com_to_com"
-
-# --- Process LCC to NCC COM to COM Boundary ---
-lcc_wall_3d = functions.create_3d_mask_from_boundary_points(LCC_data, calc_volume.shape, "com_to_com")
-lcc_wall_3d = binary_closing(lcc_wall_3d, structure=closing_structure)
-lcc_wall_3d = binary_dilation(lcc_wall_3d, closing_structure)
-lcc_wall_smooth = gaussian_filter(lcc_wall_3d.astype(np.float32), sigma=gaussian_blur)  
-file_type_lcc_ncc_com_to_com = "lcc_ncc_com_to_com"
-
-
-# %%%  --------------------- CONNECTING THE BOUNDARIES TO THE AORTIC WALL --------------------------
-
-print("Connecting the aortic leaflets to the aortic wall...")
-
-# print("The z-index which is the cutoff for the boundary is now: ", center_height)
-keep_below_center=False
-
-# Expand the RCC-LCC leaflet towards the aortic wall
-combined_rcc_lcc = rcc_wall_3d | lcc_wall_3d
-rcc_lcc_grown, _= functions.grow_boundary(
-    dilated_mask_3d_rcc_lcc,
-    combined_rcc_lcc,
-    center_height=rcc_lcc_height,
-    line_dilate=2,
-    gaussian_blur=gaussian_blur,
-    keep_below_center=keep_below_center
-)
-
-# Expand the NCC-RCC leaflet towards the aortic wall
-combined_ncc_rcc = ncc_wall_3d | rcc_wall_3d
-ncc_rcc_grown, _ = functions.grow_boundary(
-    dilated_mask_3d_ncc_rcc,
-    combined_ncc_rcc,
-    center_height=ncc_rcc_height,
-    line_dilate=2,
-    gaussian_blur=gaussian_blur,
-    keep_below_center=keep_below_center
-)
-
-# Expand the RCC-LCC leaflet towards the aortic wall
-combined_lcc_ncc = lcc_wall_3d | ncc_wall_3d
-lcc_ncc_grown, _ = functions.grow_boundary(
-    dilated_mask_3d_lcc_ncc,
-    combined_lcc_ncc,
-    center_height=lcc_ncc_height,
-    line_dilate=2,
-    gaussian_blur=gaussian_blur,
-    keep_below_center=keep_below_center
-)
-
-
-# %% EXTRACT THE CENTER BOUNDARY FROM THE GROWN SLICES
-
-# Previously it was done with the raw boundaries, but we need more point for the spline fitting
-# This is more robust 
-
-from scipy.ndimage import binary_erosion
-
-# Grab the center slice first
-rcc_lcc_center_slice = rcc_lcc_boundary_3d[rcc_lcc_height]
-ncc_rcc_center_slice = ncc_rcc_boundary_3d[ncc_rcc_height]
-lcc_ncc_center_slice = lcc_ncc_boundary_3d[lcc_ncc_height]
-
-# Boundaries at center slice
-boundaries = [
-    ("LCC→NCC", lcc_ncc_center_slice, "red"),
-    ("RCC→LCC", rcc_lcc_center_slice, "blue"),
-    ("NCC→RCC", ncc_rcc_center_slice, "green")
-]
-
-plt.figure(figsize=(8,8))
-
-for name, mask_slice, color in boundaries:
-
-    # mask_slice is 2D (Y,X)
-    coords = np.array(np.where(mask_slice))
-
-    y = coords[1]
-    x = coords[1]
-
-    plt.scatter(x, y, s=2, c=color, label=name)
-
-plt.xlabel("X")
-plt.ylabel("Y")
-# plt.title(f"Leaflet boundaries at slice z = {center_height}")
-
-plt.gca().invert_yaxis()
-plt.axis("equal")
-plt.legend()
-plt.grid(True)
-
-plt.show()
-
-
-# %% ----------------------- REORIENT THE LEAFLET BOUDNARIES BACK TO THEIR ORIGINAL SPACE ----------------------
-
-print("Reorienting the leaflet boundaries from the python space to patient space...")
-
-# del clipped_dicom
-# del gradient_volume
-
-
-## The objects are made in the reoriented space. Now reorient it back so it is in the patient space
-inverse_zoom = (
-    1 / zoom_factors[0],
-    1 / zoom_factors[1],
-    1 / zoom_factors[2],
-)
-
-downsample_factor = 1.14
+area_dict = {
+    "patient": patient_nr,
+    "NCC_area_mm2": ncc_area_mm2,
+    "LCC_area_mm2": lcc_area_mm2,
+    "RCC_area_mm2": rcc_area_mm2
+}
 
 output_path = f"H:/DATA/Afstuderen/3.Data/output_valve_segmentation/{patient_nr}/patient_space"
-os.makedirs(output_path, exist_ok=True)
+output_file = os.path.join(output_path, f"{patient_nr}_region_areas.txt")
 
+with open(output_file, "w") as f:
+    for key, value in area_dict.items():
+        f.write(f"{key}: {value}\n")
 
-    
-# %% --------------------------- EXPORTING THE NUMPY ARRAYS TO CREATE A MASK -----------------
+print(f"Saved region areas to: {output_file}")
 
-# Define what is to be exported. This is for testing goals only, later everything has to be exported
-# we will first do evertyhing in native python space, as this gives us the most information regarding
-# the leaflet boundaries.
-
-out_dir = r"H:\DATA\Afstuderen\2.Code\Stenosis-Severity-backup\temp"
-output_dir =  r"H:\DATA\Afstuderen\3.Data\output_valve_segmentation"
-
-
-# Export the coordinates which define the the lowest part of the boundaries
-np.save(os.path.join(out_dir, "lcc_ncc_boundary_slice.npy"), lcc_ncc_center_slice)
-np.save(os.path.join(out_dir, "rcc_lcc_boundary_slice.npy"), rcc_lcc_center_slice)
-np.save(os.path.join(out_dir, "ncc_rcc_boundary_slice.npy"), ncc_rcc_center_slice)
-print(np.sum(lcc_ncc_center_slice))
-print(np.sum(rcc_lcc_center_slice))
-print(np.sum(ncc_rcc_center_slice))
-
-
-# Export the 3d mask of the aortic wall
-np.save(os.path.join(output_dir, "lcc_wall.npy"), lcc_wall_3d)
-np.save(os.path.join(output_dir, "ncc_wall.npy"), ncc_wall_3d)
-np.save(os.path.join(output_dir, "rcc_wall.npy"), rcc_wall_3d)
-
-# slice_to_save = center_height  # or min(LCC_data.keys()), etc.
-
-# Make sure all commissures include the z-coordinate
-lcc_landmarks_to_save = np.array([
-    [lcc_ncc_height, *LCC_data[lcc_ncc_height]["lcc_ncc_com"]],   # commissure1
-    [rcc_lcc_height, *LCC_data[rcc_lcc_height]["rcc_lcc_com"]],   # commissure2
-    lcc_rotated[2]                                  # hinge point (already z,y,x)
-])
-
-rcc_landmarks_to_save = np.array([
-    [rcc_lcc_height, *RCC_data[rcc_lcc_height]["rcc_lcc_com"]],
-    [ncc_rcc_height, *RCC_data[ncc_rcc_height]["ncc_rcc_com"]],
-    rcc_rotated[2]
-])
-
-ncc_landmarks_to_save = np.array([
-    [ncc_rcc_height, *NCC_data[ncc_rcc_height]["ncc_rcc_com"]],
-    [lcc_ncc_height, *NCC_data[lcc_ncc_height]["lcc_ncc_com"]],
-    ncc_rotated[2]
-])
-
-# Save updated landmarks
-np.save(os.path.join(out_dir, "lcc_landmarks.npy"), lcc_landmarks_to_save)
-np.save(os.path.join(out_dir, "rcc_landmarks.npy"), rcc_landmarks_to_save)
-np.save(os.path.join(out_dir, "ncc_landmarks.npy"), ncc_landmarks_to_save)
-
-print("Saved commissure-based landmarks for LCC, RCC, NCC.")
-
-
-
-# %%% ------------------------- INTERPOLATING ALL THE LEAFLET CAPS (BOTTOM SIDE)-------------------------------
-from scipy.ndimage import binary_closing
-
-
-# del calc_volume_smooth
-# del calcification_mask_reoriented
-
-print("Creating the leaflet caps for all leaflets...")
-
-# -------------------- SETTINGS --------------------
-out_dir = r"H:\DATA\Afstuderen\2.Code\Stenosis-Severity-backup\temp"
-data_path = r"H:\DATA\Afstuderen\3.Data\output_valve_segmentation"
-output_path = rf"H:\DATA\Afstuderen\3.Data\output_valve_segmentation\{patient_nr}\patient_space"
-
-leaflets = ["lcc", "ncc", "rcc"]
-boundary_height_map = {
-    "lcc_ncc_boundary_slice.npy": lcc_ncc_height,
-    "rcc_lcc_boundary_slice.npy": rcc_lcc_height,
-    "ncc_rcc_boundary_slice.npy": ncc_rcc_height
-}
-
-leaflet_caps_3D = {}
-
-
-# -------------------- FUNCTIONAL EXPORT LOOP --------------------
-for leaflet in leaflets:
-    print(f"\n--- Processing leaflet: {leaflet.upper()} ---")
-    
-    # ---------------- Load landmarks and wall ----------------
-    landmarks_path = os.path.join(out_dir, f"{leaflet}_landmarks.npy")
-    wall_path = os.path.join(data_path, f"{leaflet}_wall.npy")
-    
-    print(f"Loading landmarks from: {landmarks_path}")
-    print(f"Loading wall mask from: {wall_path}")
-    
-    landmarks = np.load(landmarks_path)
-    wall_mask = np.load(wall_path)
-    
-    print("Landmarks loaded:", landmarks)
-    print("Wall mask shape:", wall_mask.shape)
-    
-    com1, com2, hinge = landmarks[0], landmarks[1], landmarks[2]
-
-    # ---------------- Load boundary slices ----------------
-    if leaflet == "lcc":
-        boundary_pairs = [("ncc", "lcc_ncc_boundary_slice.npy"),
-                          ("rcc", "rcc_lcc_boundary_slice.npy")]
-    elif leaflet == "ncc":
-        boundary_pairs = [("rcc", "ncc_rcc_boundary_slice.npy"),
-                          ("lcc", "lcc_ncc_boundary_slice.npy")]
-    else:  # rcc
-        boundary_pairs = [("lcc", "rcc_lcc_boundary_slice.npy"),
-                          ("ncc", "ncc_rcc_boundary_slice.npy")]
-
-    # Convert masks to point clouds & smooth
-    point_clouds = []
-    for pair_name, slice_file in boundary_pairs:
-        slice_path = os.path.join(out_dir, slice_file)
-        print(f"Loading boundary slice ({pair_name}) from: {slice_path}")
-        mask_slice = np.load(slice_path)
-        z_height = boundary_height_map[slice_file]
-        pts = functions.mask_to_pointcloud(mask_slice, z_height)
-        print(f"Point cloud size for {pair_name}: {pts.shape[0]}")
-        
-        if pts.shape[0] <= 1:
-            print(f"[WARNING] Not enough points to fit spline for {pair_name}, using raw points")
-            pts_smooth = pts
-        else:
-            pts_smooth = functions.fit_spline(pts, smoothing=40)
-            
-        point_clouds.append(pts_smooth)
-
-    boundary_curve_1, boundary_curve_2 = point_clouds
-
-    # ---------------- Build leaflet surface ----------------
-    print("Building leaflet surface...")
-    surf, eval_pts, mask = functions.build_leaflet_surface(
-        aortic_wall_mask=wall_mask,
-        commissure1=com1,
-        hinge=hinge,
-        commissure2=com2,
-        boundary_curve_1=boundary_curve_1,
-        boundary_curve_2=boundary_curve_2,
-        volume_shape=(340,512,512),
-        pixel_spacing=pixel_spacing,
-        dicom_origin=dicom_origin,
-        output_path=output_path,
-        patient_nr=patient_nr,
-        file_type=f"{leaflet}_leaflet_surface"
-    )
-    print("Leaflet surface built, number of evaluated points:", eval_pts.shape[0])
-
-    # ---------------- Voxelization & STL export ----------------
-    print("Creating 3D mask and exporting STL...")
-    cap_mask_points = functions.create_3d_mask_from_points(eval_pts, calc_volume.shape)
-    cap_mask = binary_closing(cap_mask_points, structure=closing_structure)
-    cap_mask = binary_dilation(cap_mask, cube(3))
-    cap_mask = gaussian_filter(cap_mask.astype(np.float32), sigma=gaussian_blur)
-
-    leaflet_caps_3D[leaflet] = cap_mask.copy()
-
-
-
-#%% 
-from scipy.ndimage import label
-
-# -------------------------------
-# Step 1: Combine all aortic valve masks
-# -------------------------------
-
-# dictionary of masks you already have
-valve_masks = {
-    "LCC_com_to_com": lcc_wall_3d,
-    "NCC_com_to_com": ncc_wall_3d,
-    "RCC_com_to_com": rcc_wall_3d,
-    "RCC_to_LCC": rcc_lcc_grown,
-    "NCC_to_RCC": ncc_rcc_grown,
-    "LCC_to_NCC": lcc_ncc_grown,
-}
-
-# Initialize empty boolean array
-valve_mask_combined = np.zeros_like(calc_volume, dtype=bool)
-
-# Combine all wall and boundary masks, cast to bool
-for m in valve_masks.values():
-    valve_mask_combined |= m.astype(bool)
-
-# Add the leaflet caps (cast to bool)
-for cap_mask in leaflet_caps_3D.values():
-    valve_mask_combined |= cap_mask.astype(bool)
-
-# Slightly dilate to make sure any touching calcification is included
-valve_mask_combined_dilated = binary_dilation(valve_mask_combined, cube(3))
-
-# -------------------------------
-# Step 2: Keep connected calc chunks that touch the valve
-# -------------------------------
-
-# Label connected components in the calcification volume
-labeled_calc, num_features = label(calc_volume)
-
-# Initialize the filtered volume
-calc_filtered = np.zeros_like(calc_volume, dtype=bool)
-
-# Keep any connected component that touches the dilated valve mask
-for i in range(1, num_features + 1):
-    component = (labeled_calc == i)
-    if np.any(component & valve_mask_combined_dilated):
-        calc_filtered |= component
-
-# calc_filtered now contains only calcifications that touch the valve (wall or leaflets)
-
-
-# %% ALLOCATING THE CALC MASKS
-
-# SEGMENTING THE CALCIFICATION BITS
-z_coords, y_coords, x_coords = np.nonzero(calc_filtered)
-
-# Compute bounding box
-z_min, z_max = z_coords.min(), z_coords.max()
-y_min, y_max = y_coords.min(), y_coords.max()
-x_min, x_max = x_coords.min(), x_coords.max()
-
-# Crop calcification volume
-calc_crop = calc_filtered[z_min:z_max+1, y_min:y_max+1, x_min:x_max+1]
-
-num_slices = calc_crop.shape[0]
-
-# Step 2: Crop the polygon masks to match the calc_crop bounding box
-ncc_region_mask_crop = ncc_region_mask[y_min:y_max+1, x_min:x_max+1]
-lcc_region_mask_crop = lcc_region_mask[y_min:y_max+1, x_min:x_max+1]
-rcc_region_mask_crop = rcc_region_mask[y_min:y_max+1, x_min:x_max+1]
-
-# Step 3: Extend 2D cropped masks along Z
-num_slices = calc_crop.shape[0]
-
-NCC_mask_3D = np.repeat(ncc_region_mask_crop[np.newaxis, :, :], num_slices, axis=0)
-LCC_mask_3D = np.repeat(lcc_region_mask_crop[np.newaxis, :, :], num_slices, axis=0)
-RCC_mask_3D = np.repeat(rcc_region_mask_crop[np.newaxis, :, :], num_slices, axis=0)
-
-# Step 4: Apply the masks to calc_crop
-NCC_calc_volume = calc_crop * NCC_mask_3D
-LCC_calc_volume = calc_crop * LCC_mask_3D
-RCC_calc_volume = calc_crop * RCC_mask_3D
-
-# Optional: convert to boolean
-NCC_calc_volume = NCC_calc_volume.astype(bool)
-LCC_calc_volume = LCC_calc_volume.astype(bool)
-RCC_calc_volume = RCC_calc_volume.astype(bool)
-
-# Create empty full-volume arrays
-NCC_calc_full = np.zeros_like(calc_volume, dtype=bool)
-LCC_calc_full = np.zeros_like(calc_volume, dtype=bool)
-RCC_calc_full = np.zeros_like(calc_volume, dtype=bool)
-
-# Place the cropped & masked calcifications back into the full volume
-NCC_calc_full[z_min:z_max+1, y_min:y_max+1, x_min:x_max+1] = NCC_calc_volume
-LCC_calc_full[z_min:z_max+1, y_min:y_max+1, x_min:x_max+1] = LCC_calc_volume
-RCC_calc_full[z_min:z_max+1, y_min:y_max+1, x_min:x_max+1] = RCC_calc_volume
-
-# print("Calcifications mapped back to full volume.")
-
-
-# %% CREATE DICTIONARY OF MASKS TO SAVE
-
-calc_masks_to_save = {
-    "LCC_calc": LCC_calc_full,
-    "RCC_calc": RCC_calc_full,
-    "NCC_calc": NCC_calc_full,
-    "calc_volume": calc_filtered
-}
-
-# %% CREATE CENTRAL AND PERIPHERAL CALC VOLUMES FOR EACH LEAFLET
-
-# Make sure your center_half_area_mask is already defined
-# If you have stacked it along Z (like leaflet masks), we can just multiply
-
-num_slices = calc_volume.shape[0]
-
-# Stack the 2D central circle mask along Z
-center_half_area_mask_3D = np.repeat(center_half_area_mask[np.newaxis, :, :], num_slices, axis=0)
-
-# Central calc volumes
-central_ncc_calc = NCC_calc_full & center_half_area_mask_3D
-central_lcc_calc = LCC_calc_full & center_half_area_mask_3D
-central_rcc_calc = RCC_calc_full & center_half_area_mask_3D
-
-# Peripheral calc volumes
-peripheral_ncc_calc = NCC_calc_full & (~center_half_area_mask_3D)
-peripheral_lcc_calc = LCC_calc_full & (~center_half_area_mask_3D)
-peripheral_rcc_calc = RCC_calc_full & (~center_half_area_mask_3D)
-
-# Add these new volumes to the dictionary to save
-calc_masks_to_save.update({
-    "central_NCC_calc": central_ncc_calc,
-    "peripheral_NCC_calc": peripheral_ncc_calc,
-    "central_LCC_calc": central_lcc_calc,
-    "peripheral_LCC_calc": peripheral_lcc_calc,
-    "central_RCC_calc": central_rcc_calc,
-    "peripheral_RCC_calc": peripheral_rcc_calc,
-})
-
-print("Central and peripheral calc volumes added to save dictionary.")
-
-# %% LOOP AND SAVE STL FILES WITH SMOOTHING + REORIENTATION
-calc_output_path = f"H:/DATA/Afstuderen/3.Data/output_valve_segmentation/{patient_nr}/patient_space/calc_volumes"
-os.makedirs(calc_output_path, exist_ok=True)
-
-# Minimum number of voxels to consider valid
-MIN_VOXELS = 150  # adjust as needed
-
-for name, volume in calc_masks_to_save.items():
-
-    # Count voxels (for binary masks)
-    voxel_count = np.count_nonzero(volume)
-    print(f"{name}: {voxel_count} voxels of calcification")
-
-    if voxel_count < MIN_VOXELS:
-        print(f"Skipping {name} (too small, < {MIN_VOXELS} voxels)")
-        continue
-
-    # --- Smooth mask ---
-    volume_smooth = gaussian_filter(volume.astype(np.float32), sigma=gaussian_blur)
-
-    # --- Reorient back to patient space ---
-    volume_reoriented = functions.reorient_volume_back(
-        volume, 
-        dicom_origin, 
-        rotation_matrix_dicom
-    )
-
-    # --- Downsample & rescale ---
-    volume_final = functions.downsample_and_rescale(
-        volume_reoriented, 
-        downsample_factor=downsample_factor, 
-        inverse_zoom=inverse_zoom
-    )
-
-    # --- Save STL ---
-    functions.save_volume_as_stl_patient_space(
-        volume=volume_final,
-        output_path=calc_output_path,
-        patient_nr=patient_nr,
-        file_type=name,
-        zoom_x=pixel_spacing[2],
-        zoom_y=pixel_spacing[1],
-        zoom_z=pixel_spacing[0],
-        dicom_origin=dicom_origin
-    )
-
-print("Assigned calcification masks saved as STL (smoothed & reoriented).")
-# %% SAVING THE STATS
-
-import pandas as pd
-
-# Collect data
-data = [
-    (name, int(np.count_nonzero(volume)))
-    for name, volume in calc_masks_to_save.items()
-]
-
-# Create DataFrame
-df = pd.DataFrame(data, columns=["Segment Name", "Voxel Count"])
-
-# Save to Excel
-excel_path = os.path.join(calc_output_path, f"{patient_nr}_calc_summary_voxels.xlsx")
-df.to_excel(excel_path, index=False)
-
-print(f"Excel saved at: {excel_path}")

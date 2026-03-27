@@ -43,16 +43,24 @@ PATIENT_PATHS = {
     "CZE020": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE020/DICOM/000057A3/AA56DBD9/AA4B0694/00005E78",
     "CZE022": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE022/DICOM/00002E36/AA0DF707/AAE959BA/0000B1D3",
     "CZE023": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE023/DICOM/0000B09F/AA9FDA4D/AA8D0F36/0000F21F",
-    "CZE024": "T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE024/DICOM/0000431B/AA1DAD4A/AAAA0072/0000E6A7",
+    "CZE024": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE024/DICOM/0000431B/AA1DAD4A/AAAA0072/0000E6A7",
     "CZE025": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE025/DICOM/0000A32D/AAF725DA/AA6A556D/000058A9",
     "CZE026": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE026/DICOM/00007858/AACE1771/AA3C074D/000033A6",
     "CZE027": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE027/DICOM/000046F3/AA0B28CE/AA933D3E/00007339",
     "CZE029": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE029/DICOM/00001B91/AADD797F/AA3A0E6E/00002DA1",
     "CZE030": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/SAVI-AoS/CZE030/DICOM/000032F8/AAD2875F/AA7CD947/00002E0D",
+    "CZE031": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/output_Rachelle/SAVI_Aos_dicom/CZE031/S8010",
+    "CZE032": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/output_Rachelle/SAVI_Aos_dicom/CZE032/S8010",
+    "CZE033": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/output_Rachelle/SAVI_Aos_dicom/CZE033/S8010",
+    "CZE034": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/output_Rachelle/SAVI_Aos_dicom/CZE034/S10010",
+    "CZE035": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/output_Rachelle/SAVI_Aos_dicom/CZE035/S8010",
+    "CZE036": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/output_Rachelle/SAVI_Aos_dicom/CZE036/S8010",
+    "CZE037": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/output_Rachelle/SAVI_Aos_dicom/CZE037/S9010",
+    "CZE038": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/output_Rachelle/SAVI_Aos_dicom/CZE038/S10010"
 }
 
 # Choose which patient to work with
-patient_nr = "CZE024"   # e.g. "aos_14" or "savi_07"
+patient_nr = "CZE032"   # e.g. "aos_14" or "savi_07"
 
 # Automatically load directory
 dicom_dir = PATIENT_PATHS[patient_nr]
@@ -302,7 +310,7 @@ from skimage.filters import gaussian
 # ------------------------------------- INITIALIZING VARIABLES FOR ACTIVE CONTOURS ------------------
 
 alpha = 0.01   # elasticity (snake tension)
-beta = 0.1     # rigidity (smoothness)
+beta = 0.2     # rigidity (smoothness)
 gamma = 0.01   # step size
 total_iterations = 20
 
@@ -320,7 +328,7 @@ crop_bool = False
 
 # -------------------------------------- LOOP THROUGH SLICES ---------------------------
 
-for slice_nr in range(z_min_int, z_max_int + 1):
+for slice_nr in range(z_min_int, z_max_int +1):
     
     image_pre = reoriented_volume[slice_nr, :, :]
     dicom_slice = reoriented_non_clipped[slice_nr, :, :]
@@ -667,7 +675,7 @@ for slice_nr, slice_info in slice_data.items():
 
      # ----------------------------------------- SKELETONIZATION  ----------------------------------------
     # Apply Gaussian blur to the reoriented slice (sigma controls the blur intensity)
-    sigma = 1  # Adjust this value based on how much blur you want
+    sigma = 1.5  # Adjust this value based on how much blur you want
     blurred_slice = gaussian(slice_clipped, sigma=sigma)
     
     # Multiply the blurred image with the ROI mask
@@ -973,7 +981,7 @@ for slice_nr, slice_info in slice_data.items():
 
 # The shrink ratio is where we say that the boundary has shrunk this much that we will argument that the mercedes star is there.
 # this is the height on which the leaflet cap latches on
-shrink_ratio = 0.9
+shrink_ratio = 0.95
 
 lcc_event, lcc_thresh, lcc_max_slice = functions.find_shrink_slice_consecutive(LCC_data, shrink_ratio = shrink_ratio)
 rcc_event, rcc_thresh, rcc_max_slice = functions.find_shrink_slice_consecutive(RCC_data, shrink_ratio = shrink_ratio)
