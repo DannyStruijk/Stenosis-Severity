@@ -1,69 +1,96 @@
 import os
-import trimesh
 import pandas as pd
 
 base_folder = r"H:\DATA\Afstuderen\3.Data\output_valve_segmentation"
-master_path = r"H:/DATA/Afstuderen/3.Data/patient_data/patient_data.xlsx"
+master_path = r"H:\DATA\Afstuderen\3.Data\patient_data\patient_data.xlsx"
 
-stl_names = [
-    "LCC_calc",
-    "RCC_calc",
-    "NCC_calc",
-    "calc_volume",
-    "central_NCC_calc",
-    "peripheral_NCC_calc",
-    "central_LCC_calc",
-    "peripheral_LCC_calc",
-    "central_RCC_calc",
-    "peripheral_RCC_calc"
-]
+patients_to_process = [f"CZE{i:03d}" for i in range(38, 39)]
 
-# 🔥 Select patients here
-patients_to_process = [f"CZE{i:03d}" for i in range(1, 39)]  # all patients again
-
-# 🔥 Load master file
+# Load master file
 df_master = pd.read_excel(master_path)
-locaAldf_master["PatientNr"] = df_master["PatientNr"].astype(str).str.strip()
+df_master["PatientNr"] = df_master["PatientNr"].astype(str).str.strip()
 
 for patient_id in patients_to_process:
-    
-    folder = os.path.join(
+    print(f"\nProcessing {patient_id}...")
+
+    patient_folder = os.path.join(
         base_folder,
         patient_id,
         "patient_space",
         "calc_volumes"
     )
-    
-    if not os.path.exists(folder):
+
+    if not os.path.exists(patient_folder):
         print(f"Skipping {patient_id} (folder not found)")
         continue
 
-    print(f"Processing {patient_id}...")
+    # Ensure patient exists in master
+    if not (df_master["PatientNr"] == patient_id).any():
+        print(f"{patient_id}: not found in master file")
+        continue
 
-    volumes = {}
+    # ----------------------------
+    # 1. Read calc summary volumes
+    # ----------------------------
+    summary_path = os.path.join(patient_folder, f"{patient_id}_calc_summary.xlsx")
 
-    for name in stl_names:
-        file_name = f"{patient_id}_{name}.stl"
-        file_path = os.path.join(folder, file_name)
+    if os.path.exists(summary_path):
+        df_summary = pd.read_excel(summary_path)
+        df_summary.columns = df_summary.columns.str.strip()
 
-        if os.path.exists(file_path):
-            mesh = trimesh.load(file_path)
-            
-            if not mesh.is_watertight:
-                print(f"Warning: {file_name} not watertight")
+        required_cols = ["Segment Name", "Volume (mm^3)"]
+        if all(col in df_summary.columns for col in required_cols):
+            for _, row in df_summary.iterrows():
+                segment_name = str(row["Segment Name"]).strip()
+                volume = row["Volume (mm^3)"]
 
-            volumes[name] = mesh.volume
+                if isinstance(volume, str):
+                    volume = float(volume.replace(",", "."))
+
+                if segment_name not in df_master.columns:
+                    df_master[segment_name] = None
+                    print(f"Created volume column: {segment_name}")
+
+                df_master.loc[df_master["PatientNr"] == patient_id, segment_name] = volume
         else:
-            print(f"Missing file: {file_name}")
-            volumes[name] = None
+            print(f"{patient_id}: calc summary missing required columns")
+    else:
+        print(f"{patient_id}: calc summary file not found")
 
-    # 🔥 Assign values to the correct patient row
-    for key, value in volumes.items():
-        df_master.loc[df_master["PatientNr"] == patient_id, key] = value
+    # ----------------------------
+    # 2. Read region areas
+    # ----------------------------
+    region_areas_path = os.path.join(patient_folder, f"{patient_id}_region_areas.xlsx")
+
+    if os.path.exists(region_areas_path):
+        df_areas = pd.read_excel(region_areas_path)
+        df_areas.columns = df_areas.columns.str.strip()
+
+        if df_areas.empty:
+            print(f"{patient_id}: region areas file is empty")
+        else:
+            area_row = df_areas.iloc[0]
+
+            for col in df_areas.columns:
+                if col.lower() == "patient":
+                    continue
+
+                value = area_row[col]
+
+                if isinstance(value, str):
+                    value = float(value.replace(",", "."))
+
+                if col not in df_master.columns:
+                    df_master[col] = None
+                    print(f"Created area column: {col}")
+
+                df_master.loc[df_master["PatientNr"] == patient_id, col] = value
+    else:
+        print(f"{patient_id}: region areas file not found")
 
 
-# 🔥 Save updated master file
-output_path = master_path.replace(".xlsx", "_with_volumes.xlsx")
+# Save updated master file
+output_path = master_path.replace(".xlsx", "_with_volumes_and_areas.xlsx")
 df_master.to_excel(output_path, index=False)
 
-print(f"Updated file saved to: {output_path}")
+print(f"\nUpdated file saved to: {output_path}")

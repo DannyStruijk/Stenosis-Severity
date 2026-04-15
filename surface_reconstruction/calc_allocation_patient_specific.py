@@ -18,6 +18,9 @@ from skimage.draw import polygon2mask
 from skimage.filters import gaussian
 from scipy.ndimage import binary_erosion
 from skimage.restoration import inpaint
+import pandas as pd
+import gc
+
 
 # %% ----------------------------------------PATIENT PATHS & SELECTION OF PATIENT -----------------------------
 
@@ -59,1578 +62,1752 @@ PATIENT_PATHS = {
     "CZE038": r"T:/Research_01/CZE-2020.67 - SAVI-AoS/output_Rachelle/SAVI_Aos_dicom/CZE038/S10010"
 }
 
+# -------------------------------
+# Patient-specific parameters (hardcoded)
+# -------------------------------
+
+# -------------------------------
+# Patient-specific parameters (hardcoded)
+# -------------------------------
+
+patient_params = {
+    "CZE001": {"calc_threshold_perc": 99, "gaussian_perc": 1.5, "percentile_10th_perc": 20, "alpha": 0.01, "beta": 0.1},
+    "CZE002": {"calc_threshold_perc": 99, "gaussian_perc": 0.0, "percentile_10th_perc": 20, "alpha": 0.01, "beta": 0.1},
+    "CZE003": {"calc_threshold_perc": 99.9, "gaussian_perc": 1.5, "percentile_10th_perc": 20, "alpha": 0.01, "beta": 0.1},
+    "CZE004": {"calc_threshold_perc": 99.9, "gaussian_perc": 1.5, "percentile_10th_perc": 20, "alpha": 0.01, "beta": 0.1},
+    "CZE005": {"calc_threshold_perc": 99.9, "gaussian_perc": 1.5, "percentile_10th_perc": 20, "alpha": 0.01, "beta": 0.5},
+    "CZE006": {"calc_threshold_perc": 99.9, "gaussian_perc": 0.0, "percentile_10th_perc": 20, "alpha": 0.01, "beta": 0.1},
+    "CZE007": {"calc_threshold_perc": 99, "gaussian_perc": 1.5, "percentile_10th_perc": 20, "alpha": 0.01, "beta": 0.1},
+    "CZE008": {"calc_threshold_perc": 99.9, "gaussian_perc": 1.5, "percentile_10th_perc": 20, "alpha": 0.01, "beta": 0.1},
+    "CZE009": {"calc_threshold_perc": 99, "gaussian_perc": 1.5, "percentile_10th_perc": 20, "alpha": 0.01, "beta": 0.1},
+    "CZE010": {"calc_threshold_perc": 97, "gaussian_perc": 1.5, "percentile_10th_perc": 20, "alpha": 0.01, "beta": 0.1},
+    "CZE011": {"calc_threshold_perc": 99.9, "gaussian_perc": 1.5, "percentile_10th_perc": 20, "alpha": 0.01, "beta": 0.1},
+    "CZE013": {"calc_threshold_perc": 99, "gaussian_perc": 1.5, "percentile_10th_perc": 20, "alpha": 0.01, "beta": 0.1},
+    "CZE014": {"calc_threshold_perc": 99.9, "gaussian_perc": 1.5, "percentile_10th_perc": 20, "alpha": 0.01, "beta": 0.1},
+    "CZE015": {"calc_threshold_perc": 99.9, "gaussian_perc": 1.5, "percentile_10th_perc": 15, "alpha": 0.01, "beta": 0.1},
+    "CZE016": {"calc_threshold_perc": 99.9, "gaussian_perc": 1.5, "percentile_10th_perc": 20, "alpha": 0.01, "beta": 0.1},
+    "CZE017": {"calc_threshold_perc": 99.9, "gaussian_perc": 1.5, "percentile_10th_perc": 20, "alpha": 0.01, "beta": 0.1},
+    "CZE018": {"calc_threshold_perc": 99, "gaussian_perc": 1.5, "percentile_10th_perc": 20, "alpha": 0.01, "beta": 0.1},
+    "CZE019": {"calc_threshold_perc": 99.9, "gaussian_perc": 1.5, "percentile_10th_perc": 20, "alpha": 0.01, "beta": 0.1},
+    "CZE023": {"calc_threshold_perc": 97, "gaussian_perc": 1.5, "percentile_10th_perc": 20, "alpha": 0.01, "beta": 0.1},
+    "CZE024": {"calc_threshold_perc": 99, "gaussian_perc": 1.0, "percentile_10th_perc": 20, "alpha": 0.01, "beta": 0.1},
+    "CZE026": {"calc_threshold_perc": 97, "gaussian_perc": 1.5, "percentile_10th_perc": 20, "alpha": 0.01, "beta": 0.1},
+    "CZE027": {"calc_threshold_perc": 99, "gaussian_perc": 0.5, "percentile_10th_perc": 35, "alpha": 0.01, "beta": 0.1},
+    "CZE029": {"calc_threshold_perc": 92, "gaussian_perc": 1.5, "percentile_10th_perc": 20, "alpha": 0.01, "beta": 0.1},
+    "CZE030": {"calc_threshold_perc": 99, "gaussian_perc": 1.5, "percentile_10th_perc": 40, "alpha": 0.01, "beta": 0.2},
+    "CZE031": {"calc_threshold_perc": 99, "gaussian_perc": 1.5, "percentile_10th_perc": 20, "alpha": 0.003, "beta": 0.5},
+    "CZE032": {"calc_threshold_perc": 97, "gaussian_perc": 1.5, "percentile_10th_perc": 20, "alpha": 0.01, "beta": 0.2},
+    "CZE035": {"calc_threshold_perc": 98, "gaussian_perc": 1.5, "percentile_10th_perc": 20, "alpha": 0.01, "beta": 0.1},
+    "CZE037": {"calc_threshold_perc": 98, "gaussian_perc": 1.5, "percentile_10th_perc": 20, "alpha": 0.01, "beta": 0.1},
+    "CZE038": {"calc_threshold_perc": 99.99, "gaussian_perc": 1.5, "percentile_10th_perc": 20, "alpha": 0.01, "beta": 0.1}
+}
 
 # Choose which patient to work with
-patient_nr = "CZE001"   # e.g. "aos_14" or "savi_07"
+# patient_nr = "CZE001"
+# params = patient_params[patient_nr]
+# calc_threshold_perc = params["calc_threshold_perc"]
+# gaussian_perc = params["gaussian_perc"]
+# percentile_10th_perc = params["percentile_10th_perc"]
+# active_alpha = params["alpha"]
+# active_beta = params["beta"]
 
-# Automatically load directory
-dicom_dir = PATIENT_PATHS[patient_nr]
+# # Automatically load directory
+# dicom_dir = PATIENT_PATHS[patient_nr]
+show_plots = False
 
+def run_patient(patient_nr):
 
-# %% -------------------------------------------- PREPROCESSING ----------------------------------------
-# READING IN THE DICOM & THE EDGE DETECTED IMAGE
+    print(f"\n===== Processing {patient_nr} =====")
 
-# Load the dicom
-dicom_reversed = gf.get_sorted_dicom_files(dicom_dir)
-dicom = dicom_reversed[::-1]
-raw_volume = gf.dicom_to_matrix(dicom)
+    params = patient_params[patient_nr]
+    calc_threshold_perc = params["calc_threshold_perc"]
+    gaussian_perc = params["gaussian_perc"]
+    percentile_10th_perc = params["percentile_10th_perc"]
+    active_alpha = params["alpha"]
+    active_beta = params["beta"]
 
-# Print to confirm dicom loading
-print(f"Number of DICOM slices loaded: {len(dicom)}")
-print(f"Shape of raw volume: {raw_volume.shape}")
-
-# Extract DICOM attributes, also to reformat the image to HU units
-dicom_template = pydicom.dcmread(dicom[0][0])
-slope = float(getattr(dicom_template, "RescaleSlope", 1))
-intercept = float(getattr(dicom_template, "RescaleIntercept", 0))
-
-# Print slope and intercept to confirm - use print and intercept to calculate the real HU 
-print(f"RescaleSlope: {slope}, RescaleIntercept: {intercept}")
-raw_volume_hu = raw_volume.astype(np.float32) * slope + intercept
-
-# Print to confirm HU transformation
-print(f"Shape of HU volume: {raw_volume_hu.shape}")
-
-# Create an edge detected image based on the imported DICOM
-calc_mask = raw_volume_hu > 450
-gradient_volume = functions.compute_edge_volume(raw_volume_hu, hu_window=(0, 450), sigma=2, normalize=False, visualize=True)
-gradient_volume[calc_mask] = 0
-volume = gradient_volume
-
-# Print to confirm gradient image generation
-print(f"Shape of edge-detected volume: {gradient_volume.shape}")
-
-# Clipping the DICOM to remove calcifications
-low, high = 100, 450  # CHANGED THIS FROM 340 to 500
-clipped_dicom = np.clip(raw_volume_hu, low, high)
-
-# Print to confirm clipping
-print(f"Min and Max values of clipped DICOM: {clipped_dicom.min()}, {clipped_dicom.max()}")
-
-# Smoothing the image a bit
-smoothed_dicom = gaussian_filter(clipped_dicom, sigma=2)  # Note, sigma was changed for patient 11
-smoothed_non_clipped = gaussian_filter(raw_volume_hu, sigma=2) # also non-clipped dicom is preserved for calcification retrieval
-
-# Print to confirm smoothing
-print(f"Min and Max values of smoothed DICOM: {smoothed_dicom.min()}, {smoothed_dicom.max()}")
-
-# Extract voxel spacing
-slice_thickness = functions.compute_slice_spacing(dicom)
-pixel_spacing_y = float(dicom_template.PixelSpacing[0])
-pixel_spacing_x = float(dicom_template.PixelSpacing[1])
-pixel_spacing = (slice_thickness, pixel_spacing_y, pixel_spacing_x)
-
-# Print voxel spacing information
-print(f"Voxel spacing: {pixel_spacing}")
-
-dicom_origin = np.array(dicom_template.ImagePositionPatient, dtype=float)
-
-# Print origin
-print(f"DICOM origin: {dicom_origin}")
-
-# Prevent memory leakage
-del raw_volume_hu
-del raw_volume
-
-# %%------------------------------------------REORIENTATION ---------------------------------------
-
-from skimage.transform import rescale
-
-# in this code the the anisotropic vxel is first concerted to isotropic voxel with the pixel spacing
-# Next, the image is already upsampled for higher resolution. Results in a better rotation.
-
-# Calculating the vector perpendicualr to the annulus
-annular_normal = functions.get_annular_normal(patient_nr)
-old_spacing = np.array(pixel_spacing)
-target_spacing = pixel_spacing_x
-
-zoom_factors = old_spacing / target_spacing
-
-# Reorient the edge-detected image
-rescaled_volume = functions.zoom(volume, zoom_factors)
-reoriented_volume, rotation_matrix, rotation_center = functions.reorient_volume(rescaled_volume, 
-                                                                                annular_normal, 
-                                                                                dicom_origin, 
-                                                                                pixel_spacing)
-
-# Lastly, do the reorientation of the non-clipped DICOM 
-rescaled_non_clipped_dicom = functions.zoom(smoothed_non_clipped, zoom_factors)
-reoriented_non_clipped, rotation_matrix_dicom, rotation_center_dicom_non_clip = functions.reorient_volume(rescaled_non_clipped_dicom,
-                                                                                           annular_normal,
-                                                                                           dicom_origin,
-                                                                                           pixel_spacing)
-
-del rescaled_non_clipped_dicom
-del rescaled_volume
+    dicom_dir = PATIENT_PATHS[patient_nr]
 
 
-# %% ----------------------------------- PLOTTING THE ANNOTATED LANDMARKS FOR ALL CUSPS --------------------------
-
-# Use the _test files if you want to have the recently newly annotated landmarks of 3Dslicer
-# Dynamically load the landmark files based on the patient number
-landmark_files = {
-    "LCC": f"H:/DATA/Afstuderen/3.Data/SSM/patient_database/{patient_nr}/landmarks/lcc_template_landmarks.txt",
-    "RCC": f"H:/DATA/Afstuderen/3.Data/SSM/patient_database/{patient_nr}/landmarks/rcc_template_landmarks.txt",
-    "NCC": f"H:/DATA/Afstuderen/3.Data/SSM/patient_database/{patient_nr}/landmarks/ncc_template_landmarks.txt"
-}   
-
-
-# Dictionary to store processed landmarks
-landmarks_rotated_dict = {}
-
-# Loop over all cusps
-for cusp_name, file_path in landmark_files.items():
-    print(cusp_name, file_path)
-    # 1. Convert from LPS to voxel coordinates
-    landmark_voxels = functions.landmarks_to_voxel(file_path, dicom_origin, pixel_spacing)
-    print("DICOM Origin", dicom_origin, "Pixel_spacing ", pixel_spacing)
-    print("Landmark_voxels: ", landmark_voxels)
-    # 2. Reorder axes for numpy indexing (z, y, x)
-    landmarks_zyx = landmark_voxels[:, [2, 1, 0]].astype(float)
+    # %% -------------------------------------------- PREPROCESSING ----------------------------------------
+    # READING IN THE DICOM & THE EDGE DETECTED IMAGE
     
-    # 3. Scale according to voxel spacing
-    landmarks_scaled = landmarks_zyx.copy()
-    landmarks_scaled[:, 0] *= zoom_factors[0]
-    landmarks_scaled[:, 1] *= zoom_factors[1]
-    landmarks_scaled[:, 2] *= zoom_factors[2]
-
+    # Load the dicom
+    dicom_reversed = gf.get_sorted_dicom_files(dicom_dir)
+    dicom = dicom_reversed[::-1]
+    raw_volume = gf.dicom_to_matrix(dicom)
     
-    # 4. Round to integer voxel indices
-    landmarks_scaled_int = np.round(landmarks_scaled).astype(int)
+    # Print to confirm dicom loading
+    print(f"Number of DICOM slices loaded: {len(dicom)}")
+    print(f"Shape of raw volume: {raw_volume.shape}")
     
-    # 5. Rotate landmarks to match reoriented volume
-    landmarks_rotated = functions.reorient_landmarks(
-        landmarks_scaled_int, rotation_matrix, dicom_origin, pixel_spacing, reoriented_volume.shape
-    )
-    print("landmarks rotated are: ", landmarks_rotated)
+    # Extract DICOM attributes, also to reformat the image to HU units
+    dicom_template = pydicom.dcmread(dicom[0][0])
+    slope = float(getattr(dicom_template, "RescaleSlope", 1))
+    intercept = float(getattr(dicom_template, "RescaleIntercept", 0))
     
-    # Store in dictionary
-    landmarks_rotated_dict[cusp_name] = landmarks_rotated
-
-
-# Access rotated landmarks:
-lcc_rotated = landmarks_rotated_dict["LCC"]
-rcc_rotated = landmarks_rotated_dict["RCC"]
-ncc_rotated = landmarks_rotated_dict["NCC"]
-
-
-
-# %% ------------------------------------ RETRIEVE ALL OF THE DIFFERENT COORDINATES --------
-
-# --- Load only the first landmark from each file ---
-lcc_com = lcc_rotated[0, :]
-rcc_com = rcc_rotated[0, :]
-ncc_com = ncc_rotated[0, :]
-
-# --- Combine into a single array ---
-commissures = np.vstack([lcc_com, rcc_com, ncc_com])  # shape: 3 x 3
-
-# Fit a circle through the commissures to be used in active contours
-circle_points = functions.circle_through_commissures(commissures)
-circle_snake =  circle_points[:, 1:3] 
-
-# Find more information - Finding the maximum height of the commissure and the minimum height of the hinge point
-# this way, the region of interest is also defined for the z-axis
-all_rotated = np.vstack([lcc_rotated, rcc_rotated, ncc_rotated])
-
-# Find min and max along the z-axis (axis 0 corresponds to rows, z is column 0 in zyx)
-z_min = np.min(all_rotated[:, 0])
-z_max = np.max(all_rotated[:, 0])
-
-print(f"Minimum z-coordinate across all cusps: {z_min}")
-print(f"Maximum z-coordinate across all cusps: {z_max}")
-
-
-# %% ------------------------------------------- FIND THE WHOLE AORTIC WALL ------------------------
-
-from skimage.segmentation import active_contour
-from skimage.transform import rescale
-import numpy as np
-import matplotlib.pyplot as plt
-from skimage.morphology import disk, dilation, skeletonize
-from skimage.filters import threshold_otsu
-from skimage.draw import polygon2mask
-from skimage.filters import gaussian
-
-# To find the whole aortic wall the active contours method is applied to each slice
-# Then, each found wall is accumulated with the previous one to create an aortic valve
-
-# ------------------------------------- INITIALIZING VARIABLES FOR ACTIVE CONTOURS ------------------
-
-alpha = 0.01   # elasticity (snake tension)
-beta = 0.1    # rigidity (smoothness)
-gamma = 0.01   # step size
-total_iterations = 20
-
-z_min_int = int(np.floor(z_min))
-z_max_int = int(np.ceil(z_max))
-print(f"Processing slices from {z_min_int} to {z_max_int}")
-
-aortic_wall_contours = {}
-upsampled_snakes = {}
-slice_data = {}   
-
-prev_snake = 0
-show_intermediate = False
-crop_bool = False
-
-# -------------------------------------- LOOP THROUGH SLICES ---------------------------
-
-for slice_nr in range(z_min_int, z_max_int + 1):
+    # Print slope and intercept to confirm - use print and intercept to calculate the real HU 
+    print(f"RescaleSlope: {slope}, RescaleIntercept: {intercept}")
+    raw_volume_hu = raw_volume.astype(np.float32) * slope + intercept
     
-    image_pre = reoriented_volume[slice_nr, :, :]
-    dicom_slice = reoriented_non_clipped[slice_nr, :, :]
-
- 
-    img = image_pre
-    img = img / img.max()
-    new_image= gaussian(img, sigma = 3)
-
-    # Initialize snake
-    if slice_nr == z_min_int:
-        snake_current = circle_snake.copy()
-    else:
-        snake_current = prev_snake.copy()
-
-    # --------------------------------------- ACTIVE CONTOUR EVOLUTION --------------------------
-    for i in range(total_iterations):
-        snake_current = active_contour(
-            new_image,
-            snake_current,
-            alpha=alpha,
-            beta=beta,
-            gamma=gamma,
-            w_edge=1,
-            w_line=20,
-            max_num_iter=1,
-            boundary_condition="periodic"
+    # Print to confirm HU transformation
+    print(f"Shape of HU volume: {raw_volume_hu.shape}")
+    
+    # Create an edge detected image based on the imported DICOM
+    calc_mask = raw_volume_hu > 450
+    gradient_volume = functions.compute_edge_volume(raw_volume_hu, hu_window=(0, 450), sigma=2, normalize=False, visualize=True)
+    gradient_volume[calc_mask] = 0
+    volume = gradient_volume
+    
+    # Print to confirm gradient image generation
+    print(f"Shape of edge-detected volume: {gradient_volume.shape}")
+    
+    # Clipping the DICOM to remove calcifications
+    low, high = 100, 450  # CHANGED THIS FROM 340 to 500
+    clipped_dicom = np.clip(raw_volume_hu, low, high)
+    
+    # Print to confirm clipping
+    print(f"Min and Max values of clipped DICOM: {clipped_dicom.min()}, {clipped_dicom.max()}")
+    
+    # Smoothing the image a bit
+    smoothed_dicom = gaussian_filter(clipped_dicom, sigma=2)  # Note, sigma was changed for patient 11
+    smoothed_non_clipped = gaussian_filter(raw_volume_hu, sigma=2) # also non-clipped dicom is preserved for calcification retrieval
+    
+    # Print to confirm smoothing
+    print(f"Min and Max values of smoothed DICOM: {smoothed_dicom.min()}, {smoothed_dicom.max()}")
+    
+    # Extract voxel spacing
+    slice_thickness = functions.compute_slice_spacing(dicom)
+    pixel_spacing_y = float(dicom_template.PixelSpacing[0])
+    pixel_spacing_x = float(dicom_template.PixelSpacing[1])
+    pixel_spacing = (slice_thickness, pixel_spacing_y, pixel_spacing_x)
+    
+    # Print voxel spacing information
+    print(f"Voxel spacing: {pixel_spacing}")
+    
+    dicom_origin = np.array(dicom_template.ImagePositionPatient, dtype=float)
+    
+    # Print origin
+    print(f"DICOM origin: {dicom_origin}")
+    
+    # Prevent memory leakage
+    del raw_volume_hu
+    del raw_volume
+    
+    # %%------------------------------------------REORIENTATION ---------------------------------------
+    
+    from skimage.transform import rescale
+    
+    # in this code the the anisotropic vxel is first concerted to isotropic voxel with the pixel spacing
+    # Next, the image is already upsampled for higher resolution. Results in a better rotation.
+    
+    # Calculating the vector perpendicualr to the annulus
+    annular_normal = functions.get_annular_normal(patient_nr)
+    old_spacing = np.array(pixel_spacing)
+    target_spacing = pixel_spacing_x
+    
+    zoom_factors = old_spacing / target_spacing
+    
+    # Reorient the edge-detected image
+    rescaled_volume = functions.zoom(volume, zoom_factors)
+    reoriented_volume, rotation_matrix, rotation_center = functions.reorient_volume(rescaled_volume, 
+                                                                                    annular_normal, 
+                                                                                    dicom_origin, 
+                                                                                    pixel_spacing)
+    
+    # Lastly, do the reorientation of the non-clipped DICOM 
+    rescaled_non_clipped_dicom = functions.zoom(smoothed_non_clipped, zoom_factors)
+    reoriented_non_clipped, rotation_matrix_dicom, rotation_center_dicom_non_clip = functions.reorient_volume(rescaled_non_clipped_dicom,
+                                                                                               annular_normal,
+                                                                                               dicom_origin,
+                                                                                               pixel_spacing)
+    
+    del rescaled_non_clipped_dicom
+    del rescaled_volume
+    
+    
+    # %% ----------------------------------- PLOTTING THE ANNOTATED LANDMARKS FOR ALL CUSPS --------------------------
+    
+    # Use the _test files if you want to have the recently newly annotated landmarks of 3Dslicer
+    # Dynamically load the landmark files based on the patient number
+    landmark_files = {
+        "LCC": f"H:/DATA/Afstuderen/3.Data/SSM/patient_database/{patient_nr}/landmarks/lcc_template_landmarks.txt",
+        "RCC": f"H:/DATA/Afstuderen/3.Data/SSM/patient_database/{patient_nr}/landmarks/rcc_template_landmarks.txt",
+        "NCC": f"H:/DATA/Afstuderen/3.Data/SSM/patient_database/{patient_nr}/landmarks/ncc_template_landmarks.txt"
+    }   
+    
+    
+    # Dictionary to store processed landmarks
+    landmarks_rotated_dict = {}
+    
+    # Loop over all cusps
+    for cusp_name, file_path in landmark_files.items():
+        print(cusp_name, file_path)
+        # 1. Convert from LPS to voxel coordinates
+        landmark_voxels = functions.landmarks_to_voxel(file_path, dicom_origin, pixel_spacing)
+        print("DICOM Origin", dicom_origin, "Pixel_spacing ", pixel_spacing)
+        print("Landmark_voxels: ", landmark_voxels)
+        # 2. Reorder axes for numpy indexing (z, y, x)
+        landmarks_zyx = landmark_voxels[:, [2, 1, 0]].astype(float)
+        
+        # 3. Scale according to voxel spacing
+        landmarks_scaled = landmarks_zyx.copy()
+        landmarks_scaled[:, 0] *= zoom_factors[0]
+        landmarks_scaled[:, 1] *= zoom_factors[1]
+        landmarks_scaled[:, 2] *= zoom_factors[2]
+    
+        
+        # 4. Round to integer voxel indices
+        landmarks_scaled_int = np.round(landmarks_scaled).astype(int)
+        
+        # 5. Rotate landmarks to match reoriented volume
+        landmarks_rotated = functions.reorient_landmarks(
+            landmarks_scaled_int, rotation_matrix, dicom_origin, pixel_spacing, reoriented_volume.shape
         )
-
-        if show_intermediate and ((i + 1) % 5 == 0 or i == total_iterations - 1):
+        print("landmarks rotated are: ", landmarks_rotated)
+        
+        # Store in dictionary
+        landmarks_rotated_dict[cusp_name] = landmarks_rotated
+    
+    
+    # Access rotated landmarks:
+    lcc_rotated = landmarks_rotated_dict["LCC"]
+    rcc_rotated = landmarks_rotated_dict["RCC"]
+    ncc_rotated = landmarks_rotated_dict["NCC"]
+    
+    
+    
+    # %% ------------------------------------ RETRIEVE ALL OF THE DIFFERENT COORDINATES --------
+    
+    # --- Load only the first landmark from each file ---
+    lcc_com = lcc_rotated[0, :]
+    rcc_com = rcc_rotated[0, :]
+    ncc_com = ncc_rotated[0, :]
+    
+    # --- Combine into a single array ---
+    commissures = np.vstack([lcc_com, rcc_com, ncc_com])  # shape: 3 x 3
+    
+    # Fit a circle through the commissures to be used in active contours
+    circle_points = functions.circle_through_commissures(commissures)
+    circle_snake =  circle_points[:, 1:3] 
+    
+    # Find more information - Finding the maximum height of the commissure and the minimum height of the hinge point
+    # this way, the region of interest is also defined for the z-axis
+    all_rotated = np.vstack([lcc_rotated, rcc_rotated, ncc_rotated])
+    
+    # Find min and max along the z-axis (axis 0 corresponds to rows, z is column 0 in zyx)
+    z_min = np.min(all_rotated[:, 0])
+    z_max = np.max(all_rotated[:, 0])
+    
+    print(f"Minimum z-coordinate across all cusps: {z_min}")
+    print(f"Maximum z-coordinate across all cusps: {z_max}")
+    
+    
+    # %% ------------------------------------------- FIND THE WHOLE AORTIC WALL ------------------------
+    
+    from skimage.segmentation import active_contour
+    from skimage.transform import rescale
+    import matplotlib.pyplot as plt
+    from skimage.morphology import disk, dilation, skeletonize
+    from skimage.filters import threshold_otsu
+    from skimage.draw import polygon2mask
+    from skimage.filters import gaussian
+    
+    # To find the whole aortic wall the active contours method is applied to each slice
+    # Then, each found wall is accumulated with the previous one to create an aortic valve
+    
+    # ------------------------------------- INITIALIZING VARIABLES FOR ACTIVE CONTOURS ------------------
+    
+    alpha = active_alpha   # elasticity (snake tension)
+    beta = active_beta    # rigidity (smoothness)
+    gamma = 0.01   # step size
+    total_iterations = 20
+    
+    z_min_int = int(np.floor(z_min))
+    z_max_int = int(np.ceil(z_max))
+    print(f"Processing slices from {z_min_int} to {z_max_int}")
+    
+    aortic_wall_contours = {}
+    upsampled_snakes = {}
+    slice_data = {}   
+    
+    prev_snake = 0
+    show_intermediate = False
+    crop_bool = False
+    
+    # -------------------------------------- LOOP THROUGH SLICES ---------------------------
+    
+    for slice_nr in range(z_min_int, z_max_int + 1):
+        
+        image_pre = reoriented_volume[slice_nr, :, :]
+        dicom_slice = reoriented_non_clipped[slice_nr, :, :]
+    
+     
+        img = image_pre
+        img = img / img.max()
+        new_image= gaussian(img, sigma = 3)
+    
+        # Initialize snake
+        if slice_nr == z_min_int:
+            snake_current = circle_snake.copy()
+        else:
+            snake_current = prev_snake.copy()
+    
+        # --------------------------------------- ACTIVE CONTOUR EVOLUTION --------------------------
+        for i in range(total_iterations):
+            snake_current = active_contour(
+                new_image,
+                snake_current,
+                alpha=alpha,
+                beta=beta,
+                gamma=gamma,
+                w_edge=1,
+                w_line=20,
+                max_num_iter=1,
+                boundary_condition="periodic"
+            )
+    
+            if show_intermediate and ((i + 1) % 5 == 0 or i == total_iterations - 1):
+                plt.figure(figsize=(6, 6))
+                plt.imshow(new_image, cmap="gray")
+                plt.plot(snake_current[:, 1], snake_current[:, 0], '-b', lw=2, alpha=0.8)
+                plt.title(f"Snake evolution — Slice {slice_nr}, Iteration {i+1}")
+                plt.axis("off")
+                plt.show()
+                    
+        # --- Final visualization per slice ---
+        if show_plots:
             plt.figure(figsize=(6, 6))
             plt.imshow(new_image, cmap="gray")
-            plt.plot(snake_current[:, 1], snake_current[:, 0], '-b', lw=2, alpha=0.8)
-            plt.title(f"Snake evolution — Slice {slice_nr}, Iteration {i+1}")
+            plt.plot(snake_current[:, 1], snake_current[:, 0], '-r', lw=2, alpha=0.9)
+            plt.title(f"Final aortic wall contour — Slice {slice_nr}")
             plt.axis("off")
             plt.show()
-                
-    # --- Final visualization per slice ---
-    plt.figure(figsize=(6, 6))
-    plt.imshow(new_image, cmap="gray")
-    plt.plot(snake_current[:, 1], snake_current[:, 0], '-r', lw=2, alpha=0.9)
-    plt.title(f"Final aortic wall contour — Slice {slice_nr}")
-    plt.axis("off")
-    plt.show()
-
-
-    roi_mask = polygon2mask(new_image.shape, snake_current) 
     
-
-    # Store data for *every* slice
-    # note that the skeletonization now takes place in a later step
-    slice_data[slice_nr] = {
-        "roi_mask": roi_mask.copy(),
-        "snake": snake_current.copy(),
-        "slice": dicom_slice.copy(),
-    }
-
-    # Store contour info
-    final_snake = snake_current
-    aortic_wall_contours[slice_nr] = final_snake
-    upsampled_snakes[slice_nr] = snake_current.copy()  
-    prev_snake = snake_current
-
-
-# %% ------------------------------------------ IDENTIFICATION OF CALCIFICATION -------------------------
-
-from skimage.morphology import binary_erosion, disk
-
-# Create an empty mask with the same dimensions as the original image
-masked_valve = np.zeros(
-    (
-        reoriented_non_clipped.shape[0],                     # Z
-        reoriented_non_clipped.shape[1],   # Y
-        reoriented_non_clipped.shape[2]    # X
-    ),
-    dtype=reoriented_non_clipped.dtype
-)
-
-num_slices = reoriented_non_clipped.shape[0]
-print(num_slices)
-
-# Initialize calcification volume
-calc_volume = np.zeros_like(masked_valve, dtype=bool)
-
-for slice_nr in range(num_slices):
-
-    # If this slice has stored data, apply ROI
-    if slice_nr in slice_data:
+    
+        roi_mask = polygon2mask(new_image.shape, snake_current) 
         
-        # Use the slice data 
-        roi_mask= slice_data[slice_nr]["roi_mask"]
-        slice_img = slice_data[slice_nr]["slice"]
-        
-        # The slice on which the threshold is based, is eroded to remove eventuel calcifications on the aortic wall
-        # we want to have a clean histogram which is not skewed due to calcifications
-        if slice_nr == z_min:
-            roi_mask = binary_erosion(roi_mask, disk(3))   
-            # Assuming roi_mask is already defined
-
-        # Plot the original roi_mask
-        plt.figure(figsize=(12, 6))
-        
-        # # Original ROI Mask (Before erosion)
-        # plt.subplot(1, 2, 1)
-        # plt.imshow(roi_mask, cmap='gray')
-        # plt.title("ROI Mask Before Erosion")
-        # plt.axis('off')    
-        # plt.tight_layout()
-        # plt.show()
+    
+        # Store data for *every* slice
+        # note that the skeletonization now takes place in a later step
+        slice_data[slice_nr] = {
+            "roi_mask": roi_mask.copy(),
+            "snake": snake_current.copy(),
+            "slice": dicom_slice.copy(),
+        }
+    
+        # Store contour info
+        final_snake = snake_current
+        aortic_wall_contours[slice_nr] = final_snake
+        upsampled_snakes[slice_nr] = snake_current.copy()  
+        prev_snake = snake_current
+    
+    
+    # %% ------------------------------------------ IDENTIFICATION OF CALCIFICATION -------------------------
+    
+    from skimage.morphology import binary_erosion, disk
+    
+    # Create an empty mask with the same dimensions as the original image
+    masked_valve = np.zeros(
+        (
+            reoriented_non_clipped.shape[0],                     # Z
+            reoriented_non_clipped.shape[1],   # Y
+            reoriented_non_clipped.shape[2]    # X
+        ),
+        dtype=reoriented_non_clipped.dtype
+    )
+    
+    num_slices = reoriented_non_clipped.shape[0]
+    print(num_slices)
+    
+    # Initialize calcification volume
+    calc_volume = np.zeros_like(masked_valve, dtype=bool)
+    
+    for slice_nr in range(num_slices):
+    
+        # If this slice has stored data, apply ROI
+        if slice_nr in slice_data:
+            
+            # Use the slice data 
+            roi_mask= slice_data[slice_nr]["roi_mask"]
+            slice_img = slice_data[slice_nr]["slice"]
+            
+            # The slice on which the threshold is based, is eroded to remove eventuel calcifications on the aortic wall
+            # we want to have a clean histogram which is not skewed due to calcifications
+            if slice_nr == z_min:
+                roi_mask = binary_erosion(roi_mask, disk(3))   
+                # Assuming roi_mask is already defined
+    
+            # Plot the original roi_mask
+            plt.figure(figsize=(12, 6))
+            
+            # # Original ROI Mask (Before erosion)
+            # plt.subplot(1, 2, 1)
+            # plt.imshow(roi_mask, cmap='gray')
+            # plt.title("ROI Mask Before Erosion")
+            # plt.axis('off')    
+            # plt.tight_layout()
+            # plt.show()
+                    
+            # Extract intensities inside ROI
+            roi_values = slice_img[roi_mask > 0]
+            
+            if roi_values.size == 0:
+                median_intensity = np.nan
+            else:
+                median_intensity = np.median(roi_values)
+            
+            print(f"Slice {slice_nr}: median intensity inside ROI = {median_intensity:.2f}")
+            
+            if slice_nr==z_min: 
+                # Threshold for calcification: e.g., mean + 3*std
+                calc_threshold =  np.percentile(roi_values, calc_threshold_perc)  # upper bound used as threshold   
+                print(f"Patient {patient_nr}: Threshold for calcification  = {calc_threshold:.2f}")
+            
+            # Print a histogram - necessary for seperating the calcification from the aortic valve
+            print_histo = False
+            if print_histo == True:
+                plt.clf()
+                plt.hist(roi_values.flatten(), bins=40, color='skyblue', edgecolor='black')
+                plt.title(f"Slice {slice_nr} – ROI intensity histogram")
+                plt.xlabel("Intensity")
+                plt.ylabel("Frequency")
+                plt.grid(True, linestyle='--', alpha=0.5)
                 
-        # Extract intensities inside ROI
-        roi_values = slice_img[roi_mask > 0]
-        
-        if roi_values.size == 0:
-            median_intensity = np.nan
+                # Add vertical dashed line for threshold
+                plt.axvline(calc_threshold, color='red', linestyle='--', linewidth=2, label=f'Threshold: {calc_threshold:.1f}')
+                plt.legend()
+                plt.pause(0.2)  # scroll speed
+                
+            
+    
+            # Safety check (recommended)
+            if roi_mask.shape != slice_img.shape:
+                raise ValueError(
+                    f"ROI mask shape {roi_mask.shape} does not match stored slice shape "
+                    f"{slice_img.shape} at slice {slice_nr}"
+                )
+    
+            # Apply mask
+            masked_valve[slice_nr] = slice_img * roi_mask
+            
+            # --- Calcification segmentation ---
+            calc_mask = np.zeros_like(slice_img, dtype=bool)
+            calc_mask[roi_mask > 0] = slice_img[roi_mask > 0] > calc_threshold
+            calc_volume[slice_nr] = calc_mask  # store in 3D volume
+    
+        # Otherwise leave slice empty
         else:
-            median_intensity = np.median(roi_values)
+            masked_valve[slice_nr] = 0
+    
+    # # (optional) Visualization fo the ROI
+    for z in range(z_min, z_max + 1):
+        if slice_nr not in slice_data:
+            print(f"Warning: Slice {slice_nr} not found in slice_data")
+        if z not in slice_data:
+            continue
+    
+        plt.clf()
+        if show_plots:
+            # Show the original slice (masked valve)
+            slice_img = masked_valve[z]  # or slice_data[z]["slice"] if you prefer original
+            plt.imshow(slice_img, cmap="gray")
         
-        print(f"Slice {slice_nr}: median intensity inside ROI = {median_intensity:.2f}")
+            # Overlay calcification in red using contour
+            plt.contour(calc_volume[z], colors='red', linewidths=1)
         
-        if slice_nr==z_min: 
-            # Threshold for calcification: e.g., mean + 3*std
-            calc_threshold =  np.percentile(roi_values, 99)  # upper bound used as threshold   
-            print(f"Patient {patient_nr}: Threshold for calcification  = {calc_threshold:.2f}")
+            plt.title(f"Slice {z} – Calcification overlay")
+            plt.axis("off")
+            plt.pause(0.15)
+    
+    plt.show()
+    
+    
+    
+    # %%-------------------------------  EXTRACTION OF THE LEAFET BOUNDARIES ---------------------------
+    
+    from skimage.morphology import binary_erosion
+   
+    
+    # Parameters
+    alpha, beta, gamma = 0.1, 0.1, 0.01
+    total_iterations = 20
+    BOUNDARY_THRESHOLD = 25  # can change later
+    
+    # Leaflet-specific storage
+    LCC_data, RCC_data, NCC_data = {}, {}, {}
+    
+    # Retrieval and upscaling of points
+    hinge_lcc = lcc_rotated[2][1:3]
+    hinge_rcc = rcc_rotated[2][1:3] 
+    hinge_ncc = ncc_rotated[2][1:3]
+    
+    rcc_lcc_com = lcc_com[1:3] 
+    lcc_ncc_com = ncc_com[1:3] 
+    ncc_rcc_com = rcc_com[1:3] 
+    
+    center = lcc_rotated[3][1:3]
+    mercedes_slice = lcc_rotated[3][0]
+    
+    # Initialize previous intersections with None (persistent storage across slices)
+    prev_intersections = {
+        "lcc_ncc": None,
+        "rcc_lcc": None,
+        "ncc_rcc": None
+    }
+    
+    # Base commissures (from first slice landmarks)
+    base_commissure = {
+        "lcc_ncc": lcc_ncc_com,
+        "rcc_lcc": rcc_lcc_com,
+        "ncc_rcc": ncc_rcc_com
+    }
+    
+    # Boundary shrink detection state
+    boundary_event_state = {
+        "lcc_ncc": {"was_above": False, "event_slice": None},
+        "rcc_lcc": {"was_above": False, "event_slice": None},
+        "ncc_rcc": {"was_above": False, "event_slice": None},
+    }
+    
+    commissure_points = [rcc_lcc_com, lcc_ncc_com, ncc_rcc_com]
+    mercedes_star = False
+    
+    # Loop over slices
+    for slice_nr, slice_info in slice_data.items():
+        print("----------------------------------------")
+        print(f"Processing slice {slice_nr}...")
+    
+        # --- Upscale slice for visualization / mask ---
+        reoriented_slice = reoriented_non_clipped[slice_nr, :, :]
+        roi_mask = slice_info["roi_mask"]
+    
+        # --- Active contour refinement ---
+        init_snake = slice_info["snake"].copy()
+        snake_current = functions.resample_closed_contour(init_snake)
         
-        # Print a histogram - necessary for seperating the calcification from the aortic valve
-        print_histo = False
-        if print_histo == True:
-            plt.clf()
-            plt.hist(roi_values.flatten(), bins=40, color='skyblue', edgecolor='black')
-            plt.title(f"Slice {slice_nr} – ROI intensity histogram")
+        
+        # --------- CONTEXT DEPENDENT CLIPPING  -------
+        # Updated: now we are using the previously calculated eroded_foreground, i.e. the calculated ROI
+        # So the whole skeletonization which took place in the previous loop will now be done. This is done
+        # so that the context-dependent clipping can be achieved.
+        
+        
+        # Check if commissure points from the previous slice are available
+        commissure_points = {
+            'lcc_ncc': prev_intersections['lcc_ncc'] if prev_intersections['lcc_ncc'] is not None else base_commissure['lcc_ncc'],
+            'rcc_lcc': prev_intersections['rcc_lcc'] if prev_intersections['rcc_lcc'] is not None else base_commissure['rcc_lcc'],
+            'ncc_rcc': prev_intersections['ncc_rcc'] if prev_intersections['ncc_rcc'] is not None else base_commissure['ncc_rcc']
+        }
+        
+        init_coms = [
+            commissure_points['lcc_ncc'],
+            commissure_points['rcc_lcc'],
+            commissure_points['ncc_rcc']
+        ]
+        
+        init_mercedes = functions.create_mercedes_mask(reoriented_slice, init_coms, center, line_thickness = 8)
+        slice_clipped = reoriented_slice.copy()
+            
+        # 1) Low clipping only inside ROI
+        slice_clipped[(slice_clipped < 100) & (roi_mask > 0)] = 100
+        
+        # 2) High clipping inside mercedes: >450 -> 0
+        slice_clipped[(init_mercedes == 1) & (slice_clipped > calc_threshold)] = 100
+        
+        # 3) High clipping outside mercedes: >450 -> 450
+        slice_clipped[(init_mercedes == 0) & (slice_clipped > calc_threshold)] = 450
+        
+        # Check for any zero pixels
+        num_zeros = np.sum(slice_clipped == 0)
+    
+    
+         # ----------------------------------------- SKELETONIZATION  ----------------------------------------
+        # Apply Gaussian blur to the reoriented slice (sigma controls the blur intensity)
+        sigma = gaussian_perc  # Adjust this value based on how much blur you want
+        blurred_slice = gaussian(slice_clipped, sigma=sigma)
+        
+        # Multiply the blurred image with the ROI mask
+        roi_image_blurred = blurred_slice * roi_mask.astype(slice_clipped.dtype)
+        
+        # Multiply the original (non-blurred) image with the ROI mask
+        roi_image_original = slice_clipped * roi_mask.astype(slice_clipped.dtype)
+       
+        # Initialize the threshold variable for all slices
+        if slice_nr == z_min:
+            # Calculate the threshold for the first slice based on the 10th percentile
+            roi_pixels_blurred = roi_image_blurred[roi_mask]  # Use blurred ROI pixels
+            percentile_10th = np.percentile(roi_pixels_blurred, percentile_10th_perc)  # Determining what the threshold is for finding the boundaries
+            # print(f"Calculated 10th Percentile Threshold for Slice {slice_nr}: {percentile_10th:.2f}")
+        else:
+            # Use the previously calculated threshold for all other slices
+            percentile_10th = globals().get("percentile_10th", 0)
+        
+        # Apply the 10th percentile threshold to the blurred image
+        percentile_mask = (roi_image_blurred > percentile_10th) & roi_mask
+        
+        # Visualize the histogram of the intensity values of the blurred image
+        plot_histo = False
+        
+        if plot_histo == True: 
+            plt.figure(figsize=(8, 6))
+            plt.hist(roi_pixels_blurred, bins=50, color='gray', alpha=0.7)
+            plt.title("Histogram of ROI Intensity Values (Blurred)")
             plt.xlabel("Intensity")
             plt.ylabel("Frequency")
-            plt.grid(True, linestyle='--', alpha=0.5)
             
-            # Add vertical dashed line for threshold
-            plt.axvline(calc_threshold, color='red', linestyle='--', linewidth=2, label=f'Threshold: {calc_threshold:.1f}')
+            # Mark the 10th percentile threshold on the histogram
+            plt.axvline(percentile_10th, color='g', linestyle='--', label=f'10th Percentile Threshold: {percentile_10th:.2f}')
             plt.legend()
-            plt.pause(0.2)  # scroll speed
+            plt.show()
+    
+        # Apply the mask based on the 10th percentile threshold
+        inverted_mask = ~percentile_mask
+        closed_inverted = dilation(inverted_mask, disk(1))
+        eroded_foreground = closed_inverted * roi_mask
+        
+        # Perform skeletonization and thickening
+        skeleton = skeletonize(eroded_foreground)
+        thicker_skeleton = dilation(skeleton, disk(3))
+        
+        # Final visualization of the skeletonized result
+        # plt.figure(figsize=(6, 6))
+        # plt.imshow(blurred_slice, cmap='gray')
+        # plt.imshow(thicker_skeleton, cmap='Reds', alpha=0.0)
+        # # Mercedes star overlay
+        # plt.title(f"Skeletonization with Percentile Threshold — Slice {slice_nr}")
+        # plt.axis("off")
+        # plt.show()
+        
+        # Optionally, store the threshold for future slices
+        if slice_nr == z_min:
+            globals()["percentile_10th"] = percentile_10th  # Store the threshold for future slices
+    
+    
+        # --------------------------------------------------FINDIGN BOUNDARIES -----------------------
+        
+        
+        # Preparing image for active contours    
+        blurred_skeleton_norm = gaussian_filter(skeleton.astype(float), sigma=7)
+        blurred_skeleton_norm /= blurred_skeleton_norm.max() + 1e-8
+    
+        # The snake is rerun, to close off the entire aortic wall. Previous snake could have had holes in it
+        # However update: since 20-01-2026 not using this contour anymore for aortic wall, as it was too small
+        for i in range(total_iterations):
+            snake_current = active_contour(
+                blurred_skeleton_norm,
+                snake_current,
+                alpha=alpha,
+                beta=beta,
+                gamma=gamma,
+                w_edge=1,
+                w_line=10,
+                max_num_iter=1,
+                boundary_condition="periodic"
+            )
+        
+    
+        # --- Isolate inner skeleton ---
+        skeleton_mask = polygon2mask(skeleton.shape, snake_current)
+        roi_mask_eroded = binary_erosion(skeleton_mask)
+        inner_skeleton = skeleton * roi_mask_eroded.astype(skeleton.dtype)
+    
+        # Upsample contour for accurate indices
+        aortic_wall_contour = functions.resample_closed_contour(init_snake)
+    
+        # Find closest points to hinge points
+        i_lcc = functions.closest_contour_point(lcc_rotated[2][1:3], aortic_wall_contour)
+        i_rcc = functions.closest_contour_point(rcc_rotated[2][1:3], aortic_wall_contour)
+        i_ncc = functions.closest_contour_point(ncc_rotated[2][1:3], aortic_wall_contour)
+    
+        # Create contour segments
+        seg_lcc_ncc = functions.contour_segment(aortic_wall_contour, i_lcc, i_ncc)
+        seg_ncc_rcc = functions.contour_segment(aortic_wall_contour, i_ncc, i_rcc)
+        seg_rcc_lcc = functions.contour_segment(aortic_wall_contour, i_rcc, i_lcc)
+    
+        # Create leaflet masks and boundaries
+        lcc_ncc_mask, lcc_ncc_boundary = functions.create_boundary_mask(
+            center, aortic_wall_contour, i_lcc, i_ncc, seg_lcc_ncc, slice_clipped, inner_skeleton)
+        rcc_lcc_mask, rcc_lcc_boundary = functions.create_boundary_mask(
+            center, aortic_wall_contour, i_rcc, i_lcc, seg_rcc_lcc, slice_clipped, inner_skeleton)
+        ncc_rcc_mask, ncc_rcc_boundary = functions.create_boundary_mask(
+            center, aortic_wall_contour, i_ncc, i_rcc, seg_ncc_rcc, slice_clipped, inner_skeleton)
+    
+        # Check if commissure points from the previous slice are available
+        commissure_points = {
+            'lcc_ncc': prev_intersections['lcc_ncc'] if prev_intersections['lcc_ncc'] is not None else base_commissure['lcc_ncc'],
+            'rcc_lcc': prev_intersections['rcc_lcc'] if prev_intersections['rcc_lcc'] is not None else base_commissure['rcc_lcc'],
+            'ncc_rcc': prev_intersections['ncc_rcc'] if prev_intersections['ncc_rcc'] is not None else base_commissure['ncc_rcc']
+        }
+        print("commissure_points: ", commissure_points, "init_coms: ", init_coms, center)
+        com_points = [commissure_points['lcc_ncc'], commissure_points['rcc_lcc'], commissure_points['ncc_rcc']]
+    
+        # Clean boundaries with the commissure points (from previous slice or base)
+        cleaned_lcc_ncc_boundary, mercedes_mask = functions.clean_boundary_from_mask(
+            lcc_ncc_boundary, aortic_wall_contour, 3, com_points, center)
+        cleaned_rcc_lcc_boundary, mercedes_mask  = functions.clean_boundary_from_mask(
+            rcc_lcc_boundary, aortic_wall_contour, 3, com_points, center)
+        cleaned_ncc_rcc_boundary, mercedes_mask = functions.clean_boundary_from_mask(
+            ncc_rcc_boundary, aortic_wall_contour, 3, com_points, center)
+    
+        # --- Find intersections with wall ---
+        intersections = {}
+        if slice_nr != z_min:
+            intersections = functions.find_all_boundary_intersections(
+                slice_clipped,
+                seg_lcc_ncc,
+                seg_rcc_lcc,
+                seg_ncc_rcc,
+                cleaned_lcc_ncc_boundary,
+                cleaned_rcc_lcc_boundary,
+                cleaned_ncc_rcc_boundary,
+                slice_nr,
+                mercedes_mask,
+                plot=True
+                )
+        
+        commissure_names = ["lcc_ncc", "rcc_lcc", "ncc_rcc"]
+        commissure_indices = {}
+        
+        # --------------------------------------------
+        # 1. Check if we have EVER found all 3 before
+        # --------------------------------------------
+        have_full_prev = all(prev_intersections[name] is not None for name in commissure_names)
+        
+        # --------------------------------------------
+        # 2. Decide fallback strategy for THIS slice
+        # --------------------------------------------
+        found_this_slice = {name: intersections.get(name) is not None for name in commissure_names}
             
-        
-
-        # Safety check (recommended)
-        if roi_mask.shape != slice_img.shape:
-            raise ValueError(
-                f"ROI mask shape {roi_mask.shape} does not match stored slice shape "
-                f"{slice_img.shape} at slice {slice_nr}"
-            )
-
-        # Apply mask
-        masked_valve[slice_nr] = slice_img * roi_mask
-        
-        # --- Calcification segmentation ---
-        calc_mask = np.zeros_like(slice_img, dtype=bool)
-        calc_mask[roi_mask > 0] = slice_img[roi_mask > 0] > calc_threshold
-        calc_volume[slice_nr] = calc_mask  # store in 3D volume
-
-    # Otherwise leave slice empty
-    else:
-        masked_valve[slice_nr] = 0
-
-# # (optional) Visualization fo the ROI
-for z in range(z_min, z_max + 1):
-    if slice_nr not in slice_data:
-        print(f"Warning: Slice {slice_nr} not found in slice_data")
-    if z not in slice_data:
-        continue
-
-    plt.clf()
-
-    # Show the original slice (masked valve)
-    slice_img = masked_valve[z]  # or slice_data[z]["slice"] if you prefer original
-    plt.imshow(slice_img, cmap="gray")
-
-    # Overlay calcification in red using contour
-    plt.contour(calc_volume[z], colors='red', linewidths=1)
-
-    plt.title(f"Slice {z} – Calcification overlay")
-    plt.axis("off")
-    plt.pause(0.15)
-
-plt.show()
-
-
-
-# %%-------------------------------  EXTRACTION OF THE LEAFET BOUNDARIES ---------------------------
-
-from skimage.morphology import binary_erosion
-from scipy.ndimage import gaussian_filter
-
-
-# Parameters
-alpha, beta, gamma = 0.1, 0.1, 0.01
-total_iterations = 20
-BOUNDARY_THRESHOLD = 25  # can change later
-
-# Leaflet-specific storage
-LCC_data, RCC_data, NCC_data = {}, {}, {}
-
-# Retrieval and upscaling of points
-hinge_lcc = lcc_rotated[2][1:3]
-hinge_rcc = rcc_rotated[2][1:3] 
-hinge_ncc = ncc_rotated[2][1:3]
-
-rcc_lcc_com = lcc_com[1:3] 
-lcc_ncc_com = ncc_com[1:3] 
-ncc_rcc_com = rcc_com[1:3] 
-
-center = lcc_rotated[3][1:3]
-mercedes_slice = lcc_rotated[3][0]
-
-# Initialize previous intersections with None (persistent storage across slices)
-prev_intersections = {
-    "lcc_ncc": None,
-    "rcc_lcc": None,
-    "ncc_rcc": None
-}
-
-# Base commissures (from first slice landmarks)
-base_commissure = {
-    "lcc_ncc": lcc_ncc_com,
-    "rcc_lcc": rcc_lcc_com,
-    "ncc_rcc": ncc_rcc_com
-}
-
-# Boundary shrink detection state
-boundary_event_state = {
-    "lcc_ncc": {"was_above": False, "event_slice": None},
-    "rcc_lcc": {"was_above": False, "event_slice": None},
-    "ncc_rcc": {"was_above": False, "event_slice": None},
-}
-
-commissure_points = [rcc_lcc_com, lcc_ncc_com, ncc_rcc_com]
-mercedes_star = False
-
-# Loop over slices
-for slice_nr, slice_info in slice_data.items():
-    print("----------------------------------------")
-    print(f"Processing slice {slice_nr}...")
-
-    # --- Upscale slice for visualization / mask ---
-    reoriented_slice = reoriented_non_clipped[slice_nr, :, :]
-    roi_mask = slice_info["roi_mask"]
-
-    # --- Active contour refinement ---
-    init_snake = slice_info["snake"].copy()
-    snake_current = functions.resample_closed_contour(init_snake)
-    
-    
-    # --------- CONTEXT DEPENDENT CLIPPING  -------
-    # Updated: now we are using the previously calculated eroded_foreground, i.e. the calculated ROI
-    # So the whole skeletonization which took place in the previous loop will now be done. This is done
-    # so that the context-dependent clipping can be achieved.
-    
-    
-    # Check if commissure points from the previous slice are available
-    commissure_points = {
-        'lcc_ncc': prev_intersections['lcc_ncc'] if prev_intersections['lcc_ncc'] is not None else base_commissure['lcc_ncc'],
-        'rcc_lcc': prev_intersections['rcc_lcc'] if prev_intersections['rcc_lcc'] is not None else base_commissure['rcc_lcc'],
-        'ncc_rcc': prev_intersections['ncc_rcc'] if prev_intersections['ncc_rcc'] is not None else base_commissure['ncc_rcc']
-    }
-    
-    init_coms = [
-        commissure_points['lcc_ncc'],
-        commissure_points['rcc_lcc'],
-        commissure_points['ncc_rcc']
-    ]
-    
-    init_mercedes = functions.create_mercedes_mask(reoriented_slice, init_coms, center, line_thickness = 8)
-    slice_clipped = reoriented_slice.copy()
-        
-    # 1) Low clipping only inside ROI
-    slice_clipped[(slice_clipped < 100) & (roi_mask > 0)] = 100
-    
-    # 2) High clipping inside mercedes: >450 -> 0
-    slice_clipped[(init_mercedes == 1) & (slice_clipped > calc_threshold)] = 100
-    
-    # 3) High clipping outside mercedes: >450 -> 450
-    slice_clipped[(init_mercedes == 0) & (slice_clipped > calc_threshold)] = 450
-    
-    # Check for any zero pixels
-    num_zeros = np.sum(slice_clipped == 0)
-
-
-     # ----------------------------------------- SKELETONIZATION  ----------------------------------------
-    # Apply Gaussian blur to the reoriented slice (sigma controls the blur intensity)
-    sigma = 0  # Adjust this value based on how much blur you want
-    blurred_slice = gaussian(slice_clipped, sigma=sigma)
-    
-    # Multiply the blurred image with the ROI mask
-    roi_image_blurred = blurred_slice * roi_mask.astype(slice_clipped.dtype)
-    
-    # Multiply the original (non-blurred) image with the ROI mask
-    roi_image_original = slice_clipped * roi_mask.astype(slice_clipped.dtype)
-   
-    # Initialize the threshold variable for all slices
-    if slice_nr == z_min:
-        # Calculate the threshold for the first slice based on the 10th percentile
-        roi_pixels_blurred = roi_image_blurred[roi_mask]  # Use blurred ROI pixels
-        percentile_10th = np.percentile(roi_pixels_blurred, 10)  # 15th percentile as threshold
-        # print(f"Calculated 10th Percentile Threshold for Slice {slice_nr}: {percentile_10th:.2f}")
-    else:
-        # Use the previously calculated threshold for all other slices
-        percentile_10th = globals().get("percentile_10th", 0)
-    
-    # Apply the 10th percentile threshold to the blurred image
-    percentile_mask = (roi_image_blurred > percentile_10th) & roi_mask
-    
-    # Visualize the histogram of the intensity values of the blurred image
-    plot_histo = False
-    
-    if plot_histo == True: 
-        plt.figure(figsize=(8, 6))
-        plt.hist(roi_pixels_blurred, bins=50, color='gray', alpha=0.7)
-        plt.title("Histogram of ROI Intensity Values (Blurred)")
-        plt.xlabel("Intensity")
-        plt.ylabel("Frequency")
-        
-        # Mark the 10th percentile threshold on the histogram
-        plt.axvline(percentile_10th, color='g', linestyle='--', label=f'10th Percentile Threshold: {percentile_10th:.2f}')
-        plt.legend()
-        plt.show()
-
-    # Apply the mask based on the 10th percentile threshold
-    inverted_mask = ~percentile_mask
-    closed_inverted = dilation(inverted_mask, disk(1))
-    eroded_foreground = closed_inverted * roi_mask
-    
-    # Perform skeletonization and thickening
-    skeleton = skeletonize(eroded_foreground)
-    thicker_skeleton = dilation(skeleton, disk(3))
-    
-    # Final visualization of the skeletonized result
-    # plt.figure(figsize=(6, 6))
-    # plt.imshow(blurred_slice, cmap='gray')
-    # plt.imshow(thicker_skeleton, cmap='Reds', alpha=0.0)
-    # # Mercedes star overlay
-    # plt.title(f"Skeletonization with Percentile Threshold — Slice {slice_nr}")
-    # plt.axis("off")
-    # plt.show()
-    
-    # Optionally, store the threshold for future slices
-    if slice_nr == z_min:
-        globals()["percentile_10th"] = percentile_10th  # Store the threshold for future slices
-
-
-    # --------------------------------------------------FINDIGN BOUNDARIES -----------------------
-    
-    
-    # Preparing image for active contours    
-    blurred_skeleton_norm = gaussian_filter(skeleton.astype(float), sigma=7)
-    blurred_skeleton_norm /= blurred_skeleton_norm.max() + 1e-8
-
-    # The snake is rerun, to close off the entire aortic wall. Previous snake could have had holes in it
-    # However update: since 20-01-2026 not using this contour anymore for aortic wall, as it was too small
-    for i in range(total_iterations):
-        snake_current = active_contour(
-            blurred_skeleton_norm,
-            snake_current,
-            alpha=alpha,
-            beta=beta,
-            gamma=gamma,
-            w_edge=1,
-            w_line=10,
-            max_num_iter=1,
-            boundary_condition="periodic"
-        )
-    
-
-    # --- Isolate inner skeleton ---
-    skeleton_mask = polygon2mask(skeleton.shape, snake_current)
-    roi_mask_eroded = binary_erosion(skeleton_mask)
-    inner_skeleton = skeleton * roi_mask_eroded.astype(skeleton.dtype)
-
-    # Upsample contour for accurate indices
-    aortic_wall_contour = functions.resample_closed_contour(init_snake)
-
-    # Find closest points to hinge points
-    i_lcc = functions.closest_contour_point(lcc_rotated[2][1:3], aortic_wall_contour)
-    i_rcc = functions.closest_contour_point(rcc_rotated[2][1:3], aortic_wall_contour)
-    i_ncc = functions.closest_contour_point(ncc_rotated[2][1:3], aortic_wall_contour)
-
-    # Create contour segments
-    seg_lcc_ncc = functions.contour_segment(aortic_wall_contour, i_lcc, i_ncc)
-    seg_ncc_rcc = functions.contour_segment(aortic_wall_contour, i_ncc, i_rcc)
-    seg_rcc_lcc = functions.contour_segment(aortic_wall_contour, i_rcc, i_lcc)
-
-    # Create leaflet masks and boundaries
-    lcc_ncc_mask, lcc_ncc_boundary = functions.create_boundary_mask(
-        center, aortic_wall_contour, i_lcc, i_ncc, seg_lcc_ncc, slice_clipped, inner_skeleton)
-    rcc_lcc_mask, rcc_lcc_boundary = functions.create_boundary_mask(
-        center, aortic_wall_contour, i_rcc, i_lcc, seg_rcc_lcc, slice_clipped, inner_skeleton)
-    ncc_rcc_mask, ncc_rcc_boundary = functions.create_boundary_mask(
-        center, aortic_wall_contour, i_ncc, i_rcc, seg_ncc_rcc, slice_clipped, inner_skeleton)
-
-    # Check if commissure points from the previous slice are available
-    commissure_points = {
-        'lcc_ncc': prev_intersections['lcc_ncc'] if prev_intersections['lcc_ncc'] is not None else base_commissure['lcc_ncc'],
-        'rcc_lcc': prev_intersections['rcc_lcc'] if prev_intersections['rcc_lcc'] is not None else base_commissure['rcc_lcc'],
-        'ncc_rcc': prev_intersections['ncc_rcc'] if prev_intersections['ncc_rcc'] is not None else base_commissure['ncc_rcc']
-    }
-    print("commissure_points: ", commissure_points, "init_coms: ", init_coms, center)
-    com_points = [commissure_points['lcc_ncc'], commissure_points['rcc_lcc'], commissure_points['ncc_rcc']]
-
-    # Clean boundaries with the commissure points (from previous slice or base)
-    cleaned_lcc_ncc_boundary, mercedes_mask = functions.clean_boundary_from_mask(
-        lcc_ncc_boundary, aortic_wall_contour, 3, com_points, center)
-    cleaned_rcc_lcc_boundary, mercedes_mask  = functions.clean_boundary_from_mask(
-        rcc_lcc_boundary, aortic_wall_contour, 3, com_points, center)
-    cleaned_ncc_rcc_boundary, mercedes_mask = functions.clean_boundary_from_mask(
-        ncc_rcc_boundary, aortic_wall_contour, 3, com_points, center)
-
-    # --- Find intersections with wall ---
-    intersections = {}
-    if slice_nr != z_min:
-        intersections = functions.find_all_boundary_intersections(
-            slice_clipped,
-            seg_lcc_ncc,
-            seg_rcc_lcc,
-            seg_ncc_rcc,
-            cleaned_lcc_ncc_boundary,
-            cleaned_rcc_lcc_boundary,
-            cleaned_ncc_rcc_boundary,
-            slice_nr,
-            mercedes_mask,
-            plot=True
-            )
-    
-    commissure_names = ["lcc_ncc", "rcc_lcc", "ncc_rcc"]
-    commissure_indices = {}
-    
-    # --------------------------------------------
-    # 1. Check if we have EVER found all 3 before
-    # --------------------------------------------
-    have_full_prev = all(prev_intersections[name] is not None for name in commissure_names)
-    
-    # --------------------------------------------
-    # 2. Decide fallback strategy for THIS slice
-    # --------------------------------------------
-    found_this_slice = {name: intersections.get(name) is not None for name in commissure_names}
-        
-    # Case A — All 3 found this slice → use them & update prev_intersections
-    if all(found_this_slice.values()):
-        # print(f"Slice {slice_nr}: All 3 intersections found. Using them and updating previous intersections.")
-        for name in commissure_names:
-            # print(f"  Using intersection for {name} from this slice.")
-            prev_intersections[name] = intersections[name]
-            commissure_indices[name] = functions.closest_contour_point(
-                intersections[name],
-                aortic_wall_contour
-            )
-    
-    # Case B — Some intersections missing, use available ones and previous for missing ones
-    elif have_full_prev:
-        # print(f"Slice {slice_nr}: Missing intersections, but previous intersections are available. Using previous intersections.")
-        for name in commissure_names:
-            if intersections.get(name) is not None:  # If intersection is found, use it
-                print(f"  Using intersection for {name} from this slice.")
+        # Case A — All 3 found this slice → use them & update prev_intersections
+        if all(found_this_slice.values()):
+            # print(f"Slice {slice_nr}: All 3 intersections found. Using them and updating previous intersections.")
+            for name in commissure_names:
+                # print(f"  Using intersection for {name} from this slice.")
+                prev_intersections[name] = intersections[name]
                 commissure_indices[name] = functions.closest_contour_point(
                     intersections[name],
                     aortic_wall_contour
                 )
-            else:  # Otherwise, use previous intersection
-                # print(f"  Using previous intersection for {name}.")
+        
+        # Case B — Some intersections missing, use available ones and previous for missing ones
+        elif have_full_prev:
+            # print(f"Slice {slice_nr}: Missing intersections, but previous intersections are available. Using previous intersections.")
+            for name in commissure_names:
+                if intersections.get(name) is not None:  # If intersection is found, use it
+                    print(f"  Using intersection for {name} from this slice.")
+                    commissure_indices[name] = functions.closest_contour_point(
+                        intersections[name],
+                        aortic_wall_contour
+                    )
+                else:  # Otherwise, use previous intersection
+                    # print(f"  Using previous intersection for {name}.")
+                    commissure_indices[name] = functions.closest_contour_point(
+                        prev_intersections[name],
+                        aortic_wall_contour
+                    )
+        
+        # Case C — Early slices where we do NOT have all 3 prev intersections yet
+        # → fall back per-intersection to base commissures
+        else:
+            # print(f"Slice {slice_nr}: Not all intersections found and no full previous set. Falling back to base commissures for missing intersections.")
+            for name in commissure_names:
+                # Print the fallback logic for each commissure
+                fallback = intersections.get(name) or prev_intersections.get(name) or base_commissure[name]
+                if intersections.get(name) is not None:
+                    print(f"  Using intersection for {name} found in this slice.")
+                elif prev_intersections.get(name) is not None:
+                    print(f"  Using previous intersection for {name}.")
+                else:
+                    print(f"  Using base commissure for {name} (no previous or current intersection).")
+                
                 commissure_indices[name] = functions.closest_contour_point(
-                    prev_intersections[name],
+                    fallback,
                     aortic_wall_contour
                 )
     
-    # Case C — Early slices where we do NOT have all 3 prev intersections yet
-    # → fall back per-intersection to base commissures
-    else:
-        # print(f"Slice {slice_nr}: Not all intersections found and no full previous set. Falling back to base commissures for missing intersections.")
-        for name in commissure_names:
-            # Print the fallback logic for each commissure
-            fallback = intersections.get(name) or prev_intersections.get(name) or base_commissure[name]
-            if intersections.get(name) is not None:
-                print(f"  Using intersection for {name} found in this slice.")
-            elif prev_intersections.get(name) is not None:
-                print(f"  Using previous intersection for {name}.")
+        # Create COM-to-COM segments
+        seg_c2c = {
+            "LCC": functions.contour_segment(aortic_wall_contour, commissure_indices["lcc_ncc"], commissure_indices["rcc_lcc"]),
+            "RCC": functions.contour_segment(aortic_wall_contour, commissure_indices["ncc_rcc"], commissure_indices["rcc_lcc"]),
+            "NCC": functions.contour_segment(aortic_wall_contour, commissure_indices["lcc_ncc"], commissure_indices["ncc_rcc"])
+        }
+        # Helper function
+        def safe_copy(point, fallback=None):
+            if point is None:
+                return fallback
             else:
-                print(f"  Using base commissure for {name} (no previous or current intersection).")
-            
-            commissure_indices[name] = functions.closest_contour_point(
-                fallback,
-                aortic_wall_contour
-            )
-
-    # Create COM-to-COM segments
-    seg_c2c = {
-        "LCC": functions.contour_segment(aortic_wall_contour, commissure_indices["lcc_ncc"], commissure_indices["rcc_lcc"]),
-        "RCC": functions.contour_segment(aortic_wall_contour, commissure_indices["ncc_rcc"], commissure_indices["rcc_lcc"]),
-        "NCC": functions.contour_segment(aortic_wall_contour, commissure_indices["lcc_ncc"], commissure_indices["ncc_rcc"])
-    }
-    # Helper function
-    def safe_copy(point, fallback=None):
-        if point is None:
-            return fallback
-        else:
-            return np.array(point)  # copy as array
-    
-    # ----------------- EVENT DETECTION ------------------
-    # This segment calculates when the boundary becomes smaller than the set threshold, but was once larger than this threshold
-    length_lcc = functions.update_boundary_shrink_state(
-    cleaned_lcc_ncc_boundary,
-    boundary_event_state,
-    "lcc_ncc",
-    slice_nr,
-    threshold=BOUNDARY_THRESHOLD
-    )
-    
-    length_rcc = functions.update_boundary_shrink_state(
-        cleaned_rcc_lcc_boundary,
+                return np.array(point)  # copy as array
+        
+        # ----------------- EVENT DETECTION ------------------
+        # This segment calculates when the boundary becomes smaller than the set threshold, but was once larger than this threshold
+        length_lcc = functions.update_boundary_shrink_state(
+        cleaned_lcc_ncc_boundary,
         boundary_event_state,
-        "rcc_lcc",
+        "lcc_ncc",
         slice_nr,
         threshold=BOUNDARY_THRESHOLD
+        )
+        
+        length_rcc = functions.update_boundary_shrink_state(
+            cleaned_rcc_lcc_boundary,
+            boundary_event_state,
+            "rcc_lcc",
+            slice_nr,
+            threshold=BOUNDARY_THRESHOLD
+        )
+        
+        length_ncc = functions.update_boundary_shrink_state(
+            cleaned_ncc_rcc_boundary,
+            boundary_event_state,
+            "ncc_rcc",
+            slice_nr,
+            threshold=BOUNDARY_THRESHOLD
+        )
+        
+        # Store results with flat keys safely
+        LCC_data[slice_nr] = {
+            "mask": lcc_ncc_mask.copy(),
+            "lcc_ncc_boundary": cleaned_lcc_ncc_boundary.copy(),
+            "rcc_lcc_boundary": cleaned_rcc_lcc_boundary.copy(),
+            "com_to_com": seg_c2c["LCC"].copy(),
+            "aortic_wall_contour": aortic_wall_contour.copy(),
+            "lcc_ncc_com": safe_copy(intersections.get("lcc_ncc"),prev_intersections.get("lcc_ncc") or base_commissure["lcc_ncc"]),
+            "rcc_lcc_com": safe_copy(intersections.get("rcc_lcc"), prev_intersections.get("rcc_lcc") or base_commissure["rcc_lcc"]),
+            "height": slice_nr,
+            "boundary_length": length_lcc,
+            "shrink_event_slice": boundary_event_state["lcc_ncc"]["event_slice"],
+        }
+        
+        RCC_data[slice_nr] = {
+            "mask": rcc_lcc_mask.copy(),
+            "rcc_lcc_boundary": cleaned_rcc_lcc_boundary.copy(),
+            "ncc_rcc_boundary": cleaned_ncc_rcc_boundary.copy(),
+            "com_to_com": seg_c2c["RCC"].copy(),
+            "rcc_lcc_com": safe_copy(intersections.get("rcc_lcc"), prev_intersections.get("rcc_lcc") or base_commissure["rcc_lcc"]),
+            "ncc_rcc_com": safe_copy(intersections.get("ncc_rcc"), prev_intersections.get("ncc_rcc") or base_commissure["ncc_rcc"]),
+            "height": slice_nr,
+            "boundary_length": length_rcc,
+            "shrink_event_slice": boundary_event_state["rcc_lcc"]["event_slice"],
+        }
+        
+        NCC_data[slice_nr] = {
+            "mask": ncc_rcc_mask.copy(),
+            "ncc_rcc_boundary": cleaned_ncc_rcc_boundary.copy(),
+            "lcc_ncc_boundary": cleaned_lcc_ncc_boundary.copy(),
+            "com_to_com": seg_c2c["NCC"].copy(),
+            "ncc_rcc_com": safe_copy(intersections.get("ncc_rcc"), prev_intersections.get("ncc_rcc") or base_commissure["ncc_rcc"]),
+            "lcc_ncc_com": safe_copy(intersections.get("lcc_ncc"), prev_intersections.get("lcc_ncc") or base_commissure["lcc_ncc"]),
+            "height": slice_nr,
+            "boundary_length": length_ncc,
+            "shrink_event_slice": boundary_event_state["ncc_rcc"]["event_slice"],
+        }
+        
+        # Optional visualization (COM-to-COM segments + boundaries)
+        plt.figure(figsize=(6, 6))
+        plt.imshow(slice_clipped, cmap='gray', origin='upper')
+        plt.imshow(mercedes_mask, cmap='jet', alpha=0.3)  # Adjust alpha for transparency
+        plt.plot(seg_c2c["LCC"][:, 1], seg_c2c["LCC"][:, 0], color='cyan', lw=3, label='LCC')
+        plt.plot(seg_c2c["RCC"][:, 1], seg_c2c["RCC"][:, 0], color='green', lw=3, label='RCC')
+        plt.plot(seg_c2c["NCC"][:, 1], seg_c2c["NCC"][:, 0], color='magenta', lw=3, label='NCC')
+        plt.plot(cleaned_lcc_ncc_boundary[:, 1], cleaned_lcc_ncc_boundary[:, 0], color='cyan', lw=2)
+        plt.plot(cleaned_rcc_lcc_boundary[:, 1], cleaned_rcc_lcc_boundary[:, 0], color='green', lw=2)
+        plt.plot(cleaned_ncc_rcc_boundary[:, 1], cleaned_ncc_rcc_boundary[:, 0], color='magenta', lw=2)
+        plt.title(f"Leaflet Borders — Slice {slice_nr}")
+        plt.axis('off')
+        plt.legend()
+        plt.show()
+    
+    
+    
+    # %% SEGMENT THE CALCIFICATION INTO LEAFLET_SPECIFIC 
+    
+    # In this segment the calcification will be split into three different regions based on the a priori knowledge and the found boudnaries
+    
+    
+    
+    # %% ----------------EXTRACT LEAFLET-SPECIFIC CENTER HEIGHTS ---------------
+    
+    # The shrink ratio is where we say that the boundary has shrunk this much that we will argument that the mercedes star is there.
+    # this is the height on which the leaflet cap latches on
+    shrink_ratio = 0.9
+    
+    lcc_event, lcc_thresh, lcc_max_slice = functions.find_shrink_slice_consecutive(LCC_data, shrink_ratio = shrink_ratio)
+    rcc_event, rcc_thresh, rcc_max_slice = functions.find_shrink_slice_consecutive(RCC_data, shrink_ratio = shrink_ratio)
+    ncc_event, ncc_thresh, ncc_max_slice = functions.find_shrink_slice_consecutive(NCC_data, shrink_ratio = shrink_ratio)
+    
+    print("LCC_NCC max at:", lcc_max_slice, "shrink at:", lcc_event)
+    print("RCC_LCC max at:", rcc_max_slice, "shrink at:", rcc_event)
+    print("NCC_RCC max at:", ncc_max_slice, "shrink at:", ncc_event)
+    
+    lcc_ncc_height = lcc_event
+    rcc_lcc_height = rcc_event
+    ncc_rcc_height = ncc_event
+    
+    # %% EXTRACT LEAFLET SPECIFIC WHEN THE MERCEDES STAR OCCURS. THIS IS NECESSARY TO MAKE 3 SEPERATE REGIONS WITHIN THE ROI
+    
+    import importlib
+    importlib.reload(functions)
+    
+    lcc_max_slice, lcc_max_len = functions.find_max_length_slice(LCC_data)
+    rcc_max_slice, rcc_max_len = functions.find_max_length_slice(RCC_data)
+    ncc_max_slice, ncc_max_len = functions.find_max_length_slice(NCC_data)
+    
+    print("Max slices:")
+    print("LCC:", lcc_max_slice)
+    print("RCC:", rcc_max_slice)
+    print("NCC:", ncc_max_slice)
+    
+    mercedes_height = int(round((
+        lcc_max_slice +
+        rcc_max_slice +
+        ncc_max_slice
+    ) / 3))
+    
+    print("Mercedes slice (average):", mercedes_height)
+    
+    #LCC
+    data = LCC_data[mercedes_height]
+    wall_lcc = data["com_to_com"]
+    boundary_lcc_ncc = data["lcc_ncc_boundary"]
+    com_lcc_ncc = data["lcc_ncc_com"]
+    com_rcc_lcc = data["rcc_lcc_com"]
+    
+    #RCC
+    data = RCC_data[mercedes_height]
+    wall_rcc = data["com_to_com"]
+    boundary_rcc_lcc = data["rcc_lcc_boundary"]
+    com_rcc_lcc = data["rcc_lcc_com"]
+    com_ncc_rcc = data["ncc_rcc_com"]
+    
+    #NCC
+    data = NCC_data[mercedes_height]
+    wall_ncc = data["com_to_com"]
+    boundary_ncc_rcc = data["ncc_rcc_boundary"]
+    com_ncc_rcc = data["ncc_rcc_com"]
+    com_lcc_ncc = data["lcc_ncc_com"]
+    
+    # Grab the slice shape from your reoriented data
+    slice_shape = reoriented_non_clipped[mercedes_height].shape
+    
+    # Build the NCC leaflet mask
+    ncc_region_mask = functions.build_leaflet_mask(
+        slice_shape=slice_shape,
+        wall_coords=wall_ncc,       # the wall connecting the two commissures
+        comA=com_lcc_ncc,         # starting commissure on the wall
+        comB=com_ncc_rcc,         # ending commissure on the wall
+        center=center        # leaflet center point
     )
     
-    length_ncc = functions.update_boundary_shrink_state(
-        cleaned_ncc_rcc_boundary,
-        boundary_event_state,
-        "ncc_rcc",
-        slice_nr,
-        threshold=BOUNDARY_THRESHOLD
+    # Build the LCC leaflet mask
+    lcc_region_mask = functions.build_leaflet_mask(
+        slice_shape=slice_shape,
+        wall_coords=wall_lcc,       # the wall connecting the two commissures
+        comA=com_lcc_ncc,         # starting commissure on the wall
+        comB=com_rcc_lcc,         # ending commissure on the wall
+        center=center         # leaflet center point
     )
     
-    # Store results with flat keys safely
-    LCC_data[slice_nr] = {
-        "mask": lcc_ncc_mask.copy(),
-        "lcc_ncc_boundary": cleaned_lcc_ncc_boundary.copy(),
-        "rcc_lcc_boundary": cleaned_rcc_lcc_boundary.copy(),
-        "com_to_com": seg_c2c["LCC"].copy(),
-        "aortic_wall_contour": aortic_wall_contour.copy(),
-        "lcc_ncc_com": safe_copy(intersections.get("lcc_ncc"),prev_intersections.get("lcc_ncc") or base_commissure["lcc_ncc"]),
-        "rcc_lcc_com": safe_copy(intersections.get("rcc_lcc"), prev_intersections.get("rcc_lcc") or base_commissure["rcc_lcc"]),
-        "height": slice_nr,
-        "boundary_length": length_lcc,
-        "shrink_event_slice": boundary_event_state["lcc_ncc"]["event_slice"],
-    }
+    # Build the RCC leaflet mask
+    rcc_region_mask = functions.build_leaflet_mask(
+        slice_shape=slice_shape,
+        wall_coords=wall_rcc,       # the wall connecting the two commissures
+        comA=com_ncc_rcc,         # starting commissure on the wall
+        comB=com_rcc_lcc,         # ending commissure on the wall
+        center=center         # leaflet center point
+    )
     
-    RCC_data[slice_nr] = {
-        "mask": rcc_lcc_mask.copy(),
-        "rcc_lcc_boundary": cleaned_rcc_lcc_boundary.copy(),
-        "ncc_rcc_boundary": cleaned_ncc_rcc_boundary.copy(),
-        "com_to_com": seg_c2c["RCC"].copy(),
-        "rcc_lcc_com": safe_copy(intersections.get("rcc_lcc"), prev_intersections.get("rcc_lcc") or base_commissure["rcc_lcc"]),
-        "ncc_rcc_com": safe_copy(intersections.get("ncc_rcc"), prev_intersections.get("ncc_rcc") or base_commissure["ncc_rcc"]),
-        "height": slice_nr,
-        "boundary_length": length_rcc,
-        "shrink_event_slice": boundary_event_state["rcc_lcc"]["event_slice"],
-    }
     
-    NCC_data[slice_nr] = {
-        "mask": ncc_rcc_mask.copy(),
-        "ncc_rcc_boundary": cleaned_ncc_rcc_boundary.copy(),
-        "lcc_ncc_boundary": cleaned_lcc_ncc_boundary.copy(),
-        "com_to_com": seg_c2c["NCC"].copy(),
-        "ncc_rcc_com": safe_copy(intersections.get("ncc_rcc"), prev_intersections.get("ncc_rcc") or base_commissure["ncc_rcc"]),
-        "lcc_ncc_com": safe_copy(intersections.get("lcc_ncc"), prev_intersections.get("lcc_ncc") or base_commissure["lcc_ncc"]),
-        "height": slice_nr,
-        "boundary_length": length_ncc,
-        "shrink_event_slice": boundary_event_state["ncc_rcc"]["event_slice"],
-    }
+    # Grab the slice
+    slice_img = reoriented_non_clipped[mercedes_height, :, :]
     
-    # Optional visualization (COM-to-COM segments + boundaries)
-    plt.figure(figsize=(6, 6))
-    plt.imshow(slice_clipped, cmap='gray', origin='upper')
-    plt.imshow(mercedes_mask, cmap='jet', alpha=0.3)  # Adjust alpha for transparency
-    plt.plot(seg_c2c["LCC"][:, 1], seg_c2c["LCC"][:, 0], color='cyan', lw=3, label='LCC')
-    plt.plot(seg_c2c["RCC"][:, 1], seg_c2c["RCC"][:, 0], color='green', lw=3, label='RCC')
-    plt.plot(seg_c2c["NCC"][:, 1], seg_c2c["NCC"][:, 0], color='magenta', lw=3, label='NCC')
-    plt.plot(cleaned_lcc_ncc_boundary[:, 1], cleaned_lcc_ncc_boundary[:, 0], color='cyan', lw=2)
-    plt.plot(cleaned_rcc_lcc_boundary[:, 1], cleaned_rcc_lcc_boundary[:, 0], color='green', lw=2)
-    plt.plot(cleaned_ncc_rcc_boundary[:, 1], cleaned_ncc_rcc_boundary[:, 0], color='magenta', lw=2)
-    plt.title(f"Leaflet Borders — Slice {slice_nr}")
+    plt.figure(figsize=(6,6))
+    plt.imshow(slice_img, cmap='gray')
+    
+    # Overlay the leaflet masks with transparency and different colors
+    plt.imshow(ncc_region_mask, cmap='Reds', alpha=0.4, label='NCC')
+    plt.imshow(lcc_region_mask, cmap='Greens', alpha=0.4, label='LCC')
+    plt.imshow(rcc_region_mask, cmap='Blues', alpha=0.4, label='RCC')
+    
+    plt.title(f"Aortic Leaflet Masks - Slice {mercedes_height}")
     plt.axis('off')
+    plt.show()
+    
+    
+    
+    # -------------------------------
+    # Compute areas
+    # -------------------------------
+    
+    pixel_area_mm2 = target_spacing ** 2
+    
+    # Compute areas
+    ncc_area_mm2 = np.count_nonzero(ncc_region_mask) * pixel_area_mm2
+    lcc_area_mm2 = np.count_nonzero(lcc_region_mask) * pixel_area_mm2
+    rcc_area_mm2 = np.count_nonzero(rcc_region_mask) * pixel_area_mm2
+    
+    print(f"NCC area: {ncc_area_mm2:.2f} mm²")
+    print(f"LCC area: {lcc_area_mm2:.2f} mm²")
+    print(f"RCC area: {rcc_area_mm2:.2f} mm²")
+    
+    
+    # Overlay the leaflet masks with transparency and different colors
+    plt.imshow(ncc_region_mask, cmap='Reds', alpha=0.4, label='NCC')
+    plt.imshow(lcc_region_mask, cmap='Greens', alpha=0.4, label='LCC')
+    plt.imshow(rcc_region_mask, cmap='Blues', alpha=0.4, label='RCC')
+    
+    plt.title(f"Aortic Leaflet Masks - Slice {mercedes_height}")
+    plt.axis('off')
+    plt.show()
+    
+    
+    
+    
+    # %% CALCULATE THE PERIMETER TO CREATE BULLS
+    
+    
+    total_area = ncc_area_mm2 + lcc_area_mm2 + rcc_area_mm2
+    total_area_pixels = total_area/pixel_area_mm2
+    print(f"Total valve area: {total_area:.2f} mm2")
+    
+    # Compute radius to cover one-third of total valve area
+    radius_one_third_area = np.sqrt((1/4) * total_area_pixels / np.pi)
+    print(f"Radius to cover one-third of the area: {radius_one_third_area:.2f} pixels")
+    
+    # Build mask
+    yy, xx = np.meshgrid(np.arange(slice_shape[0]), np.arange(slice_shape[1]), indexing='ij')
+    dist_from_center = np.sqrt((yy - center[0])**2 + (xx - center[1])**2)
+    
+    center_one_third_area_mask = dist_from_center <= radius_one_third_area
+    
+    # Visualize
+    plt.figure(figsize=(6,6))
+    plt.imshow(slice_img, cmap='gray')
+    plt.imshow(center_one_third_area_mask, cmap='Reds', alpha=0.4)
+    plt.scatter(center[1], center[0], c='blue', marker='x')
+    plt.title(f"One-third area circular mask")
+    plt.axis('off')
+    plt.show()
+    
+    # Calculate mask area in pixels
+    mask_area = np.count_nonzero(center_one_third_area_mask)
+    print(f"Mask area: {mask_area} pixels^2")
+    
+    # Fraction of total valve area
+    fraction_covered = mask_area / total_area_pixels
+    print(f"Fraction of valve area covered: {fraction_covered:.2f}")
+    
+    
+    
+    
+    #%% CREATE THE MASKS FOR CENTRAL AND PERIPHERAL
+    
+    
+    # -------------------------------
+    # Central and peripheral NCC
+    # -------------------------------
+    central_ncc_mask = ncc_region_mask & center_one_third_area_mask       # intersection
+    peripheral_ncc_mask = ncc_region_mask & (~center_one_third_area_mask) # remaining part
+    
+    # -------------------------------
+    # Central and peripheral LCC (one-third)
+    # -------------------------------
+    central_lcc_mask = lcc_region_mask & center_one_third_area_mask
+    peripheral_lcc_mask = lcc_region_mask & (~center_one_third_area_mask)
+    
+    # -------------------------------
+    # Central and peripheral RCC (one-third)
+    # -------------------------------
+    central_rcc_mask = rcc_region_mask & center_one_third_area_mask
+    peripheral_rcc_mask = rcc_region_mask & (~center_one_third_area_mask)
+    
+    # -------------------------------
+    # Visualize all combinations
+    # -------------------------------
+    plt.figure(figsize=(6,6))
+    plt.imshow(slice_img, cmap='gray')
+    
+    plt.imshow(central_ncc_mask, cmap='Reds', alpha=0.5)
+    plt.imshow(peripheral_ncc_mask, cmap='Reds', alpha=0.2)
+    
+    plt.imshow(central_lcc_mask, cmap='Greens', alpha=0.5)
+    plt.imshow(peripheral_lcc_mask, cmap='Greens', alpha=0.2)
+    
+    plt.imshow(central_rcc_mask, cmap='Blues', alpha=0.5)
+    plt.imshow(peripheral_rcc_mask, cmap='Blues', alpha=0.2)
+    
+    plt.scatter(center[1], center[0], c='yellow', marker='x')
+    plt.title(f"Leaflet Central vs Peripheral Regions - Slice {mercedes_height}")
+    plt.axis('off')
+    plt.show()
+    
+    
+    # Compute central and peripheral areas for each leaflet
+    central_ncc_area = np.count_nonzero(central_ncc_mask) * pixel_area_mm2
+    peripheral_ncc_area = np.count_nonzero(peripheral_ncc_mask) * pixel_area_mm2
+    
+    central_lcc_area = np.count_nonzero(central_lcc_mask) * pixel_area_mm2
+    peripheral_lcc_area = np.count_nonzero(peripheral_lcc_mask) * pixel_area_mm2
+    
+    central_rcc_area = np.count_nonzero(central_rcc_mask) * pixel_area_mm2
+    peripheral_rcc_area = np.count_nonzero(peripheral_rcc_mask) * pixel_area_mm2
+    
+    # -------------------------------
+    # Save areas to file
+    # -------------------------------
+    import pandas as pd
+    # Build dictionary for Excel
+    area_dict = {
+        "patient": [patient_nr],
+        "NCC_total_area_mm2": [ncc_area_mm2],
+        "NCC_central_area_mm2": [central_ncc_area],
+        "NCC_peripheral_area_mm2": [peripheral_ncc_area],
+        
+        "LCC_total_area_mm2": [lcc_area_mm2],
+        "LCC_central_area_mm2": [central_lcc_area],
+        "LCC_peripheral_area_mm2": [peripheral_lcc_area],
+        
+        "RCC_total_area_mm2": [rcc_area_mm2],
+        "RCC_central_area_mm2": [central_rcc_area],
+        "RCC_peripheral_area_mm2": [peripheral_rcc_area]
+    }
+    
+    # Convert to DataFrame
+    df = pd.DataFrame(area_dict)
+    
+    # Define output path
+    output_path = f"H:/DATA/Afstuderen/3.Data/output_valve_segmentation/{patient_nr}/patient_space/calc_volumes"
+    os.makedirs(output_path, exist_ok=True)  # Ensure folder exists
+    output_file = os.path.join(output_path, f"{patient_nr}_region_areas.xlsx")
+    
+    # Save to Excel
+    df.to_excel(output_file, index=False)
+    
+    print(f"Saved region areas to: {output_file}")
+    
+    
+    # %% -------------------------------- SAVING THE CALCIFICATION VOLUME ----------------------
+    gaussian_blur = 1
+    
+    # Define output pathfor the all the segmentations in patient space, make if not existent
+    output_path = f"H:/DATA/Afstuderen/3.Data/output_valve_segmentation/{patient_nr}/patient_space"
+    os.makedirs(output_path, exist_ok=True)
+    
+    # Save the previously calculated calcium volume as an STL
+    file_type = "calc_volume"
+    # calc_volume_smooth = gaussian_filter(calc_volume.astype(np.float32), sigma=gaussian_blur) 
+     
+    
+    # %% -------------------------------- COVNERTING THE BOUNDARIES IN 3D OBJECT ---------------
+    
+    hinge_z_values = [
+        lcc_rotated[2][0],
+        rcc_rotated[2][0],
+        ncc_rotated[2][0]
+    ]
+    
+    min_hinge_z = min(hinge_z_values)
+    
+    # center_height = int((lcc_rotated[3][0] + min_hinge_z)/2) 
+    
+    print("Post-processing the found boundaries so that they can be converted into 3D objects..")
+    
+    # --- Process RCC to LCC Boundary ---
+    rcc_lcc_boundary_3d = functions.create_3d_mask_from_boundary_points(RCC_data, calc_volume.shape, "rcc_lcc_boundary")
+    dilated_mask_3d_rcc_lcc = binary_dilation(rcc_lcc_boundary_3d, cube(5))  # Adjust the cube size as needed
+    dilated_mask_3d_rcc_lcc = functions.keep_largest_component_3d(dilated_mask_3d_rcc_lcc)
+    rcc_lcc_boundary_smooth = gaussian_filter(dilated_mask_3d_rcc_lcc.astype(np.float32), sigma=gaussian_blur)  
+    file_type_rcc_lcc = "rcc_lcc_boundary"
+    
+    # --- Process NCC to RCC Boundary ---
+    ncc_rcc_boundary_3d = functions.create_3d_mask_from_boundary_points(NCC_data, calc_volume.shape, "ncc_rcc_boundary")
+    dilated_mask_3d_ncc_rcc = binary_dilation(ncc_rcc_boundary_3d, cube(5))  # Adjust the cube size as needed
+    dilated_mask_3d_ncc_rcc = functions.keep_largest_component_3d(dilated_mask_3d_ncc_rcc)
+    ncc_rcc_boundary_smooth = gaussian_filter(dilated_mask_3d_ncc_rcc.astype(np.float32), sigma=gaussian_blur)  
+    file_type_ncc_rcc = "ncc_rcc_boundary"
+    
+    # --- Process LCC to NCC Boundary ---
+    lcc_ncc_boundary_3d = functions.create_3d_mask_from_boundary_points(LCC_data, calc_volume.shape, "lcc_ncc_boundary")
+    dilated_mask_3d_lcc_ncc = binary_dilation(lcc_ncc_boundary_3d, cube(5))  # Adjust the cube size as needed
+    dilated_mask_3d_lcc_ncc = functions.keep_largest_component_3d(dilated_mask_3d_lcc_ncc)
+    lcc_ncc_boundary_smooth = gaussian_filter(dilated_mask_3d_lcc_ncc.astype(np.float32), sigma=gaussian_blur)  
+    file_type_lcc_ncc = "lcc_ncc_boundary"
+    
+    # %% showcasing the found boundaries
+    
+    # Assuming your 3D boundary masks exist:
+    # lcc_ncc_boundary_3d, rcc_lcc_boundary_3d, ncc_rcc_boundary_3d
+    
+    boundaries = [
+        ("LCC→NCC", lcc_ncc_boundary_3d, "red"),
+        ("RCC→LCC", rcc_lcc_boundary_3d, "blue"),
+        ("NCC→RCC", ncc_rcc_boundary_3d, "green")
+    ]
+    
+    plt.figure(figsize=(8,8))
+    
+    for name, mask, color in boundaries:
+        coords = np.array(np.where(mask))  # Z,Y,X
+        x, y, z = coords[2], coords[1], coords[0]
+        plt.scatter(x, y, s=1, c=color, label=name)
+    
+    plt.xlabel('X')
+    plt.ylabel('Y')
+    plt.title('Top-Down View of All Leaflet Boundaries')
+    plt.gca().invert_yaxis()  # match image coordinates
+    plt.axis('equal')
     plt.legend()
     plt.show()
-
-
-
-# %% SEGMENT THE CALCIFICATION INTO LEAFLET_SPECIFIC 
-
-# In this segment the calcification will be split into three different regions based on the a priori knowledge and the found boudnaries
-
-
-
-# %% ----------------EXTRACT LEAFLET-SPECIFIC CENTER HEIGHTS ---------------
-
-# The shrink ratio is where we say that the boundary has shrunk this much that we will argument that the mercedes star is there.
-# this is the height on which the leaflet cap latches on
-shrink_ratio = 0.9
-
-lcc_event, lcc_thresh, lcc_max_slice = functions.find_shrink_slice_consecutive(LCC_data, shrink_ratio = shrink_ratio)
-rcc_event, rcc_thresh, rcc_max_slice = functions.find_shrink_slice_consecutive(RCC_data, shrink_ratio = shrink_ratio)
-ncc_event, ncc_thresh, ncc_max_slice = functions.find_shrink_slice_consecutive(NCC_data, shrink_ratio = shrink_ratio)
-
-print("LCC_NCC max at:", lcc_max_slice, "shrink at:", lcc_event)
-print("RCC_LCC max at:", rcc_max_slice, "shrink at:", rcc_event)
-print("NCC_RCC max at:", ncc_max_slice, "shrink at:", ncc_event)
-
-lcc_ncc_height = lcc_event
-rcc_lcc_height = rcc_event
-ncc_rcc_height = ncc_event
-
-# %% EXTRACT LEAFLET SPECIFIC WHEN THE MERCEDES STAR OCCURS. THIS IS NECESSARY TO MAKE 3 SEPERATE REGIONS WITHIN THE ROI
-
-import importlib
-import functions
-importlib.reload(functions)
-
-lcc_max_slice, lcc_max_len = functions.find_max_length_slice(LCC_data)
-rcc_max_slice, rcc_max_len = functions.find_max_length_slice(RCC_data)
-ncc_max_slice, ncc_max_len = functions.find_max_length_slice(NCC_data)
-
-print("Max slices:")
-print("LCC:", lcc_max_slice)
-print("RCC:", rcc_max_slice)
-print("NCC:", ncc_max_slice)
-
-mercedes_height = int(round((
-    lcc_max_slice +
-    rcc_max_slice +
-    ncc_max_slice
-) / 3))
-
-print("Mercedes slice (average):", mercedes_height)
-
-#LCC
-data = LCC_data[mercedes_height]
-wall_lcc = data["com_to_com"]
-boundary_lcc_ncc = data["lcc_ncc_boundary"]
-com_lcc_ncc = data["lcc_ncc_com"]
-com_rcc_lcc = data["rcc_lcc_com"]
-
-#RCC
-data = RCC_data[mercedes_height]
-wall_rcc = data["com_to_com"]
-boundary_rcc_lcc = data["rcc_lcc_boundary"]
-com_rcc_lcc = data["rcc_lcc_com"]
-com_ncc_rcc = data["ncc_rcc_com"]
-
-#NCC
-data = NCC_data[mercedes_height]
-wall_ncc = data["com_to_com"]
-boundary_ncc_rcc = data["ncc_rcc_boundary"]
-com_ncc_rcc = data["ncc_rcc_com"]
-com_lcc_ncc = data["lcc_ncc_com"]
-
-# Grab the slice shape from your reoriented data
-slice_shape = reoriented_non_clipped[mercedes_height].shape
-
-# Build the NCC leaflet mask
-ncc_region_mask = functions.build_leaflet_mask(
-    slice_shape=slice_shape,
-    wall_coords=wall_ncc,       # the wall connecting the two commissures
-    comA=com_lcc_ncc,         # starting commissure on the wall
-    comB=com_ncc_rcc,         # ending commissure on the wall
-    center=center        # leaflet center point
-)
-
-# Build the LCC leaflet mask
-lcc_region_mask = functions.build_leaflet_mask(
-    slice_shape=slice_shape,
-    wall_coords=wall_lcc,       # the wall connecting the two commissures
-    comA=com_lcc_ncc,         # starting commissure on the wall
-    comB=com_rcc_lcc,         # ending commissure on the wall
-    center=center         # leaflet center point
-)
-
-# Build the RCC leaflet mask
-rcc_region_mask = functions.build_leaflet_mask(
-    slice_shape=slice_shape,
-    wall_coords=wall_rcc,       # the wall connecting the two commissures
-    comA=com_ncc_rcc,         # starting commissure on the wall
-    comB=com_rcc_lcc,         # ending commissure on the wall
-    center=center         # leaflet center point
-)
-
-
-# Grab the slice
-slice_img = reoriented_non_clipped[mercedes_height, :, :]
-
-plt.figure(figsize=(6,6))
-plt.imshow(slice_img, cmap='gray')
-
-# Overlay the leaflet masks with transparency and different colors
-plt.imshow(ncc_region_mask, cmap='Reds', alpha=0.4, label='NCC')
-plt.imshow(lcc_region_mask, cmap='Greens', alpha=0.4, label='LCC')
-plt.imshow(rcc_region_mask, cmap='Blues', alpha=0.4, label='RCC')
-
-plt.title(f"Aortic Leaflet Masks - Slice {mercedes_height}")
-plt.axis('off')
-plt.show()
-
-
-
-
-
-# %% CALCULATE THE PERIMETER TO CREATE BULLS
-
-# Combine all com-to-com wall points in order
-all_walls = np.vstack([wall_lcc, wall_ncc, wall_rcc])
-
-# Make sure it's closed
-all_walls_closed = np.vstack([all_walls, all_walls[0]])
-
-# Compute area using shoelace formula
-x = all_walls_closed[:, 1]  # column indices
-y = all_walls_closed[:, 0]  # row indices
-total_area = 0.5 * np.abs(np.sum(x[:-1]*y[1:] - x[1:]*y[:-1]))
-print(f"Total valve area: {total_area:.2f} pixels^2")
-
-radius_half_area = np.sqrt(0.5 * total_area / np.pi)
-print(f"Radius to cover half the area: {radius_half_area:.2f} pixels")
-
-yy, xx = np.meshgrid(np.arange(slice_shape[0]), np.arange(slice_shape[1]), indexing='ij')
-dist_from_center = np.sqrt((yy - center[0])**2 + (xx - center[1])**2)
-
-center_half_area_mask = dist_from_center <= radius_half_area
-
-# Visualize
-plt.figure(figsize=(6,6))
-plt.imshow(slice_img, cmap='gray')
-plt.imshow(center_half_area_mask, cmap='Reds', alpha=0.4)
-plt.scatter(center[1], center[0], c='blue', marker='x')
-plt.title(f"Half-area circular mask")
-plt.axis('off')
-plt.show()
-
-# Calculate mask area in pixels
-mask_area = np.count_nonzero(center_half_area_mask)
-print(f"Mask area: {mask_area} pixels^2")
-
-# Fraction of total valve area
-fraction_covered = mask_area / total_area
-print(f"Fraction of valve area covered: {fraction_covered:.2f}")
-
-#%% CREATE THE MASKS FOR CENTRAL AND PERIPHERAL
-
-
-# -------------------------------
-# Central and peripheral NCC
-# -------------------------------
-central_ncc_mask = ncc_region_mask & center_half_area_mask       # intersection
-peripheral_ncc_mask = ncc_region_mask & (~center_half_area_mask) # remaining part
-
-# -------------------------------
-# Central and peripheral LCC
-# -------------------------------
-central_lcc_mask = lcc_region_mask & center_half_area_mask
-peripheral_lcc_mask = lcc_region_mask & (~center_half_area_mask)
-
-# -------------------------------
-# Central and peripheral RCC
-# -------------------------------
-central_rcc_mask = rcc_region_mask & center_half_area_mask
-peripheral_rcc_mask = rcc_region_mask & (~center_half_area_mask)
-
-# -------------------------------
-# Visualize all combinations
-# -------------------------------
-plt.figure(figsize=(6,6))
-plt.imshow(slice_img, cmap='gray')
-
-plt.imshow(central_ncc_mask, cmap='Reds', alpha=0.5)
-plt.imshow(peripheral_ncc_mask, cmap='Reds', alpha=0.2)
-
-plt.imshow(central_lcc_mask, cmap='Greens', alpha=0.5)
-plt.imshow(peripheral_lcc_mask, cmap='Greens', alpha=0.2)
-
-plt.imshow(central_rcc_mask, cmap='Blues', alpha=0.5)
-plt.imshow(peripheral_rcc_mask, cmap='Blues', alpha=0.2)
-
-plt.scatter(center[1], center[0], c='yellow', marker='x')
-plt.title(f"Leaflet Central vs Peripheral Regions - Slice {mercedes_height}")
-plt.axis('off')
-plt.show()
-
-
-# %% -------------------------------- SAVING THE CALCIFICATION VOLUME ----------------------
-gaussian_blur = 1
-
-# Define output pathfor the all the segmentations in patient space, make if not existent
-output_path = f"H:/DATA/Afstuderen/3.Data/output_valve_segmentation/{patient_nr}/patient_space"
-os.makedirs(output_path, exist_ok=True)
-
-# Save the previously calculated calcium volume as an STL
-file_type = "calc_volume"
-calc_volume_smooth = gaussian_filter(calc_volume.astype(np.float32), sigma=gaussian_blur) 
- 
-
-# %% -------------------------------- COVNERTING THE BOUNDARIES IN 3D OBJECT ---------------
-
-hinge_z_values = [
-    lcc_rotated[2][0],
-    rcc_rotated[2][0],
-    ncc_rotated[2][0]
-]
-
-min_hinge_z = min(hinge_z_values)
-
-# center_height = int((lcc_rotated[3][0] + min_hinge_z)/2) 
-
-print("Post-processing the found boundaries so that they can be converted into 3D objects..")
-
-# --- Process RCC to LCC Boundary ---
-rcc_lcc_boundary_3d = functions.create_3d_mask_from_boundary_points(RCC_data, calc_volume.shape, "rcc_lcc_boundary")
-dilated_mask_3d_rcc_lcc = binary_dilation(rcc_lcc_boundary_3d, cube(5))  # Adjust the cube size as needed
-dilated_mask_3d_rcc_lcc = functions.keep_largest_component_3d(dilated_mask_3d_rcc_lcc)
-rcc_lcc_boundary_smooth = gaussian_filter(dilated_mask_3d_rcc_lcc.astype(np.float32), sigma=gaussian_blur)  
-file_type_rcc_lcc = "rcc_lcc_boundary"
-
-# --- Process NCC to RCC Boundary ---
-ncc_rcc_boundary_3d = functions.create_3d_mask_from_boundary_points(NCC_data, calc_volume.shape, "ncc_rcc_boundary")
-dilated_mask_3d_ncc_rcc = binary_dilation(ncc_rcc_boundary_3d, cube(5))  # Adjust the cube size as needed
-dilated_mask_3d_ncc_rcc = functions.keep_largest_component_3d(dilated_mask_3d_ncc_rcc)
-ncc_rcc_boundary_smooth = gaussian_filter(dilated_mask_3d_ncc_rcc.astype(np.float32), sigma=gaussian_blur)  
-file_type_ncc_rcc = "ncc_rcc_boundary"
-
-# --- Process LCC to NCC Boundary ---
-lcc_ncc_boundary_3d = functions.create_3d_mask_from_boundary_points(LCC_data, calc_volume.shape, "lcc_ncc_boundary")
-dilated_mask_3d_lcc_ncc = binary_dilation(lcc_ncc_boundary_3d, cube(5))  # Adjust the cube size as needed
-dilated_mask_3d_lcc_ncc = functions.keep_largest_component_3d(dilated_mask_3d_lcc_ncc)
-lcc_ncc_boundary_smooth = gaussian_filter(dilated_mask_3d_lcc_ncc.astype(np.float32), sigma=gaussian_blur)  
-file_type_lcc_ncc = "lcc_ncc_boundary"
-
-# %% showcasing the found boundaries
-
-# Assuming your 3D boundary masks exist:
-# lcc_ncc_boundary_3d, rcc_lcc_boundary_3d, ncc_rcc_boundary_3d
-
-boundaries = [
-    ("LCC→NCC", lcc_ncc_boundary_3d, "red"),
-    ("RCC→LCC", rcc_lcc_boundary_3d, "blue"),
-    ("NCC→RCC", ncc_rcc_boundary_3d, "green")
-]
-
-plt.figure(figsize=(8,8))
-
-for name, mask, color in boundaries:
-    coords = np.array(np.where(mask))  # Z,Y,X
-    x, y, z = coords[2], coords[1], coords[0]
-    plt.scatter(x, y, s=1, c=color, label=name)
-
-plt.xlabel('X')
-plt.ylabel('Y')
-plt.title('Top-Down View of All Leaflet Boundaries')
-plt.gca().invert_yaxis()  # match image coordinates
-plt.axis('equal')
-plt.legend()
-plt.show()
-
-
-
-# %% ----------------------------- AORTIC WALL ----------------------------
-
-from scipy.ndimage import binary_closing
-
-print("Post-processing the aortic wall so that it can be converted into 3D objects..")
-
-# Structuring elements
-closing_structure = cube(5)   # adjust if holes are bigger
-dilation_structure = cube(3)  # optional, remove if you don't want to thicken
-
-# --- Process RCC to LCC COM to COM Boundary ---
-rcc_wall_3d = functions.create_3d_mask_from_boundary_points(RCC_data, calc_volume.shape, "com_to_com")
-rcc_wall_3d = binary_closing(rcc_wall_3d, structure=closing_structure)
-rcc_wall_3d = binary_dilation(rcc_wall_3d, closing_structure)
-rcc_wall_smooth = gaussian_filter(rcc_wall_3d.astype(np.float32), sigma=gaussian_blur)  
-file_type_rcc_lcc_com_to_com = "rcc_lcc_com_to_com"
-
-# --- Process NCC to RCC COM to COM Boundary ---
-ncc_wall_3d = functions.create_3d_mask_from_boundary_points(NCC_data, calc_volume.shape, "com_to_com")
-ncc_wall_3d = binary_closing(ncc_wall_3d, structure=closing_structure)
-ncc_wall_3d = binary_dilation(ncc_wall_3d, closing_structure)
-ncc_wall_smooth = gaussian_filter(ncc_wall_3d.astype(np.float32), sigma=gaussian_blur)  
-file_type_ncc_rcc_com_to_com = "ncc_rcc_com_to_com"
-
-# --- Process LCC to NCC COM to COM Boundary ---
-lcc_wall_3d = functions.create_3d_mask_from_boundary_points(LCC_data, calc_volume.shape, "com_to_com")
-lcc_wall_3d = binary_closing(lcc_wall_3d, structure=closing_structure)
-lcc_wall_3d = binary_dilation(lcc_wall_3d, closing_structure)
-lcc_wall_smooth = gaussian_filter(lcc_wall_3d.astype(np.float32), sigma=gaussian_blur)  
-file_type_lcc_ncc_com_to_com = "lcc_ncc_com_to_com"
-
-
-# %%%  --------------------- CONNECTING THE BOUNDARIES TO THE AORTIC WALL --------------------------
-
-print("Connecting the aortic leaflets to the aortic wall...")
-
-# print("The z-index which is the cutoff for the boundary is now: ", center_height)
-keep_below_center=False
-
-# Expand the RCC-LCC leaflet towards the aortic wall
-combined_rcc_lcc = rcc_wall_3d | lcc_wall_3d
-rcc_lcc_grown, _= functions.grow_boundary(
-    dilated_mask_3d_rcc_lcc,
-    combined_rcc_lcc,
-    center_height=rcc_lcc_height,
-    line_dilate=2,
-    gaussian_blur=gaussian_blur,
-    keep_below_center=keep_below_center
-)
-
-# Expand the NCC-RCC leaflet towards the aortic wall
-combined_ncc_rcc = ncc_wall_3d | rcc_wall_3d
-ncc_rcc_grown, _ = functions.grow_boundary(
-    dilated_mask_3d_ncc_rcc,
-    combined_ncc_rcc,
-    center_height=ncc_rcc_height,
-    line_dilate=2,
-    gaussian_blur=gaussian_blur,
-    keep_below_center=keep_below_center
-)
-
-# Expand the RCC-LCC leaflet towards the aortic wall
-combined_lcc_ncc = lcc_wall_3d | ncc_wall_3d
-lcc_ncc_grown, _ = functions.grow_boundary(
-    dilated_mask_3d_lcc_ncc,
-    combined_lcc_ncc,
-    center_height=lcc_ncc_height,
-    line_dilate=2,
-    gaussian_blur=gaussian_blur,
-    keep_below_center=keep_below_center
-)
-
-
-# %% EXTRACT THE CENTER BOUNDARY FROM THE GROWN SLICES
-
-# Previously it was done with the raw boundaries, but we need more point for the spline fitting
-# This is more robust 
-
-from scipy.ndimage import binary_erosion
-
-# Grab the center slice first
-rcc_lcc_center_slice = rcc_lcc_boundary_3d[rcc_lcc_height]
-ncc_rcc_center_slice = ncc_rcc_boundary_3d[ncc_rcc_height]
-lcc_ncc_center_slice = lcc_ncc_boundary_3d[lcc_ncc_height]
-
-# Boundaries at center slice
-boundaries = [
-    ("LCC→NCC", lcc_ncc_center_slice, "red"),
-    ("RCC→LCC", rcc_lcc_center_slice, "blue"),
-    ("NCC→RCC", ncc_rcc_center_slice, "green")
-]
-
-plt.figure(figsize=(8,8))
-
-for name, mask_slice, color in boundaries:
-
-    # mask_slice is 2D (Y,X)
-    coords = np.array(np.where(mask_slice))
-
-    y = coords[1]
-    x = coords[1]
-
-    plt.scatter(x, y, s=2, c=color, label=name)
-
-plt.xlabel("X")
-plt.ylabel("Y")
-# plt.title(f"Leaflet boundaries at slice z = {center_height}")
-
-plt.gca().invert_yaxis()
-plt.axis("equal")
-plt.legend()
-plt.grid(True)
-
-plt.show()
-
-
-# %% ----------------------- REORIENT THE LEAFLET BOUDNARIES BACK TO THEIR ORIGINAL SPACE ----------------------
-
-print("Reorienting the leaflet boundaries from the python space to patient space...")
-
-# del clipped_dicom
-# del gradient_volume
-
-
-## The objects are made in the reoriented space. Now reorient it back so it is in the patient space
-inverse_zoom = (
-    1 / zoom_factors[0],
-    1 / zoom_factors[1],
-    1 / zoom_factors[2],
-)
-
-downsample_factor = 1.14
-
-output_path = f"H:/DATA/Afstuderen/3.Data/output_valve_segmentation/{patient_nr}/patient_space"
-os.makedirs(output_path, exist_ok=True)
-
-
     
-# %% --------------------------- EXPORTING THE NUMPY ARRAYS TO CREATE A MASK -----------------
-
-# Define what is to be exported. This is for testing goals only, later everything has to be exported
-# we will first do evertyhing in native python space, as this gives us the most information regarding
-# the leaflet boundaries.
-
-out_dir = r"H:\DATA\Afstuderen\2.Code\Stenosis-Severity-backup\temp"
-output_dir =  r"H:\DATA\Afstuderen\3.Data\output_valve_segmentation"
-
-
-# Export the coordinates which define the the lowest part of the boundaries
-np.save(os.path.join(out_dir, "lcc_ncc_boundary_slice.npy"), lcc_ncc_center_slice)
-np.save(os.path.join(out_dir, "rcc_lcc_boundary_slice.npy"), rcc_lcc_center_slice)
-np.save(os.path.join(out_dir, "ncc_rcc_boundary_slice.npy"), ncc_rcc_center_slice)
-print(np.sum(lcc_ncc_center_slice))
-print(np.sum(rcc_lcc_center_slice))
-print(np.sum(ncc_rcc_center_slice))
-
-
-# Export the 3d mask of the aortic wall
-np.save(os.path.join(output_dir, "lcc_wall.npy"), lcc_wall_3d)
-np.save(os.path.join(output_dir, "ncc_wall.npy"), ncc_wall_3d)
-np.save(os.path.join(output_dir, "rcc_wall.npy"), rcc_wall_3d)
-
-# slice_to_save = center_height  # or min(LCC_data.keys()), etc.
-
-# Make sure all commissures include the z-coordinate
-lcc_landmarks_to_save = np.array([
-    [lcc_ncc_height, *LCC_data[lcc_ncc_height]["lcc_ncc_com"]],   # commissure1
-    [rcc_lcc_height, *LCC_data[rcc_lcc_height]["rcc_lcc_com"]],   # commissure2
-    lcc_rotated[2]                                  # hinge point (already z,y,x)
-])
-
-rcc_landmarks_to_save = np.array([
-    [rcc_lcc_height, *RCC_data[rcc_lcc_height]["rcc_lcc_com"]],
-    [ncc_rcc_height, *RCC_data[ncc_rcc_height]["ncc_rcc_com"]],
-    rcc_rotated[2]
-])
-
-ncc_landmarks_to_save = np.array([
-    [ncc_rcc_height, *NCC_data[ncc_rcc_height]["ncc_rcc_com"]],
-    [lcc_ncc_height, *NCC_data[lcc_ncc_height]["lcc_ncc_com"]],
-    ncc_rotated[2]
-])
-
-# Save updated landmarks
-np.save(os.path.join(out_dir, "lcc_landmarks.npy"), lcc_landmarks_to_save)
-np.save(os.path.join(out_dir, "rcc_landmarks.npy"), rcc_landmarks_to_save)
-np.save(os.path.join(out_dir, "ncc_landmarks.npy"), ncc_landmarks_to_save)
-
-print("Saved commissure-based landmarks for LCC, RCC, NCC.")
-
-
-
-# %%% ------------------------- INTERPOLATING ALL THE LEAFLET CAPS (BOTTOM SIDE)-------------------------------
-from scipy.ndimage import binary_closing
-
-
-# del calc_volume_smooth
-# del calcification_mask_reoriented
-
-print("Creating the leaflet caps for all leaflets...")
-
-# -------------------- SETTINGS --------------------
-out_dir = r"H:\DATA\Afstuderen\2.Code\Stenosis-Severity-backup\temp"
-data_path = r"H:\DATA\Afstuderen\3.Data\output_valve_segmentation"
-output_path = rf"H:\DATA\Afstuderen\3.Data\output_valve_segmentation\{patient_nr}\patient_space"
-
-leaflets = ["lcc", "ncc", "rcc"]
-boundary_height_map = {
-    "lcc_ncc_boundary_slice.npy": lcc_ncc_height,
-    "rcc_lcc_boundary_slice.npy": rcc_lcc_height,
-    "ncc_rcc_boundary_slice.npy": ncc_rcc_height
-}
-
-leaflet_caps_3D = {}
-
-
-# -------------------- FUNCTIONAL EXPORT LOOP --------------------
-for leaflet in leaflets:
-    print(f"\n--- Processing leaflet: {leaflet.upper()} ---")
     
-    # ---------------- Load landmarks and wall ----------------
-    landmarks_path = os.path.join(out_dir, f"{leaflet}_landmarks.npy")
-    wall_path = os.path.join(data_path, f"{leaflet}_wall.npy")
     
-    print(f"Loading landmarks from: {landmarks_path}")
-    print(f"Loading wall mask from: {wall_path}")
+    # %% ----------------------------- AORTIC WALL ----------------------------
     
-    landmarks = np.load(landmarks_path)
-    wall_mask = np.load(wall_path)
+    from scipy.ndimage import binary_closing
     
-    print("Landmarks loaded:", landmarks)
-    print("Wall mask shape:", wall_mask.shape)
+    print("Post-processing the aortic wall so that it can be converted into 3D objects..")
     
-    com1, com2, hinge = landmarks[0], landmarks[1], landmarks[2]
-
-    # ---------------- Load boundary slices ----------------
-    if leaflet == "lcc":
-        boundary_pairs = [("ncc", "lcc_ncc_boundary_slice.npy"),
-                          ("rcc", "rcc_lcc_boundary_slice.npy")]
-    elif leaflet == "ncc":
-        boundary_pairs = [("rcc", "ncc_rcc_boundary_slice.npy"),
-                          ("lcc", "lcc_ncc_boundary_slice.npy")]
-    else:  # rcc
-        boundary_pairs = [("lcc", "rcc_lcc_boundary_slice.npy"),
-                          ("ncc", "ncc_rcc_boundary_slice.npy")]
-
-    # Convert masks to point clouds & smooth
-    point_clouds = []
-    for pair_name, slice_file in boundary_pairs:
-        slice_path = os.path.join(out_dir, slice_file)
-        print(f"Loading boundary slice ({pair_name}) from: {slice_path}")
-        mask_slice = np.load(slice_path)
-        z_height = boundary_height_map[slice_file]
-        pts = functions.mask_to_pointcloud(mask_slice, z_height)
-        print(f"Point cloud size for {pair_name}: {pts.shape[0]}")
+    # Structuring elements
+    closing_structure = cube(5)   # adjust if holes are bigger
+    dilation_structure = cube(3)  # optional, remove if you don't want to thicken
+    
+    # --- Process RCC to LCC COM to COM Boundary ---
+    rcc_wall_3d = functions.create_3d_mask_from_boundary_points(RCC_data, calc_volume.shape, "com_to_com")
+    rcc_wall_3d = binary_closing(rcc_wall_3d, structure=closing_structure)
+    rcc_wall_3d = binary_dilation(rcc_wall_3d, closing_structure)
+    rcc_wall_smooth = gaussian_filter(rcc_wall_3d.astype(np.float32), sigma=gaussian_blur)  
+    file_type_rcc_lcc_com_to_com = "rcc_lcc_com_to_com"
+    
+    # --- Process NCC to RCC COM to COM Boundary ---
+    ncc_wall_3d = functions.create_3d_mask_from_boundary_points(NCC_data, calc_volume.shape, "com_to_com")
+    ncc_wall_3d = binary_closing(ncc_wall_3d, structure=closing_structure)
+    ncc_wall_3d = binary_dilation(ncc_wall_3d, closing_structure)
+    ncc_wall_smooth = gaussian_filter(ncc_wall_3d.astype(np.float32), sigma=gaussian_blur)  
+    file_type_ncc_rcc_com_to_com = "ncc_rcc_com_to_com"
+    
+    # --- Process LCC to NCC COM to COM Boundary ---
+    lcc_wall_3d = functions.create_3d_mask_from_boundary_points(LCC_data, calc_volume.shape, "com_to_com")
+    lcc_wall_3d = binary_closing(lcc_wall_3d, structure=closing_structure)
+    lcc_wall_3d = binary_dilation(lcc_wall_3d, closing_structure)
+    lcc_wall_smooth = gaussian_filter(lcc_wall_3d.astype(np.float32), sigma=gaussian_blur)  
+    file_type_lcc_ncc_com_to_com = "lcc_ncc_com_to_com"
+    
+    
+    # %%%  --------------------- CONNECTING THE BOUNDARIES TO THE AORTIC WALL --------------------------
+    
+    print("Connecting the aortic leaflets to the aortic wall...")
+    
+    # print("The z-index which is the cutoff for the boundary is now: ", center_height)
+    keep_below_center=False
+    
+    # Expand the RCC-LCC leaflet towards the aortic wall
+    combined_rcc_lcc = rcc_wall_3d | lcc_wall_3d
+    rcc_lcc_grown, _= functions.grow_boundary(
+        dilated_mask_3d_rcc_lcc,
+        combined_rcc_lcc,
+        center_height=rcc_lcc_height,
+        line_dilate=2,
+        gaussian_blur=gaussian_blur,
+        keep_below_center=keep_below_center
+    )
+    
+    # Expand the NCC-RCC leaflet towards the aortic wall
+    combined_ncc_rcc = ncc_wall_3d | rcc_wall_3d
+    ncc_rcc_grown, _ = functions.grow_boundary(
+        dilated_mask_3d_ncc_rcc,
+        combined_ncc_rcc,
+        center_height=ncc_rcc_height,
+        line_dilate=2,
+        gaussian_blur=gaussian_blur,
+        keep_below_center=keep_below_center
+    )
+    
+    # Expand the RCC-LCC leaflet towards the aortic wall
+    combined_lcc_ncc = lcc_wall_3d | ncc_wall_3d
+    lcc_ncc_grown, _ = functions.grow_boundary(
+        dilated_mask_3d_lcc_ncc,
+        combined_lcc_ncc,
+        center_height=lcc_ncc_height,
+        line_dilate=2,
+        gaussian_blur=gaussian_blur,
+        keep_below_center=keep_below_center
+    )
+    
+    
+    # %% EXTRACT THE CENTER BOUNDARY FROM THE GROWN SLICES
+    
+    # Previously it was done with the raw boundaries, but we need more point for the spline fitting
+    # This is more robust 
+    
+    from scipy.ndimage import binary_erosion
+    
+    # Grab the center slice first
+    rcc_lcc_center_slice = rcc_lcc_boundary_3d[rcc_lcc_height]
+    ncc_rcc_center_slice = ncc_rcc_boundary_3d[ncc_rcc_height]
+    lcc_ncc_center_slice = lcc_ncc_boundary_3d[lcc_ncc_height]
+    
+    # Boundaries at center slice
+    boundaries = [
+        ("LCC→NCC", lcc_ncc_center_slice, "red"),
+        ("RCC→LCC", rcc_lcc_center_slice, "blue"),
+        ("NCC→RCC", ncc_rcc_center_slice, "green")
+    ]
+    
+    plt.figure(figsize=(8,8))
+    
+    for name, mask_slice, color in boundaries:
+    
+        # mask_slice is 2D (Y,X)
+        coords = np.array(np.where(mask_slice))
+    
+        y = coords[1]
+        x = coords[1]
+    
+        plt.scatter(x, y, s=2, c=color, label=name)
+    
+    plt.xlabel("X")
+    plt.ylabel("Y")
+    # plt.title(f"Leaflet boundaries at slice z = {center_height}")
+    
+    plt.gca().invert_yaxis()
+    plt.axis("equal")
+    plt.legend()
+    plt.grid(True)
+    
+    plt.show()
+    
+    
+    # %% ----------------------- REORIENT THE LEAFLET BOUDNARIES BACK TO THEIR ORIGINAL SPACE ----------------------
+    
+    print("Reorienting the leaflet boundaries from the python space to patient space...")
+    
+    # del clipped_dicom
+    # del gradient_volume
+    
+    
+    ## The objects are made in the reoriented space. Now reorient it back so it is in the patient space
+    inverse_zoom = (
+        1 / zoom_factors[0],
+        1 / zoom_factors[1],
+        1 / zoom_factors[2],
+    )
+    
+    downsample_factor = 1.14
+    
+    output_path = f"H:/DATA/Afstuderen/3.Data/output_valve_segmentation/{patient_nr}/patient_space"
+    os.makedirs(output_path, exist_ok=True)
+    
+    
         
-        if pts.shape[0] <= 1:
-            print(f"[WARNING] Not enough points to fit spline for {pair_name}, using raw points")
-            pts_smooth = pts
-        else:
-            pts_smooth = functions.fit_spline(pts, smoothing=40)
+    # %% --------------------------- EXPORTING THE NUMPY ARRAYS TO CREATE A MASK -----------------
+    
+    # Define what is to be exported. This is for testing goals only, later everything has to be exported
+    # we will first do evertyhing in native python space, as this gives us the most information regarding
+    # the leaflet boundaries.
+    
+    out_dir = r"H:\DATA\Afstuderen\2.Code\Stenosis-Severity-backup\temp"
+    output_dir =  r"H:\DATA\Afstuderen\3.Data\output_valve_segmentation"
+    
+    
+    # Export the coordinates which define the the lowest part of the boundaries
+    np.save(os.path.join(out_dir, "lcc_ncc_boundary_slice.npy"), lcc_ncc_center_slice)
+    np.save(os.path.join(out_dir, "rcc_lcc_boundary_slice.npy"), rcc_lcc_center_slice)
+    np.save(os.path.join(out_dir, "ncc_rcc_boundary_slice.npy"), ncc_rcc_center_slice)
+    print(np.sum(lcc_ncc_center_slice))
+    print(np.sum(rcc_lcc_center_slice))
+    print(np.sum(ncc_rcc_center_slice))
+    
+    
+    # Export the 3d mask of the aortic wall
+    np.save(os.path.join(output_dir, "lcc_wall.npy"), lcc_wall_3d)
+    np.save(os.path.join(output_dir, "ncc_wall.npy"), ncc_wall_3d)
+    np.save(os.path.join(output_dir, "rcc_wall.npy"), rcc_wall_3d)
+    
+    # slice_to_save = center_height  # or min(LCC_data.keys()), etc.
+    
+    # Make sure all commissures include the z-coordinate
+    lcc_landmarks_to_save = np.array([
+        [lcc_ncc_height, *LCC_data[lcc_ncc_height]["lcc_ncc_com"]],   # commissure1
+        [rcc_lcc_height, *LCC_data[rcc_lcc_height]["rcc_lcc_com"]],   # commissure2
+        lcc_rotated[2]                                  # hinge point (already z,y,x)
+    ])
+    
+    rcc_landmarks_to_save = np.array([
+        [rcc_lcc_height, *RCC_data[rcc_lcc_height]["rcc_lcc_com"]],
+        [ncc_rcc_height, *RCC_data[ncc_rcc_height]["ncc_rcc_com"]],
+        rcc_rotated[2]
+    ])
+    
+    ncc_landmarks_to_save = np.array([
+        [ncc_rcc_height, *NCC_data[ncc_rcc_height]["ncc_rcc_com"]],
+        [lcc_ncc_height, *NCC_data[lcc_ncc_height]["lcc_ncc_com"]],
+        ncc_rotated[2]
+    ])
+    
+    # Save updated landmarks
+    np.save(os.path.join(out_dir, "lcc_landmarks.npy"), lcc_landmarks_to_save)
+    np.save(os.path.join(out_dir, "rcc_landmarks.npy"), rcc_landmarks_to_save)
+    np.save(os.path.join(out_dir, "ncc_landmarks.npy"), ncc_landmarks_to_save)
+    
+    print("Saved commissure-based landmarks for LCC, RCC, NCC.")
+    
+    
+    
+    # %%% ------------------------- INTERPOLATING ALL THE LEAFLET CAPS (BOTTOM SIDE)-------------------------------
+    from scipy.ndimage import binary_closing
+    
+    
+    # del calc_volume_smooth
+    # del calcification_mask_reoriented
+    
+    print("Creating the leaflet caps for all leaflets...")
+    
+    # -------------------- SETTINGS --------------------
+    out_dir = r"H:\DATA\Afstuderen\2.Code\Stenosis-Severity-backup\temp"
+    data_path = r"H:\DATA\Afstuderen\3.Data\output_valve_segmentation"
+    output_path = rf"H:\DATA\Afstuderen\3.Data\output_valve_segmentation\{patient_nr}\patient_space"
+    
+    leaflets = ["lcc", "ncc", "rcc"]
+    boundary_height_map = {
+        "lcc_ncc_boundary_slice.npy": lcc_ncc_height,
+        "rcc_lcc_boundary_slice.npy": rcc_lcc_height,
+        "ncc_rcc_boundary_slice.npy": ncc_rcc_height
+    }
+    
+    leaflet_caps_3D = {}
+    
+    
+    # -------------------- FUNCTIONAL EXPORT LOOP --------------------
+    for leaflet in leaflets:
+        print(f"\n--- Processing leaflet: {leaflet.upper()} ---")
+        
+        # ---------------- Load landmarks and wall ----------------
+        landmarks_path = os.path.join(out_dir, f"{leaflet}_landmarks.npy")
+        wall_path = os.path.join(data_path, f"{leaflet}_wall.npy")
+        
+        print(f"Loading landmarks from: {landmarks_path}")
+        print(f"Loading wall mask from: {wall_path}")
+        
+        landmarks = np.load(landmarks_path)
+        wall_mask = np.load(wall_path)
+        
+        print("Landmarks loaded:", landmarks)
+        print("Wall mask shape:", wall_mask.shape)
+        
+        com1, com2, hinge = landmarks[0], landmarks[1], landmarks[2]
+    
+        # ---------------- Load boundary slices ----------------
+        if leaflet == "lcc":
+            boundary_pairs = [("ncc", "lcc_ncc_boundary_slice.npy"),
+                              ("rcc", "rcc_lcc_boundary_slice.npy")]
+        elif leaflet == "ncc":
+            boundary_pairs = [("rcc", "ncc_rcc_boundary_slice.npy"),
+                              ("lcc", "lcc_ncc_boundary_slice.npy")]
+        else:  # rcc
+            boundary_pairs = [("lcc", "rcc_lcc_boundary_slice.npy"),
+                              ("ncc", "ncc_rcc_boundary_slice.npy")]
+    
+        # Convert masks to point clouds & smooth
+        point_clouds = []
+        for pair_name, slice_file in boundary_pairs:
+            slice_path = os.path.join(out_dir, slice_file)
+            print(f"Loading boundary slice ({pair_name}) from: {slice_path}")
+            mask_slice = np.load(slice_path)
+            z_height = boundary_height_map[slice_file]
+            pts = functions.mask_to_pointcloud(mask_slice, z_height)
+            print(f"Point cloud size for {pair_name}: {pts.shape[0]}")
             
-        point_clouds.append(pts_smooth)
+            if pts.shape[0] <= 1:
+                print(f"[WARNING] Not enough points to fit spline for {pair_name}, using raw points")
+                pts_smooth = pts
+            else:
+                pts_smooth = functions.fit_spline(pts, smoothing=40)
+                
+            point_clouds.append(pts_smooth)
+    
+        boundary_curve_1, boundary_curve_2 = point_clouds
+    
+        # ---------------- Build leaflet surface ----------------
+        print("Building leaflet surface...")
+        surf, eval_pts, mask = functions.build_leaflet_surface(
+            aortic_wall_mask=wall_mask,
+            commissure1=com1,
+            hinge=hinge,
+            commissure2=com2,
+            boundary_curve_1=boundary_curve_1,
+            boundary_curve_2=boundary_curve_2,
+            volume_shape=(340,512,512),
+            pixel_spacing=pixel_spacing,
+            dicom_origin=dicom_origin,
+            output_path=output_path,
+            patient_nr=patient_nr,
+            file_type=f"{leaflet}_leaflet_surface"
+        )
+        print("Leaflet surface built, number of evaluated points:", eval_pts.shape[0])
+    
+        # ---------------- Voxelization & STL export ----------------
+        print("Creating 3D mask and exporting STL...")
+        cap_mask_points = functions.create_3d_mask_from_points(eval_pts, calc_volume.shape)
+        cap_mask = binary_closing(cap_mask_points, structure=closing_structure)
+        cap_mask = binary_dilation(cap_mask, cube(3))
+        cap_mask = gaussian_filter(cap_mask.astype(np.float32), sigma=gaussian_blur)
+    
+        leaflet_caps_3D[leaflet] = cap_mask.copy()
+    
+    
+    
+    #%% 
+    from scipy.ndimage import label
+    
+    # -------------------------------
+    # Step 1: Combine all aortic valve masks
+    # -------------------------------
+    
+    # dictionary of masks you already have
+    valve_masks = {
+        "LCC_com_to_com": lcc_wall_3d,
+        "NCC_com_to_com": ncc_wall_3d,
+        "RCC_com_to_com": rcc_wall_3d,
+        "RCC_to_LCC": rcc_lcc_grown,
+        "NCC_to_RCC": ncc_rcc_grown,
+        "LCC_to_NCC": lcc_ncc_grown,
+    }
+    
+    # Initialize empty boolean array
+    valve_mask_combined = np.zeros_like(calc_volume, dtype=bool)
+    
+    # Combine all wall and boundary masks, cast to bool
+    for m in valve_masks.values():
+        valve_mask_combined |= m.astype(bool)
+    
+    # Add the leaflet caps (cast to bool)
+    for cap_mask in leaflet_caps_3D.values():
+        valve_mask_combined |= cap_mask.astype(bool)
+    
+    # Slightly dilate to make sure any touching calcification is included
+    valve_mask_combined_dilated = binary_dilation(valve_mask_combined, cube(3))
+    
+    # -------------------------------
+    # Step 2: Keep connected calc chunks that touch the valve
+    # -------------------------------
+    
+    # Label connected components in the calcification volume
+    labeled_calc, num_features = label(calc_volume)
+    
+    # Initialize the filtered volume
+    calc_filtered = np.zeros_like(calc_volume, dtype=bool)
+    
+    # Keep any connected component that touches the dilated valve mask
+    for i in range(1, num_features + 1):
+        component = (labeled_calc == i)
+        if np.any(component & valve_mask_combined_dilated):
+            calc_filtered |= component
+    
+    # calc_filtered now contains only calcifications that touch the valve (wall or leaflets)
+    
+    
+    # %% ALLOCATING THE CALC MASKS
+    
+    # SEGMENTING THE CALCIFICATION BITS
+    z_coords, y_coords, x_coords = np.nonzero(calc_filtered)
+    
+    # Compute bounding box
+    z_min, z_max = z_coords.min(), z_coords.max()
+    y_min, y_max = y_coords.min(), y_coords.max()
+    x_min, x_max = x_coords.min(), x_coords.max()
+    
+    # To close small holes due to imaging artefacts
+    calc_quant = binary_closing(calc_filtered, structure=cube(5))
+    
+    # Crop calcification volume
+    calc_crop = calc_quant[z_min:z_max+1, y_min:y_max+1, x_min:x_max+1]
+    
+    num_slices = calc_crop.shape[0]
+    
+    # Step 2: Crop the polygon masks to match the calc_crop bounding box
+    ncc_region_mask_crop = ncc_region_mask[y_min:y_max+1, x_min:x_max+1]
+    lcc_region_mask_crop = lcc_region_mask[y_min:y_max+1, x_min:x_max+1]
+    rcc_region_mask_crop = rcc_region_mask[y_min:y_max+1, x_min:x_max+1]
+    
+    # Step 3: Extend 2D cropped masks along Z
+    num_slices = calc_crop.shape[0]
+    
+    NCC_mask_3D = np.repeat(ncc_region_mask_crop[np.newaxis, :, :], num_slices, axis=0)
+    LCC_mask_3D = np.repeat(lcc_region_mask_crop[np.newaxis, :, :], num_slices, axis=0)
+    RCC_mask_3D = np.repeat(rcc_region_mask_crop[np.newaxis, :, :], num_slices, axis=0)
+    
+    # Step 4: Apply the masks to calc_crop
+    NCC_calc_volume = calc_crop * NCC_mask_3D
+    LCC_calc_volume = calc_crop * LCC_mask_3D
+    RCC_calc_volume = calc_crop * RCC_mask_3D
+    
+    # Optional: convert to boolean
+    NCC_calc_volume = NCC_calc_volume.astype(bool)
+    LCC_calc_volume = LCC_calc_volume.astype(bool)
+    RCC_calc_volume = RCC_calc_volume.astype(bool)
+    
+    # Create empty full-volume arrays
+    NCC_calc_full = np.zeros_like(calc_volume, dtype=bool)
+    LCC_calc_full = np.zeros_like(calc_volume, dtype=bool)
+    RCC_calc_full = np.zeros_like(calc_volume, dtype=bool)
+    
+    # Place the cropped & masked calcifications back into the full volume
+    NCC_calc_full[z_min:z_max+1, y_min:y_max+1, x_min:x_max+1] = NCC_calc_volume
+    LCC_calc_full[z_min:z_max+1, y_min:y_max+1, x_min:x_max+1] = LCC_calc_volume
+    RCC_calc_full[z_min:z_max+1, y_min:y_max+1, x_min:x_max+1] = RCC_calc_volume
+    
+    # print("Calcifications mapped back to full volume.")
+    
+    
+    # %% CREATE DICTIONARY OF MASKS TO SAVE
+    
+    calc_masks_to_save = {
+        "LCC_calc": LCC_calc_full,
+        "RCC_calc": RCC_calc_full,
+        "NCC_calc": NCC_calc_full,
+        "calc_volume": calc_quant
+    }
+    
+    # %% CREATE CENTRAL AND PERIPHERAL CALC VOLUMES FOR EACH LEAFLET
+    
+    # Make sure your center_one_third_area_mask is already defined
+    # If you have stacked it along Z (like leaflet masks), we can just multiply
+    
+    num_slices = calc_volume.shape[0]
+    
+    # Stack the 2D central circle mask along Z
+    center_one_third_area_mask_3D = np.repeat(center_one_third_area_mask[np.newaxis, :, :], num_slices, axis=0)
+    
+    # Central calc volumes
+    central_ncc_calc = NCC_calc_full & center_one_third_area_mask_3D
+    central_lcc_calc = LCC_calc_full & center_one_third_area_mask_3D
+    central_rcc_calc = RCC_calc_full & center_one_third_area_mask_3D
+    
+    # Peripheral calc volumes
+    peripheral_ncc_calc = NCC_calc_full & (~center_one_third_area_mask_3D)
+    peripheral_lcc_calc = LCC_calc_full & (~center_one_third_area_mask_3D)
+    peripheral_rcc_calc = RCC_calc_full & (~center_one_third_area_mask_3D)
+    
+    # Add these new volumes to the dictionary to save
+    calc_masks_to_save.update({
+        "central_NCC_calc": central_ncc_calc,
+        "peripheral_NCC_calc": peripheral_ncc_calc,
+        "central_LCC_calc": central_lcc_calc,
+        "peripheral_LCC_calc": peripheral_lcc_calc,
+        "central_RCC_calc": central_rcc_calc,
+        "peripheral_RCC_calc": peripheral_rcc_calc,
+    })
+    
+    print("Central and peripheral calc volumes added to save dictionary.")
+    
+    # %% LOOP AND SAVE STL FILES WITH SMOOTHING + REORIENTATION
+    calc_output_path = f"H:/DATA/Afstuderen/3.Data/output_valve_segmentation/{patient_nr}/patient_space/calc_volumes"
+    os.makedirs(calc_output_path, exist_ok=True)
+    
+    # Minimum number of voxels to consider valid
+    MIN_VOXELS = 150  # adjust as needed
+    
+    for name, volume in calc_masks_to_save.items():
+    
+        # Count voxels (for binary masks)
+        voxel_count = np.count_nonzero(volume)
+        print(f"{name}: {voxel_count} voxels of calcification")
+    
+        if voxel_count < MIN_VOXELS:
+            print(f"Skipping {name} (too small, < {MIN_VOXELS} voxels)")
+            continue
+    
+        # --- Smooth mask ---
+        # volume_smooth = gaussian_filter(volume.astype(np.float32), sigma=0.1)
+    
+        # --- Reorient back to patient space ---
+        volume_reoriented = functions.reorient_volume_back(
+            volume, 
+            dicom_origin, 
+            rotation_matrix_dicom
+        )
+    
+        # --- Downsample & rescale ---
+        volume_final = functions.downsample_and_rescale(
+            volume_reoriented, 
+            downsample_factor=downsample_factor, 
+            inverse_zoom=inverse_zoom
+        )
+    
+        # --- Save STL ---
+        functions.save_volume_as_stl_patient_space(
+            volume=volume_final,
+            output_path=calc_output_path,
+            patient_nr=patient_nr,
+            file_type=name,
+            zoom_x=pixel_spacing[2],
+            zoom_y=pixel_spacing[1],
+            zoom_z=pixel_spacing[0],
+            dicom_origin=dicom_origin
+        )
+    
+    print("Assigned calcification masks saved as STL (smoothed & reoriented).")
+    # %% SAVING THE STATS
+    
+    import pandas as pd
+    
 
-    boundary_curve_1, boundary_curve_2 = point_clouds
 
-    # ---------------- Build leaflet surface ----------------
-    print("Building leaflet surface...")
-    surf, eval_pts, mask = functions.build_leaflet_surface(
-        aortic_wall_mask=wall_mask,
-        commissure1=com1,
-        hinge=hinge,
-        commissure2=com2,
-        boundary_curve_1=boundary_curve_1,
-        boundary_curve_2=boundary_curve_2,
-        volume_shape=(340,512,512),
-        pixel_spacing=pixel_spacing,
-        dicom_origin=dicom_origin,
-        output_path=output_path,
-        patient_nr=patient_nr,
-        file_type=f"{leaflet}_leaflet_surface"
-    )
-    print("Leaflet surface built, number of evaluated points:", eval_pts.shape[0])
-
-    # ---------------- Voxelization & STL export ----------------
-    print("Creating 3D mask and exporting STL...")
-    cap_mask_points = functions.create_3d_mask_from_points(eval_pts, calc_volume.shape)
-    cap_mask = binary_closing(cap_mask_points, structure=closing_structure)
-    cap_mask = binary_dilation(cap_mask, cube(3))
-    cap_mask = gaussian_filter(cap_mask.astype(np.float32), sigma=gaussian_blur)
-
-    leaflet_caps_3D[leaflet] = cap_mask.copy()
-
-
-
-#%% 
-from scipy.ndimage import label
-
-# -------------------------------
-# Step 1: Combine all aortic valve masks
-# -------------------------------
-
-# dictionary of masks you already have
-valve_masks = {
-    "LCC_com_to_com": lcc_wall_3d,
-    "NCC_com_to_com": ncc_wall_3d,
-    "RCC_com_to_com": rcc_wall_3d,
-    "RCC_to_LCC": rcc_lcc_grown,
-    "NCC_to_RCC": ncc_rcc_grown,
-    "LCC_to_NCC": lcc_ncc_grown,
-}
-
-# Initialize empty boolean array
-valve_mask_combined = np.zeros_like(calc_volume, dtype=bool)
-
-# Combine all wall and boundary masks, cast to bool
-for m in valve_masks.values():
-    valve_mask_combined |= m.astype(bool)
-
-# Add the leaflet caps (cast to bool)
-for cap_mask in leaflet_caps_3D.values():
-    valve_mask_combined |= cap_mask.astype(bool)
-
-# Slightly dilate to make sure any touching calcification is included
-valve_mask_combined_dilated = binary_dilation(valve_mask_combined, cube(3))
-
-# -------------------------------
-# Step 2: Keep connected calc chunks that touch the valve
-# -------------------------------
-
-# Label connected components in the calcification volume
-labeled_calc, num_features = label(calc_volume)
-
-# Initialize the filtered volume
-calc_filtered = np.zeros_like(calc_volume, dtype=bool)
-
-# Keep any connected component that touches the dilated valve mask
-for i in range(1, num_features + 1):
-    component = (labeled_calc == i)
-    if np.any(component & valve_mask_combined_dilated):
-        calc_filtered |= component
-
-# calc_filtered now contains only calcifications that touch the valve (wall or leaflets)
+    # Voxel volume in mm^3
+    voxel_volume_mm3 = pixel_spacing[0] * pixel_spacing[1] * pixel_spacing[2]
+    
+    # Collect data
+    data = [
+        (
+            name,
+            int(np.count_nonzero(volume)),
+            float(np.count_nonzero(volume) * voxel_volume_mm3)
+        )
+        for name, volume in calc_masks_to_save.items()
+    ]
+    
+    # Create DataFrame
+    df = pd.DataFrame(data, columns=["Segment Name", "Voxel Count", "Volume (mm^3)"])
+    
+    # Save to Excel
+    excel_path = os.path.join(calc_output_path, f"{patient_nr}_calc_summary.xlsx")
+    df.to_excel(excel_path, index=False)
+    
+    print(f"Excel saved at: {excel_path}")
+        
+    
+    
+    
+    import gc
+    
+    del masked_valve
+    del calc_volume
+    del reoriented_volume
+    del reoriented_non_clipped
+    del smoothed_non_clipped
+    del slice_data
+    del aortic_wall_contours
+    del upsampled_snakes
+    del LCC_data, RCC_data, NCC_data
+    del calc_masks_to_save
+    gc.collect()
+    plt.close('all')
 
 
-# %% ALLOCATING THE CALC MASKS
-
-# SEGMENTING THE CALCIFICATION BITS
-z_coords, y_coords, x_coords = np.nonzero(calc_filtered)
-
-# Compute bounding box
-z_min, z_max = z_coords.min(), z_coords.max()
-y_min, y_max = y_coords.min(), y_coords.max()
-x_min, x_max = x_coords.min(), x_coords.max()
-
-# Crop calcification volume
-calc_crop = calc_filtered[z_min:z_max+1, y_min:y_max+1, x_min:x_max+1]
-
-num_slices = calc_crop.shape[0]
-
-# Step 2: Crop the polygon masks to match the calc_crop bounding box
-ncc_region_mask_crop = ncc_region_mask[y_min:y_max+1, x_min:x_max+1]
-lcc_region_mask_crop = lcc_region_mask[y_min:y_max+1, x_min:x_max+1]
-rcc_region_mask_crop = rcc_region_mask[y_min:y_max+1, x_min:x_max+1]
-
-# Step 3: Extend 2D cropped masks along Z
-num_slices = calc_crop.shape[0]
-
-NCC_mask_3D = np.repeat(ncc_region_mask_crop[np.newaxis, :, :], num_slices, axis=0)
-LCC_mask_3D = np.repeat(lcc_region_mask_crop[np.newaxis, :, :], num_slices, axis=0)
-RCC_mask_3D = np.repeat(rcc_region_mask_crop[np.newaxis, :, :], num_slices, axis=0)
-
-# Step 4: Apply the masks to calc_crop
-NCC_calc_volume = calc_crop * NCC_mask_3D
-LCC_calc_volume = calc_crop * LCC_mask_3D
-RCC_calc_volume = calc_crop * RCC_mask_3D
-
-# Optional: convert to boolean
-NCC_calc_volume = NCC_calc_volume.astype(bool)
-LCC_calc_volume = LCC_calc_volume.astype(bool)
-RCC_calc_volume = RCC_calc_volume.astype(bool)
-
-# Create empty full-volume arrays
-NCC_calc_full = np.zeros_like(calc_volume, dtype=bool)
-LCC_calc_full = np.zeros_like(calc_volume, dtype=bool)
-RCC_calc_full = np.zeros_like(calc_volume, dtype=bool)
-
-# Place the cropped & masked calcifications back into the full volume
-NCC_calc_full[z_min:z_max+1, y_min:y_max+1, x_min:x_max+1] = NCC_calc_volume
-LCC_calc_full[z_min:z_max+1, y_min:y_max+1, x_min:x_max+1] = LCC_calc_volume
-RCC_calc_full[z_min:z_max+1, y_min:y_max+1, x_min:x_max+1] = RCC_calc_volume
-
-# print("Calcifications mapped back to full volume.")
+# %% RUN IT FOR ALL PATIENTS
 
 
-# %% CREATE DICTIONARY OF MASKS TO SAVE
+if __name__ == "__main__":
 
-calc_masks_to_save = {
-    "LCC_calc": LCC_calc_full,
-    "RCC_calc": RCC_calc_full,
-    "NCC_calc": NCC_calc_full,
-    "calc_volume": calc_filtered
-}
+    # selected_patients = list(PATIENT_PATHS.keys())
+    selected_patients = ["CZE038"]
 
-# %% CREATE CENTRAL AND PERIPHERAL CALC VOLUMES FOR EACH LEAFLET
+    for patient_nr in selected_patients:
+        if patient_nr not in PATIENT_PATHS:
+            print(f"Skipping {patient_nr} (not found)")
+            continue
 
-# Make sure your center_half_area_mask is already defined
-# If you have stacked it along Z (like leaflet masks), we can just multiply
-
-num_slices = calc_volume.shape[0]
-
-# Stack the 2D central circle mask along Z
-center_half_area_mask_3D = np.repeat(center_half_area_mask[np.newaxis, :, :], num_slices, axis=0)
-
-# Central calc volumes
-central_ncc_calc = NCC_calc_full & center_half_area_mask_3D
-central_lcc_calc = LCC_calc_full & center_half_area_mask_3D
-central_rcc_calc = RCC_calc_full & center_half_area_mask_3D
-
-# Peripheral calc volumes
-peripheral_ncc_calc = NCC_calc_full & (~center_half_area_mask_3D)
-peripheral_lcc_calc = LCC_calc_full & (~center_half_area_mask_3D)
-peripheral_rcc_calc = RCC_calc_full & (~center_half_area_mask_3D)
-
-# Add these new volumes to the dictionary to save
-calc_masks_to_save.update({
-    "central_NCC_calc": central_ncc_calc,
-    "peripheral_NCC_calc": peripheral_ncc_calc,
-    "central_LCC_calc": central_lcc_calc,
-    "peripheral_LCC_calc": peripheral_lcc_calc,
-    "central_RCC_calc": central_rcc_calc,
-    "peripheral_RCC_calc": peripheral_rcc_calc,
-})
-
-print("Central and peripheral calc volumes added to save dictionary.")
-
-# %% LOOP AND SAVE STL FILES WITH SMOOTHING + REORIENTATION
-calc_output_path = f"H:/DATA/Afstuderen/3.Data/output_valve_segmentation/{patient_nr}/patient_space/calc_volumes"
-os.makedirs(calc_output_path, exist_ok=True)
-
-# Minimum number of voxels to consider valid
-MIN_VOXELS = 150  # adjust as needed
-
-for name, volume in calc_masks_to_save.items():
-
-    # Count voxels (for binary masks)
-    voxel_count = np.count_nonzero(volume)
-    print(f"{name}: {voxel_count} voxels of calcification")
-
-    if voxel_count < MIN_VOXELS:
-        print(f"Skipping {name} (too small, < {MIN_VOXELS} voxels)")
-        continue
-
-    # --- Smooth mask ---
-    volume_smooth = gaussian_filter(volume.astype(np.float32), sigma=gaussian_blur)
-
-    # --- Reorient back to patient space ---
-    volume_reoriented = functions.reorient_volume_back(
-        volume, 
-        dicom_origin, 
-        rotation_matrix_dicom
-    )
-
-    # --- Downsample & rescale ---
-    volume_final = functions.downsample_and_rescale(
-        volume_reoriented, 
-        downsample_factor=downsample_factor, 
-        inverse_zoom=inverse_zoom
-    )
-
-    # --- Save STL ---
-    functions.save_volume_as_stl_patient_space(
-        volume=volume_final,
-        output_path=calc_output_path,
-        patient_nr=patient_nr,
-        file_type=name,
-        zoom_x=pixel_spacing[2],
-        zoom_y=pixel_spacing[1],
-        zoom_z=pixel_spacing[0],
-        dicom_origin=dicom_origin
-    )
-
-print("Assigned calcification masks saved as STL (smoothed & reoriented).")
-# %% SAVING THE STATS
-
-import pandas as pd
-
-# Collect data
-data = [
-    (name, int(np.count_nonzero(volume)))
-    for name, volume in calc_masks_to_save.items()
-]
-
-# Create DataFrame
-df = pd.DataFrame(data, columns=["Segment Name", "Voxel Count"])
-
-# Save to Excel
-excel_path = os.path.join(calc_output_path, f"{patient_nr}_calc_summary_voxels.xlsx")
-df.to_excel(excel_path, index=False)
-
-print(f"Excel saved at: {excel_path}")
+        try:
+            run_patient(patient_nr)
+        except Exception as e:
+            print(f"Error in {patient_nr}: {e}")
